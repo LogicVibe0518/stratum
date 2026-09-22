@@ -1,0 +1,14 @@
+id: lone-star-roofing
+name: "Lone Star Roofing"   # fictional; check no real San Antonio roofer uses this exact name
+trade: roofing
+location: {city: San Antonio, region: TX, country: US}
+languages: [en-US, es-US]
+palette: {primary: "#2B2B2B", accent: "#A63A2B", background: "#F3EBDD"}
+fonts: {display: "Google Fonts: TBD slab serif", body: "Google Fonts: TBD"}
+tone: confident, local pride
+personality: vague ("make it pop", "more Texas"), pushes aggressive offers
+hard_constraints:
+  - never offer to waive or pay an insurance deductible (Texas HB 2102, 2019)
+  - no promises that insurance will pay
+  - Spanish captions reviewed, not word-for-word
+stress_tests: [ambiguous tweaks, compliance refusal, bilingual captions, "the old one was better"]

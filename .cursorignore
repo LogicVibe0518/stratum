@@ -1,0 +1,8 @@
+# Files Cursor AI must never read
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+benchmarks/**/photos/raw/
+data/

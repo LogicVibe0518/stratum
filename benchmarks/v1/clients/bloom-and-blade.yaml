@@ -1,0 +1,16 @@
+id: bloom-and-blade
+name: "Bloom & Blade Landscaping"   # fictional
+trade: landscaping
+location: {city: Bristol, country: GB}
+languages: [en-GB]
+palette: {primary: "#1F4D2B", secondary: "#6FA35A", background: "#F7F5EF"}   # ONLY these three
+fonts: {display: "Google Fonts: TBD geometric sans", body: same}
+tone: calm, crafted
+personality: perfectionist; hates stock photos; notices any off-palette shade
+hard_constraints:
+  - palette locked to the three colours above
+  - logo always bottom-left
+  - never place text over foliage
+  - no stock images at all
+  - blur number plates and house numbers
+stress_tests: [brand enforcement, burst-shot dedupe, repetition guard, saliency text placement, privacy blur]

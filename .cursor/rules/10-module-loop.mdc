@@ -1,0 +1,14 @@
+---
+description: How to plan and build any Stratum module (M0–M16). Use when starting, planning or reviewing a module.
+alwaysApply: false
+---
+1. Find the module in the architecture doc: scope, design, failure modes, done-when, depth (Deep/Review).
+2. Pressure-test scope: invariants, failure modes, simplest version meeting the SLO, what breaks at 10x/100x, hostile client/model.
+3. Write a short module spec: goal, in/out of scope, interfaces, acceptance tests incl. failure cases, done-when.
+4. Deep modules: the human writes the core models/functions by hand first. You explain concepts, then harden, test and extend. Ask the human 3 check questions before merge.
+5. Tests first: unit + Hypothesis for invariants; golden images for rendering; tenant-isolation tests for data.
+6. Smallest change that passes. One module per branch/PR. Conventional commits.
+7. Run `make check`. Never weaken a test.
+8. PR description: what, why, risks, flagged security-sensitive lines (RLS, migrations, auth, tokens), 5-bullet explanation.
+9. List decisions made; remind the human to write/update the ADR in docs/adr/ themselves.
+10. If output changes, run the relevant benchmarks/v1 slice and record time, constraint pass rate, cost.

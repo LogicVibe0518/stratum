@@ -1,0 +1,17 @@
+[project]
+name = "stratum-worker"
+version = "0.0.1"
+description = "Stratum workflows, compositor and AI gateway"
+requires-python = ">=3.12,<3.13"
+dependencies = ["stratum-spec"]
+# M5 adds: resvg, uharfbuzz, fonttools, pyvips. M7 adds: dbos. Add when the module starts.
+
+[tool.uv.sources]
+stratum-spec = { workspace = true }
+
+[build-system]
+requires = ["uv_build"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "stratum_worker"

@@ -1,0 +1,14 @@
+id: sharmas-dhaba
+name: "Sharma's Dhaba"          # fictional
+trade: restaurant
+location: {city: Southall, region: London, country: GB}
+languages: [en-GB, hi]
+palette: {primary: "#E07A1F", secondary: "#7A1F2B", text_on_dark: "#FFF6EC"}   # saffron, maroon — edit to taste
+fonts: {display: "Google Fonts: TBD hand-lettered", body: "Google Fonts: TBD"}
+tone: warm, family, light Hinglish
+personality: proud, picky that food looks exactly like theirs, last-minute price changes
+hard_constraints:
+  - food pixels must be the original photo (product-mask SSIM check)
+  - prices must match the brief exactly
+  - halal mark only if brief says so
+stress_tests: [real-product fidelity, harmonisation, Devanagari shaping, logo with white box]

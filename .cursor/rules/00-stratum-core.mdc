@@ -1,0 +1,7 @@
+---
+description: Stratum architecture rules — always apply
+alwaysApply: true
+---
+Read and follow @AGENTS.md at the repo root for every change. It is the source of truth for
+architecture rules, never-rules, stack, repo map, commands and UI rules.
+If a request conflicts with AGENTS.md, stop and ask before writing code.

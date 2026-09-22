@@ -1,0 +1,14 @@
+id: kowalski-plumbing
+name: "Kowalski Plumbing & Heating"   # fictional
+trade: plumbing_heating
+location: {city: Manchester, country: GB}
+languages: [en-GB]
+palette: {primary: "#12264A", accent: "#FF6A00", text_on_dark: "#FFFFFF"}
+fonts: {display: "Google Fonts: TBD condensed sans", body: "Google Fonts: TBD"}
+tone: no-nonsense, trustworthy
+personality: replies late with one line; asks for a bigger logo every time
+hard_constraints:
+  - Gas Safe registration number exactly as in brand kit on heating posts (use a clearly fake number)
+  - emergency phone number exact
+  - no "cheapest in Manchester" style claims
+stress_tests: [photo repair, blur detection, before/after alignment, max logo size]

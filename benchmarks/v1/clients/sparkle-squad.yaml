@@ -1,0 +1,13 @@
+id: sparkle-squad
+name: "Sparkle Squad Cleaning"   # fictional
+trade: home_cleaning
+location: {city: Tampa, region: FL, country: US}
+languages: [en-US]
+palette: {primary: "#19B5B0", accent: "#FFD23F", text: "#1A1A1A"}
+fonts: {display: "Google Fonts: TBD rounded", body: "Google Fonts: TBD"}
+tone: upbeat, emoji-friendly
+personality: enthusiastic, contradictory, reopens approved posts, sends voice notes
+hard_constraints:
+  - services and prices only from price list
+  - no "licensed"/"insured" claims unless brand kit says so
+stress_tests: [voice intake, reopen approved, contradiction handling, motion reels]

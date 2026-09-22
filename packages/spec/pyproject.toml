@@ -1,0 +1,13 @@
+[project]
+name = "stratum-spec"
+version = "0.0.1"
+description = "Stratum layer spec and edit-op schema (source of truth)"
+requires-python = ">=3.12,<3.13"
+dependencies = ["pydantic>=2"]
+
+[build-system]
+requires = ["uv_build"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "stratum_spec"

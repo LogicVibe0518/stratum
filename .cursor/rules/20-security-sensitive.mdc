@@ -1,0 +1,8 @@
+---
+description: Extra care for security-sensitive code
+globs: ["**/migrations/**", "**/*rls*", "**/auth/**", "**/*token*", "infra/**"]
+alwaysApply: false
+---
+This file is security-sensitive (RLS, migrations, auth, tokens, infra). Make the smallest possible change,
+explain every line in the PR description, add or update a tenant-isolation or token test, and never
+disable RLS, widen a policy, or log secrets.

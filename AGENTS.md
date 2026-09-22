@@ -1,0 +1,70 @@
+# AGENTS.md — rules for every coding agent (Claude Code, Cursor, Codex, GPT)
+
+Read this whole file before changing anything. If a request conflicts with these rules, stop and ask.
+
+## What Stratum is
+Stratum turns a client's brief, real photos and brand kit into on-brand social posts in minutes,
+and handles client tweaks in seconds. Built for small agencies serving blue-collar SMBs (UK/US).
+Core idea: **a poster is data, not pixels.** Every poster is a layered JSON spec; our own
+compositor renders it. AI models may generate a *background*, never a finished poster.
+
+## Architecture rules (non-negotiable)
+1. **Poster = layer spec.** Layers: background, subject cutout, shapes, logo, text. Never bake text or logos into generated images.
+2. **Logos are always the client's original file.** Never generated, traced or recoloured by a model.
+3. **Real product pixels are sacred.** "Generate around, paste the truth back": model output goes behind; original product pixels go on top via mask.
+4. **Commands go through workflows (DBOS); reads go straight to Postgres.** No slow or multi-step work inside an HTTP request.
+5. **Every AI call goes through the task gateway** (`caption.generate`, `edit.parse`, `background.create`, ...). Application code never imports a vendor SDK directly.
+6. **Model output is data, never code or markup.** Validate every model output with Pydantic; edit ops must pass the allowlist + template slot schema.
+7. **Immutable versions.** Poster versions are never mutated; edits create a new version.
+8. **Versioned spec schema.** Every spec has `schema_version`; changes ship with an upgrader + test.
+9. **Idempotency keys on every command endpoint.**
+10. **Tenancy everywhere.** Every row has `agency_id`; RLS on every table; tenant comes from the verified token, never the request body. Workers use a restricted DB role and set the tenant per transaction.
+11. **Content addressing.** Assets and renders are stored by SHA-256; render cache key = hash(spec, template version, renderer version, fonts).
+
+## Never
+- Never commit secrets, `.env`, real client data, or real business names/logos/photos.
+- Never write or change RLS policies, migrations, auth or token code without flagging it clearly in the PR description for line-by-line human review.
+- Never add a dependency with a non-commercial licence (e.g. CC BY-NC). Allowed: MIT, Apache-2.0, BSD, OFL (fonts).
+- Never let a model publish, send, or approve anything. A human click is required.
+- Never skip or weaken a test to make CI pass.
+- Never edit files under `benchmarks/v1/` — create `v2` instead.
+
+## Stack
+Python 3.12 · uv workspace · FastAPI · Pydantic v2 · DBOS · Postgres (Supabase) · resvg + HarfBuzz (uharfbuzz) + pyvips ·
+Next.js + TypeScript + react-konva + shadcn/ui (apps/web) · pytest + Hypothesis · ruff · mypy (strict on packages/) ·
+Langfuse (AI traces) · Sentry · OpenTelemetry.
+
+## Repo map
+- `packages/spec` — the layer spec + edit-op schema (source of truth). Pure Python, no I/O.
+- `apps/api` — FastAPI: auth, commands (start workflows), reads.
+- `apps/worker` — DBOS workflows, compositor, image ops, AI gateway calls.
+- `apps/web` — Next.js editor + client review page.
+- `ml/` — command-model data, training, evals.
+- `benchmarks/` — frozen Client Lab benchmark (5 fictional clients). Read-only per version.
+- `docs/adr/` — architecture decision records. **Written by the human owner, not by agents.**
+- `infra/` — local dev + deploy config.
+
+## Commands
+- `make setup` — install everything (`uv sync --all-packages`, pre-commit install)
+- `make check` — ruff + format check + mypy + tests (must pass before any PR)
+- `make test` — pytest
+- `make api` — run the API locally
+
+## How to work on a module
+1. Read the module spec in the issue/PR description and the relevant ADR.
+2. Write or update tests first (including failure cases).
+3. Implement the smallest change that passes. Prefer boring code.
+4. Run `make check`.
+5. In the PR description: what changed, why, risks, and a 5-bullet explanation a reviewer can repeat back.
+One module per branch/PR. Conventional commits (`feat:`, `fix:`, `test:`, `docs:`, `chore:`).
+
+## Style
+- Type hints everywhere; no `Any` in `packages/`.
+- Small pure functions; side effects at the edges.
+- Errors: raise typed exceptions; never swallow.
+- Logs: structured JSON, include `agency_id`, `workflow_id`, never secrets or raw client images.
+
+## UI rules (apps/web)
+Monochrome chrome: black, white and greys. One accent colour, only for focus states and the voice orb.
+Red/amber/green only for status. The client's poster is the only colourful thing on screen.
+Light and dark mode. Typography-led layout; no gradients, no decorative illustrations.
