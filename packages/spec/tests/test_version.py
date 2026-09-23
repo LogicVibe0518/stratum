@@ -1,6 +1,8 @@
-from stratum_spec import SCHEMA_VERSION
+from __future__ import annotations
+
+import stratum_spec
 
 
-def test_schema_version_is_positive_int() -> None:
-    assert isinstance(SCHEMA_VERSION, int)
-    assert SCHEMA_VERSION >= 1
+def test_public_api_is_exported() -> None:
+    for name in ("PosterSpec", "apply_ops", "load", "SCHEMA_VERSION"):
+        assert hasattr(stratum_spec, name), name

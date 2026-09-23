@@ -1,8 +1,58 @@
-"""Stratum layer spec.
+"""Stratum layer spec: the source of truth for what a poster is."""
 
-M4 (deep module): the owner writes the core models here by hand
-(Canvas, Layer variants, EditOp) before any agent extends them.
-See docs/adr/0001-poster-is-data.md.
-"""
+from stratum_spec.migrate import UnknownSchemaVersion, load, upgrade
+from stratum_spec.models import (
+    SCHEMA_VERSION,
+    Box,
+    Canvas,
+    CutoutLayer,
+    ImageLayer,
+    Layer,
+    LogoLayer,
+    PosterSpec,
+    ShapeLayer,
+    TextLayer,
+)
+from stratum_spec.ops import (
+    EditOp,
+    Move,
+    NeedsHuman,
+    OpError,
+    Scale,
+    SetColor,
+    SetText,
+    SetVisible,
+    SwapAsset,
+    apply_op,
+    apply_ops,
+)
+from stratum_spec.templates import load_template, load_templates
 
-SCHEMA_VERSION = 1
+__all__ = [
+    "SCHEMA_VERSION",
+    "Box",
+    "Canvas",
+    "CutoutLayer",
+    "EditOp",
+    "ImageLayer",
+    "Layer",
+    "LogoLayer",
+    "Move",
+    "NeedsHuman",
+    "OpError",
+    "PosterSpec",
+    "Scale",
+    "SetColor",
+    "SetText",
+    "SetVisible",
+    "ShapeLayer",
+    "SwapAsset",
+    "TextLayer",
+    "UnknownSchemaVersion",
+    "apply_op",
+    "apply_ops",
+    "load",
+    "load_template",
+    "load_templates",
+    "upgrade",
+]

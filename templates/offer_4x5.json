@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "template_id": "offer_4x5",
+  "template_version": 1,
+  "brand_kit_version": 1,
+  "canvas": {"aspect": "4:5", "base_width": 1080},
+  "layers": [
+    {"type": "image", "id": "bg", "box": {"x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0}, "source": "client", "fit": "cover", "dim": 0.25},
+    {"type": "shape", "id": "band", "box": {"x": 0.0, "y": 0.58, "w": 1.0, "h": 0.42}, "shape": "rect", "fill": "palette.primary", "opacity": 0.92},
+    {"type": "text", "id": "headline", "box": {"x": 0.08, "y": 0.62, "w": 0.84, "h": 0.16}, "content": "HEADLINE", "font": "font.display", "color": "palette.text_on_primary", "align": "left", "max_lines": 2, "min_size": 0.05, "max_size": 0.11, "uppercase": true},
+    {"type": "text", "id": "offer", "box": {"x": 0.08, "y": 0.79, "w": 0.6, "h": 0.07}, "content": "OFFER DETAIL", "font": "font.body", "color": "palette.text_on_primary", "max_lines": 2, "min_size": 0.025, "max_size": 0.05},
+    {"type": "text", "id": "cta", "box": {"x": 0.08, "y": 0.88, "w": 0.6, "h": 0.05}, "content": "CALL TO ACTION", "font": "font.body", "color": "palette.text_on_primary", "max_lines": 1, "min_size": 0.02, "max_size": 0.035},
+    {"type": "logo", "id": "logo", "box": {"x": 0.74, "y": 0.06, "w": 0.18, "h": 0.1}, "variant": "full", "safe_area": 0.02}
+  ]
+}
