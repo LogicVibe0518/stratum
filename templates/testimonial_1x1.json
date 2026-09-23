@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "template_id": "testimonial_1x1",
+  "template_version": 1,
+  "brand_kit_version": 1,
+  "canvas": {"aspect": "1:1", "base_width": 1080},
+  "layers": [
+    {"type": "shape", "id": "bg", "box": {"x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0}, "shape": "rect", "fill": "palette.surface"},
+    {"type": "cutout", "id": "subject", "box": {"x": 0.58, "y": 0.18, "w": 0.4, "h": 0.7}, "shadow": true},
+    {"type": "text", "id": "quote", "box": {"x": 0.07, "y": 0.2, "w": 0.46, "h": 0.4}, "content": "CUSTOMER QUOTE", "font": "font.display", "color": "palette.text", "max_lines": 6, "min_size": 0.03, "max_size": 0.07},
+    {"type": "text", "id": "attribution", "box": {"x": 0.07, "y": 0.63, "w": 0.4, "h": 0.06}, "content": "NAME, SUBURB", "font": "font.body", "color": "palette.muted", "max_lines": 2, "min_size": 0.018, "max_size": 0.03},
+    {"type": "logo", "id": "logo", "box": {"x": 0.07, "y": 0.83, "w": 0.2, "h": 0.1}, "variant": "full", "safe_area": 0.02}
+  ]
+}

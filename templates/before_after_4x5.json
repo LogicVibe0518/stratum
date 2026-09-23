@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "template_id": "before_after_4x5",
+  "template_version": 1,
+  "brand_kit_version": 1,
+  "canvas": {"aspect": "4:5", "base_width": 1080},
+  "layers": [
+    {"type": "shape", "id": "bg", "box": {"x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0}, "shape": "rect", "fill": "palette.surface"},
+    {"type": "image", "id": "before", "box": {"x": 0.0, "y": 0.08, "w": 0.5, "h": 0.62}, "source": "client", "fit": "cover"},
+    {"type": "image", "id": "after", "box": {"x": 0.5, "y": 0.08, "w": 0.5, "h": 0.62}, "source": "client", "fit": "cover"},
+    {"type": "text", "id": "before_label", "box": {"x": 0.04, "y": 0.63, "w": 0.2, "h": 0.05}, "content": "BEFORE", "font": "font.body", "color": "palette.text", "max_lines": 1, "min_size": 0.02, "max_size": 0.035, "uppercase": true},
+    {"type": "text", "id": "after_label", "box": {"x": 0.54, "y": 0.63, "w": 0.2, "h": 0.05}, "content": "AFTER", "font": "font.body", "color": "palette.text", "max_lines": 1, "min_size": 0.02, "max_size": 0.035, "uppercase": true},
+    {"type": "text", "id": "headline", "box": {"x": 0.06, "y": 0.73, "w": 0.88, "h": 0.12}, "content": "HEADLINE", "font": "font.display", "color": "palette.text", "max_lines": 2, "min_size": 0.04, "max_size": 0.085},
+    {"type": "text", "id": "contact", "box": {"x": 0.06, "y": 0.88, "w": 0.6, "h": 0.05}, "content": "PHONE OR CTA", "font": "font.body", "color": "palette.text", "max_lines": 1, "min_size": 0.02, "max_size": 0.035},
+    {"type": "logo", "id": "logo", "box": {"x": 0.76, "y": 0.86, "w": 0.18, "h": 0.09}, "variant": "full", "safe_area": 0.02}
+  ]
+}
