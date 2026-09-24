@@ -1,0 +1,86 @@
+from __future__ import annotations
+
+import hashlib
+
+import pytest
+from pydantic import BaseModel
+from stratum_worker.gateway import (
+    BackgroundRequest,
+    CaptionRequest,
+    EditParseRequest,
+    TaskName,
+)
+from stratum_worker.gateway.prompts import VERSION, load, read_text, render
+
+# sha256 of each prompt file at its current VERSION. Editing a prompt means bumping
+# VERSION[task] in prompts/__init__.py AND updating this table - never just one.
+PINNED: dict[tuple[TaskName, int], str] = {
+    (
+        TaskName.CAPTION_GENERATE,
+        1,
+    ): "9d7292ec7d2c51bde6d9cb19c422c180f91dfd7b90c4e9bfc002db90b33fe1ec",
+    (TaskName.EDIT_PARSE, 1): "d66f0407cc2f301992a9b0945d55610b24d39ebfbc2de9a1bbad6b52c86d3725",
+    (
+        TaskName.BACKGROUND_CREATE,
+        1,
+    ): "41bb621e0f0fe3b27464617112b7fcb20946962312011faf6a79658fc9ed4a11",
+}
+
+REQUESTS: dict[TaskName, BaseModel] = {
+    TaskName.CAPTION_GENERATE: CaptionRequest(
+        brief="Winter boiler checks",
+        client_name="Northgate",
+        banned_words=["cheap"],
+        past_posts=["Old post"],
+    ),
+    TaskName.EDIT_PARSE: EditParseRequest(
+        message="bigger logo", layers={"logo": "logo image"}, palette=["palette.primary"]
+    ),
+    TaskName.BACKGROUND_CREATE: BackgroundRequest(prompt="a tidy garage workshop"),
+}
+
+
+@pytest.mark.parametrize("task", list(TaskName))
+def test_prompt_text_is_pinned_to_its_version(task: TaskName) -> None:
+    digest = hashlib.sha256(read_text(task).encode()).hexdigest()
+    assert PINNED.get((task, VERSION[task])) == digest, (
+        f"{task} prompt changed: bump VERSION[{task!s}] and pin the new hash {digest}"
+    )
+
+
+@pytest.mark.parametrize("task", list(TaskName))
+def test_every_placeholder_is_filled(task: TaskName) -> None:
+    rendered = render(task, REQUESTS[task])
+    assert "$" not in rendered.user
+    assert rendered.id == f"{task}@v{VERSION[task]}"
+
+
+def test_caption_prompt_carries_request_data() -> None:
+    rendered = render(TaskName.CAPTION_GENERATE, REQUESTS[TaskName.CAPTION_GENERATE])
+    assert "Winter boiler checks" in rendered.user
+    assert "cheap" in rendered.user
+    assert "JSON" in rendered.system
+
+
+def test_edit_prompt_lists_layers_and_palette() -> None:
+    rendered = render(TaskName.EDIT_PARSE, REQUESTS[TaskName.EDIT_PARSE])
+    assert '"logo"' in rendered.user and "palette.primary" in rendered.user
+
+
+def test_background_prompt_forbids_text() -> None:
+    prompt = load(TaskName.BACKGROUND_CREATE)
+    assert prompt.system == ""
+    assert (
+        "no text"
+        in render(TaskName.BACKGROUND_CREATE, REQUESTS[TaskName.BACKGROUND_CREATE]).user.lower()
+    )
+
+
+def test_client_text_with_dollar_signs_is_inserted_verbatim() -> None:
+    request = CaptionRequest(brief="Save $50 on ${service} today", client_name="Northgate")
+    assert "Save $50 on ${service} today" in render(TaskName.CAPTION_GENERATE, request).user
+
+
+def test_wrong_request_type_is_refused() -> None:
+    with pytest.raises(TypeError):
+        render(TaskName.EDIT_PARSE, REQUESTS[TaskName.CAPTION_GENERATE])
