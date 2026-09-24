@@ -95,6 +95,104 @@ def test_golden_offer_poster(offer: PosterSpec, kit: BrandKit, repo_root: Path) 
     assert mean <= MAX_MEAN_DIFF, f"render drifted from golden (mean diff {mean:.3f})"
 
 
+FAKE_SHA = "a" * 64
+
+
+def _checker(path: Path, size: int = 512, cell: int = 16) -> Path:
+    """High-contrast photo stand-in: blur and dim both change it visibly."""
+    image = Image.new("RGB", (size, size), (255, 255, 255))
+    for top in range(0, size, cell):
+        for left in range((top // cell) % 2 * cell, size, cell * 2):
+            image.paste((20, 20, 20), (left, top, left + cell, top + cell))
+    image.save(path, "PNG")
+    return path
+
+
+def _with_layer(spec: PosterSpec, layer_id: str, **changes: object) -> PosterSpec:
+    layers = [
+        layer.model_copy(update=changes) if layer.id == layer_id else layer for layer in spec.layers
+    ]
+    return spec.model_copy(update={"layers": layers})
+
+
+def _inset_spec(**changes: object) -> PosterSpec:
+    """A light canvas with one photo in the middle and nothing else."""
+    return PosterSpec.model_validate(
+        {
+            "template_id": "inset_test",
+            "canvas": {"aspect": "1:1", "base_width": 400},
+            "layers": [
+                {
+                    "type": "shape",
+                    "id": "paper",
+                    "box": {"x": 0, "y": 0, "w": 1, "h": 1},
+                    "fill": "palette.text_on_primary",
+                },
+                {
+                    "type": "image",
+                    "id": "photo",
+                    "asset": FAKE_SHA,
+                    "box": {"x": 0.25, "y": 0.25, "w": 0.5, "h": 0.5},
+                    **changes,
+                },
+            ],
+        }
+    )
+
+
+def _luma(png: bytes, xy: tuple[int, int]) -> int:
+    value = Image.open(io.BytesIO(png)).convert("L").getpixel(xy)
+    assert isinstance(value, int)
+    return value
+
+
+def test_dim_darkens_the_image(
+    offer: PosterSpec, kit: BrandKit, repo_root: Path, tmp_path: Path
+) -> None:
+    assets = {FAKE_SHA: str(_checker(tmp_path / "photo.png"))}
+    bound = _with_layer(offer, "bg", asset=FAKE_SHA)
+    bright = render_poster(_with_layer(bound, "bg", dim=0.0), kit, assets=assets, root=repo_root)
+    dimmed = render_poster(_with_layer(bound, "bg", dim=0.5), kit, assets=assets, root=repo_root)
+
+    for xy in [(20, 20), (300, 300)]:
+        assert _luma(dimmed, xy) < _luma(bright, xy) - 40
+
+
+def test_blur_zero_is_identical_to_no_filter(
+    kit: BrandKit, repo_root: Path, tmp_path: Path
+) -> None:
+    assets = {FAKE_SHA: str(_checker(tmp_path / "photo.png"))}
+    no_field, zero = _inset_spec(), _inset_spec(blur=0.0)
+
+    svg = build_svg(zero, kit, assets=assets, root=repo_root)
+    assert "feGaussianBlur" not in svg and "clip-path" not in svg
+    assert svg == build_svg(no_field, kit, assets=assets, root=repo_root)
+    assert render_poster(zero, kit, assets=assets, root=repo_root) == render_poster(
+        no_field, kit, assets=assets, root=repo_root
+    )
+
+
+def test_blur_softens_inside_and_stays_inside_the_box(
+    kit: BrandKit, repo_root: Path, tmp_path: Path
+) -> None:
+    assets = {FAKE_SHA: str(_checker(tmp_path / "photo.png"))}
+    sharp = Image.open(io.BytesIO(render_poster(_inset_spec(), kit, assets=assets, root=repo_root)))
+    soft = Image.open(
+        io.BytesIO(render_poster(_inset_spec(blur=0.5), kit, assets=assets, root=repo_root))
+    )
+    sharp_rgb, soft_rgb = sharp.convert("RGB"), soft.convert("RGB")
+
+    inside = (150, 150, 250, 250)
+    sharp_low, sharp_high = sharp_rgb.convert("L").crop(inside).getextrema()
+    soft_low, soft_high = soft_rgb.convert("L").crop(inside).getextrema()
+    assert sharp_high - sharp_low > 200
+    assert soft_high - soft_low < 60, "a blurred checkerboard should be nearly flat grey"
+    # Everything outside the 100..300 box must be untouched by the blur.
+    for box in [(0, 0, 400, 98), (0, 302, 400, 400), (0, 0, 98, 400), (302, 0, 400, 400)]:
+        diff = ImageChops.difference(sharp_rgb.crop(box), soft_rgb.crop(box))
+        assert diff.getbbox() is None, f"blur bled outside the layer box into {box}"
+
+
 def test_cli_writes_a_png(tmp_path: Path, repo_root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from stratum_worker.cli import main
 

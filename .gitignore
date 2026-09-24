@@ -21,6 +21,7 @@ node_modules/
 # Data never committed
 data/
 renders/
+.stratum/
 *.psd
 benchmarks/**/photos/raw/
 ml/**/checkpoints/
