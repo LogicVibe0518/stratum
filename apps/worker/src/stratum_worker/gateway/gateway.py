@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import random
+import secrets
 from dataclasses import dataclass, field
 from typing import Protocol
 
@@ -27,6 +28,7 @@ from stratum_worker.gateway.errors import (
     ProviderRateLimited,
     ProviderTimeout,
     ProviderUnavailable,
+    TaskNotSupported,
 )
 from stratum_worker.gateway.providers.base import ProviderCall
 from stratum_worker.gateway.router import Router
@@ -42,6 +44,7 @@ class Tracer(Protocol):
     def record(
         self,
         *,
+        run_id: str,
         task: TaskName,
         provider: str,
         call: ProviderCall | None,
@@ -85,6 +88,10 @@ class Gateway:
         timeout_s: float | None = None,
     ) -> BaseModel:
         """Run one task. Returns a validated result model or raises a GatewayError."""
+        # One id for the whole run. Every attempt - each retry, each failover, each
+        # skipped provider - is recorded under it, so a trace shows "this caption cost
+        # three attempts across two vendors" instead of three unrelated events.
+        run_id = secrets.token_hex(16)
         budget_s = timeout_s or TIMEOUTS_S[task]
         result_type = RESULT_TYPES[task]
         chain = self.router.chain(task, roll=self.rng.randrange(100))
@@ -95,6 +102,7 @@ class Gateway:
             breaker = self._breaker(provider.name)
             if not breaker.allows():
                 self.tracer.record(
+                    run_id=run_id,
                     task=task,
                     provider=provider.name,
                     call=None,
@@ -118,6 +126,7 @@ class Gateway:
                     last_error = ProviderTimeout(f"{provider.name} timed out")
                     breaker.record_failure()
                     self.tracer.record(
+                        run_id=run_id,
                         task=task,
                         provider=provider.name,
                         call=None,
@@ -126,10 +135,24 @@ class Gateway:
                         error=str(exc),
                     )
                     break  # a timeout will not fix itself on a retry; move on
+                except TaskNotSupported as exc:
+                    # Healthy provider, wrong tool for the job. No breaker failure.
+                    last_error = exc
+                    self.tracer.record(
+                        run_id=run_id,
+                        task=task,
+                        provider=provider.name,
+                        call=None,
+                        outcome="unsupported",
+                        agency_id=agency_id,
+                        error=str(exc),
+                    )
+                    break
                 except (ProviderUnavailable, ProviderRateLimited) as exc:
                     last_error = exc
                     breaker.record_failure()
                     self.tracer.record(
+                        run_id=run_id,
                         task=task,
                         provider=provider.name,
                         call=None,
@@ -149,6 +172,7 @@ class Gateway:
                         f"{provider.name}: {exc.error_count()} validation errors"
                     )
                     self.tracer.record(
+                        run_id=run_id,
                         task=task,
                         provider=provider.name,
                         call=call,
@@ -165,6 +189,7 @@ class Gateway:
                 breaker.record_success()
                 self.budget.record(agency_id, call.cost_usd)
                 self.tracer.record(
+                    run_id=run_id,
                     task=task,
                     provider=provider.name,
                     call=call,

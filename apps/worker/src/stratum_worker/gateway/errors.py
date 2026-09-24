@@ -27,6 +27,17 @@ class InvalidProviderOutput(GatewayError):
     """
 
 
+class TaskNotSupported(GatewayError):
+    """This provider cannot serve this request - not a fault, a capability gap.
+
+    Raised before any network call (e.g. a reference image on a provider that only
+    does text-to-image). The gateway moves to the next provider WITHOUT recording a
+    breaker failure: a provider that is up and simply declined must not be counted
+    towards the failure threshold, or one unsupported feature would open the circuit
+    on a healthy vendor for every other task too.
+    """
+
+
 class BudgetExceeded(GatewayError):
     """The agency's daily AI spend cap would be breached. Never retried."""
 

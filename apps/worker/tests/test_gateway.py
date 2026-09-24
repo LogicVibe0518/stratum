@@ -13,6 +13,7 @@ from stratum_worker.gateway import (
 )
 from stratum_worker.gateway.breaker import FAILURE_THRESHOLD, Breaker
 from stratum_worker.gateway.budget import Budget
+from stratum_worker.gateway.errors import TaskNotSupported
 from stratum_worker.gateway.providers.base import ProviderCall
 from stratum_worker.gateway.providers.fake import (
     FakeProvider,
@@ -119,6 +120,44 @@ async def test_spend_is_recorded_per_agency() -> None:
     await gateway.run(TASK, request(), agency_id="other")
     assert gateway.budget.spent_today("nimble") == pytest.approx(0.02)
     assert gateway.budget.spent_today("other") == pytest.approx(0.02)
+
+
+@pytest.mark.asyncio
+async def test_all_attempts_of_one_run_share_a_run_id() -> None:
+    """A retry and a failover are one call, not three. Traces must say so."""
+    gateway = build(always_unavailable("primary"), FakeProvider(name="backup", results=[GOOD]))
+    tracer = ListTracer()
+    gateway.tracer = tracer
+    await gateway.run(TASK, request(), agency_id="nimble")
+    run_ids = {r["run_id"] for r in tracer.records}
+    assert len(tracer.records) > 1, "expected retries and a failover to be recorded"
+    assert len(run_ids) == 1, f"one call produced {len(run_ids)} trace ids"
+
+
+@pytest.mark.asyncio
+async def test_separate_runs_get_separate_run_ids() -> None:
+    gateway = build(FakeProvider(name="primary", results=[GOOD, GOOD]))
+    tracer = ListTracer()
+    gateway.tracer = tracer
+    await gateway.run(TASK, request(), agency_id="nimble")
+    await gateway.run(TASK, request(), agency_id="nimble")
+    assert len({r["run_id"] for r in tracer.records}) == 2
+
+
+@pytest.mark.asyncio
+async def test_unsupported_request_does_not_penalise_the_provider() -> None:
+    """Declining a feature is not a fault. One unsupported request must not open
+    the circuit on a healthy vendor and take its other tasks down with it."""
+    picky = FakeProvider(name="picky", failures=[TaskNotSupported("picky: no reference images")])
+    backup = FakeProvider(name="backup", results=[GOOD])
+    gateway = build(picky, backup)
+    tracer = ListTracer()
+    gateway.tracer = tracer
+    result = await gateway.run(TASK, request(), agency_id="nimble")
+    assert isinstance(result, CaptionResult)
+    assert len(picky.calls) == 1, "an unsupported request must not be retried"
+    assert gateway.router.breakers["picky"].allows()
+    assert [r["outcome"] for r in tracer.records] == ["unsupported", "ok"]
 
 
 @pytest.mark.asyncio

@@ -766,6 +766,7 @@ version = "0.0.1"
 source = { editable = "apps/worker" }
 dependencies = [
     { name = "fonttools" },
+    { name = "httpx" },
     { name = "numpy" },
     { name = "pillow" },
     { name = "resvg" },
@@ -775,6 +776,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "fonttools", specifier = ">=4.50" },
+    { name = "httpx", specifier = ">=0.27" },
     { name = "numpy", specifier = ">=2.0" },
     { name = "pillow", specifier = ">=11.0" },
     { name = "resvg", specifier = ">=0.2" },

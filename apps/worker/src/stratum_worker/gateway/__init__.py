@@ -9,6 +9,7 @@ from stratum_worker.gateway.errors import (
     ProviderRateLimited,
     ProviderTimeout,
     ProviderUnavailable,
+    TaskNotSupported,
 )
 from stratum_worker.gateway.gateway import Gateway, NullTracer, Tracer
 from stratum_worker.gateway.router import Router, TaskPolicy
@@ -41,6 +42,7 @@ __all__ = [
     "ProviderUnavailable",
     "Router",
     "TaskName",
+    "TaskNotSupported",
     "TaskPolicy",
     "Tracer",
 ]
