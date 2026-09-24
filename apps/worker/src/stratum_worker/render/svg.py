@@ -26,6 +26,9 @@ from stratum_worker.render.text import fit, load_metrics
 
 PLACEHOLDER_FILL = "#d8d8d8"
 PLACEHOLDER_STROKE = "#b4b4b4"
+DIM_FILL = "#000000"
+# blur=1.0 means a standard deviation of 4% of the canvas's shorter side.
+BLUR_SCALE = 0.04
 
 
 def _px(spec: PosterSpec, layer: Layer) -> tuple[float, float, float, float]:
@@ -56,17 +59,45 @@ def _placeholder(x: float, y: float, w: float, h: float, label: str) -> str:
     )
 
 
+def _blurred(layer: ImageLayer, spec: PosterSpec, geom: tuple[float, ...], image: str) -> str:
+    """Blur the image, clipped to its own box so it never bleeds over neighbours."""
+    x, y, w, h = geom
+    std_dev = layer.blur * BLUR_SCALE * min(spec.canvas.size)
+    # Layer ids cannot contain "-", so these ids never collide with a layer's.
+    clip_id, filter_id = f"clip-{layer.id}", f"blur-{layer.id}"
+    return (
+        f'<defs><clipPath id="{clip_id}"><rect x="{x:.2f}" y="{y:.2f}" width="{w:.2f}" '
+        f'height="{h:.2f}"/></clipPath>'
+        f'<filter id="{filter_id}"><feGaussianBlur stdDeviation="{std_dev:.3f}"/></filter></defs>'
+        f'<g clip-path="url(#{clip_id})"><g filter="url(#{filter_id})">{image}</g></g>'
+    )
+
+
 def _image_svg(
-    layer: ImageLayer | CutoutLayer | LogoLayer, geom: tuple[float, ...], href: str | None
+    layer: ImageLayer | CutoutLayer | LogoLayer,
+    spec: PosterSpec,
+    geom: tuple[float, ...],
+    href: str | None,
 ) -> str:
     x, y, w, h = geom
     if href is None:
-        return _placeholder(x, y, w, h, layer.type)
-    preserve = "xMidYMid slice" if getattr(layer, "fit", "cover") == "cover" else "xMidYMid meet"
-    return (
-        f'<image x="{x:.2f}" y="{y:.2f}" width="{w:.2f}" height="{h:.2f}" '
-        f'href="{escape(href, {chr(34): "&quot;"})}" preserveAspectRatio="{preserve}"/>'
-    )
+        body = _placeholder(x, y, w, h, layer.type)
+    else:
+        preserve = (
+            "xMidYMid slice" if getattr(layer, "fit", "cover") == "cover" else "xMidYMid meet"
+        )
+        body = (
+            f'<image x="{x:.2f}" y="{y:.2f}" width="{w:.2f}" height="{h:.2f}" '
+            f'href="{escape(href, {chr(34): "&quot;"})}" preserveAspectRatio="{preserve}"/>'
+        )
+        if isinstance(layer, ImageLayer) and layer.blur > 0:
+            body = _blurred(layer, spec, geom, body)
+    if isinstance(layer, ImageLayer) and layer.dim > 0:
+        body += (
+            f'<rect x="{x:.2f}" y="{y:.2f}" width="{w:.2f}" height="{h:.2f}" '
+            f'fill="{DIM_FILL}" opacity="{layer.dim:.4f}"/>'
+        )
+    return body
 
 
 def _shape_svg(layer: ShapeLayer, kit: BrandKit, geom: tuple[float, ...]) -> str:
@@ -143,7 +174,7 @@ def build_svg(
             body.append(_shape_svg(layer, kit, geom))
         else:
             href = assets.get(layer.asset) if layer.asset else None
-            body.append(_image_svg(layer, geom, href))
+            body.append(_image_svg(layer, spec, geom, href))
         body.append("</g>")
     body.append("</svg>")
     return "".join(body)
