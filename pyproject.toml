@@ -17,6 +17,7 @@ dev = [
   "pre-commit",
   "httpx",
   "pillow",
+  "pytest-asyncio",
 ]
 
 [tool.ruff]
@@ -39,3 +40,5 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 testpaths = ["packages", "apps"]
 addopts = "-q"
+asyncio_mode = "auto"
+markers = ["live: makes real, paid provider calls; skipped unless STRATUM_LIVE=1 (make live)"]

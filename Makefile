@@ -1,4 +1,4 @@
-.PHONY: setup sync check lint fmt type test api
+.PHONY: setup sync check lint fmt type test live api
 
 setup:
 	uv sync --all-packages
@@ -22,6 +22,10 @@ test: sync
 	uv run pytest
 
 check: lint type test
+
+# Real provider calls that cost real money. Keys come from the environment or .env.
+live: sync
+	set -a; [ -f .env ] && . ./.env; set +a; STRATUM_LIVE=1 uv run pytest -m live -rs
 
 api: sync
 	uv run uvicorn stratum_api.main:app --reload --port 8000

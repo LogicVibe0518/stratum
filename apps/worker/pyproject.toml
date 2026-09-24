@@ -3,7 +3,14 @@ name = "stratum-worker"
 version = "0.0.1"
 description = "Stratum workflows, compositor and AI gateway"
 requires-python = ">=3.12,<3.13"
-dependencies = ["stratum-spec", "resvg>=0.2", "fonttools>=4.50", "pillow>=11.0", "numpy>=2.0"]
+dependencies = [
+  "stratum-spec",
+  "resvg>=0.2",
+  "fonttools>=4.50",
+  "pillow>=11.0",
+  "numpy>=2.0",
+  "httpx>=0.27",
+]
 # M7 adds: dbos. Add when the module starts.
 
 [project.scripts]

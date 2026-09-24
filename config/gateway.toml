@@ -1,0 +1,65 @@
+# AI gateway routing. Merged over the defaults in
+# apps/worker/src/stratum_worker/gateway/config.py, table by table.
+#
+# Changing a model here is a config change plus an eval run, never a code change.
+# Every model named under [models] must have an entry under [prices], or loading fails:
+# an unpriced model would pass every budget check for free.
+#
+# Verified 2026-09-25:
+#   text  - openrouter.ai/api/v1/models (ids and per-token prices)
+#   openai - developers.openai.com/api/docs/pricing
+#   fal   - fal.ai/models/fal-ai/flux/schnell ($0.003/megapixel, rounded up)
+# Re-verify before every model swap. Two ids Cursor proposed did not exist
+# (google/gemini-3.5-flash-lite, gpt-image-1); a wrong id fails closed at load,
+# a wrong PRICE fails open and spends real money, so prices are rounded up.
+
+[tasks."caption.generate"]
+order = ["openrouter", "openai"]
+canary_percent = 0          # 0-100: share of traffic sent to `canary` first
+max_attempts_per_provider = 2
+max_output_tokens = 600
+
+[tasks."edit.parse"]        # interactive path: keep it on fast models
+order = ["openrouter", "openai"]
+max_output_tokens = 400
+
+[tasks."background.create"]
+order = ["fal", "openai"]
+
+# Known limit: openrouter and openai deliberately run the SAME text model, so this
+# failover covers a route outage (OpenRouter down, key rejected, 429), not a model
+# that has itself gone bad. Model diversity belongs in `canary` once the eval
+# harness can prove a second model is as good - guessing one now just adds variance.
+[models.openrouter]
+"caption.generate" = "openai/gpt-6-luna"
+"edit.parse" = "openai/gpt-6-luna"
+
+[models.openai]
+"caption.generate" = "gpt-6-luna"
+"edit.parse" = "gpt-6-luna"
+"background.create" = "gpt-image-2.5-flare"   # flare = the fast variant; the poster
+                                              # only needs a background, not precision
+
+[models.fal]
+"background.create" = "fal-ai/flux/schnell"
+
+# USD. Token prices per million; image prices per image.
+# Long-context requests cost roughly double at OpenAI - our prompts are short, but
+# that is why per-token estimates here are a floor, not a promise.
+[prices."openai/gpt-6-luna"]
+input_per_mtok = 0.10
+output_per_mtok = 0.50
+
+[prices."gpt-6-luna"]
+input_per_mtok = 0.10
+output_per_mtok = 0.50
+
+# Token-billed, not flat: ~439 output tokens for 1024x1024 medium at $30/Mtok
+# is ~$0.013, plus prompt tokens. 0.025 leaves room for a larger poster aspect.
+[prices."gpt-image-2.5-flare"]
+per_image = 0.025
+
+# $0.003/megapixel rounded up to the next whole megapixel. A 1080x1350 4:5 poster
+# is 1.46 MP, so it bills as 2 MP = $0.006.
+[prices."fal-ai/flux/schnell"]
+per_image = 0.006
