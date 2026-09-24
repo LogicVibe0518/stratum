@@ -17,6 +17,7 @@ dev = [
   "pre-commit",
   "httpx",
   "pillow",
+  "pytest-asyncio",
 ]
 
 [tool.ruff]
@@ -39,3 +40,4 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 testpaths = ["packages", "apps"]
 addopts = "-q"
+asyncio_mode = "auto"
