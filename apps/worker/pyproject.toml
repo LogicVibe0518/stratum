@@ -3,8 +3,11 @@ name = "stratum-worker"
 version = "0.0.1"
 description = "Stratum workflows, compositor and AI gateway"
 requires-python = ">=3.12,<3.13"
-dependencies = ["stratum-spec"]
-# M5 adds: resvg, uharfbuzz, fonttools, pyvips. M7 adds: dbos. Add when the module starts.
+dependencies = ["stratum-spec", "resvg>=0.2", "fonttools>=4.50"]
+# M7 adds: dbos. M2 adds: pyvips. Add when the module starts.
+
+[project.scripts]
+stratum-render = "stratum_worker.cli:main"
 
 [tool.uv.sources]
 stratum-spec = { workspace = true }

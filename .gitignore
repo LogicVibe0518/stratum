@@ -31,3 +31,4 @@ ml/**/wandb/
 .vscode/*
 !.vscode/extensions.json
 !.vscode/settings.json
+out/
