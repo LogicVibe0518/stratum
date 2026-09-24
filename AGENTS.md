@@ -24,13 +24,13 @@ compositor renders it. AI models may generate a *background*, never a finished p
 ## Never
 - Never commit secrets, `.env`, real client data, or real business names/logos/photos.
 - Never write or change RLS policies, migrations, auth or token code without flagging it clearly in the PR description for line-by-line human review.
-- Never add a dependency with a non-commercial licence (e.g. CC BY-NC). Allowed: MIT, Apache-2.0, BSD, OFL (fonts).
+- Never add a dependency outside the allowed licences: MIT, MIT-CMU, Apache-2.0, BSD, ISC, OFL (fonts). GPL, AGPL, LGPL and non-commercial licences (e.g. CC BY-NC) need a written decision first.
 - Never let a model publish, send, or approve anything. A human click is required.
 - Never skip or weaken a test to make CI pass.
 - Never edit files under `benchmarks/v1/` — create `v2` instead.
 
 ## Stack
-Python 3.12 · uv workspace · FastAPI · Pydantic v2 · DBOS · Postgres (Supabase) · resvg + HarfBuzz (uharfbuzz) + pyvips ·
+Python 3.12 · uv workspace · FastAPI · Pydantic v2 · DBOS · Postgres (Supabase) · resvg + HarfBuzz (uharfbuzz) + Pillow ·
 Next.js + TypeScript + react-konva + shadcn/ui (apps/web) · pytest + Hypothesis · ruff · mypy (strict on packages/) ·
 Langfuse (AI traces) · Sentry · OpenTelemetry.
 
