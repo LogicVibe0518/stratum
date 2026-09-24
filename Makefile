@@ -1,10 +1,13 @@
-.PHONY: setup check lint fmt type test api
+.PHONY: setup sync check lint fmt type test api
 
 setup:
 	uv sync --all-packages
-	uv run pre-commit install
+	uv run pre-commit install --install-hooks
 
-lint:
+sync:
+	uv sync --all-packages --quiet
+
+lint: sync
 	uv run ruff check .
 	uv run ruff format --check .
 
@@ -12,13 +15,13 @@ fmt:
 	uv run ruff check --fix .
 	uv run ruff format .
 
-type:
+type: sync
 	uv run mypy
 
-test:
+test: sync
 	uv run pytest
 
 check: lint type test
 
-api:
+api: sync
 	uv run uvicorn stratum_api.main:app --reload --port 8000
