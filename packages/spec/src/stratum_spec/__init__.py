@@ -1,5 +1,6 @@
 """Stratum layer spec: the source of truth for what a poster is."""
 
+from stratum_spec.brand import BrandKit, FontFace, UnknownToken
 from stratum_spec.migrate import UnknownSchemaVersion, load, upgrade
 from stratum_spec.models import (
     SCHEMA_VERSION,
@@ -31,9 +32,11 @@ from stratum_spec.templates import load_template, load_templates
 __all__ = [
     "SCHEMA_VERSION",
     "Box",
+    "BrandKit",
     "Canvas",
     "CutoutLayer",
     "EditOp",
+    "FontFace",
     "ImageLayer",
     "Layer",
     "LogoLayer",
@@ -49,6 +52,7 @@ __all__ = [
     "SwapAsset",
     "TextLayer",
     "UnknownSchemaVersion",
+    "UnknownToken",
     "apply_op",
     "apply_ops",
     "load",
