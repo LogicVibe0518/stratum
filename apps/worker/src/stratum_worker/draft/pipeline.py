@@ -16,11 +16,11 @@ from __future__ import annotations
 import json
 import os
 import tempfile
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from stratum_spec.models import Aspect, PosterSpec
-from stratum_spec.templates import load_template
+from stratum_spec.templates import Variants, load_template, load_variants, retarget
 
 from stratum_worker.assets.models import AssetMeta
 from stratum_worker.assets.store import AssetStore
@@ -35,7 +35,7 @@ from stratum_worker.draft.models import (
     RenderedPoster,
     StepRecord,
 )
-from stratum_worker.draft.preflight import check_copy
+from stratum_worker.draft.preflight import check_copy, check_layout
 from stratum_worker.gateway.gateway import Gateway, NullTracer, Tracer
 from stratum_worker.gateway.providers.base import ProviderCall
 from stratum_worker.gateway.tasks import (
@@ -309,11 +309,12 @@ def _render_all(
     brief: PostBrief,
     client: Client,
     template: PosterSpec,
+    variants: Variants,
     texts: dict[str, str],
     assets: dict[str, str],
     asset_paths: dict[str, str],
     deps: Deps,
-) -> tuple[RenderedPoster, ...]:
+) -> tuple[tuple[RenderedPoster, ...], tuple[Flag, ...]]:
     """One spec and one PNG per aspect, from one set of words.
 
     The model is not called again here. That is the whole cost argument for shipping
@@ -323,14 +324,17 @@ def _render_all(
     out = client.out_dir(brief.slug)
     out.mkdir(parents=True, exist_ok=True)
     posters: list[RenderedPoster] = []
+    layout_flags: list[Flag] = []
     for aspect in brief.aspects:
         spec = build_spec(template, client.kit, texts, assets, aspect=aspect)
+        spec = retarget(spec, aspect, variants)
         png = render_poster(spec, client.kit, assets=asset_paths, root=deps.repo_root)
         suffix = _aspect_suffix(aspect)
         png_path = out / f"poster-{suffix}.png"
         spec_path = out / f"spec-{suffix}.json"
         png_path.write_bytes(png)
         spec_path.write_text(spec.model_dump_json(indent=2), encoding="utf-8")
+        layout_flags.extend(check_layout(spec, client.kit, root=deps.repo_root))
         width, height = spec.canvas.size
         posters.append(
             RenderedPoster(
@@ -341,19 +345,26 @@ def _render_all(
                 height=height,
             )
         )
-    return tuple(posters)
+    return tuple(posters), tuple(layout_flags)
 
 
 async def draft_post(brief: PostBrief, deps: Deps) -> PostDraft:
     """Brief in, finished post out. See docs/modules/M7-draft-post.md."""
     client = load_client(deps.clients_root, brief.client_id)
     binding = binding_for(brief.template_id)
-    template = load_template(deps.templates_dir / f"{brief.template_id}.json")
+    template_path = deps.templates_dir / f"{brief.template_id}.json"
+    template = load_template(template_path)
+    variants = load_variants(template_path)
 
     out = client.out_dir(brief.slug)
     checkpoints = Checkpoints(out / ".checkpoints.json")
+    # A per-draft gateway, sharing the router, budget and breakers but carrying its
+    # own tracer. Mutating deps.gateway.tracer would work for one draft and corrupt
+    # every other draft's provenance the moment two run at once - which is exactly
+    # what the batch command does.
     tracer = CollectingTracer(inner=deps.gateway.tracer)
-    deps.gateway.tracer = tracer
+    gateway = replace(deps.gateway, tracer=tracer)
+    deps = replace(deps, gateway=gateway)
 
     flags: list[Flag] = []
     steps: list[StepRecord] = []
@@ -416,8 +427,11 @@ async def draft_post(brief: PostBrief, deps: Deps) -> PostDraft:
     asset_paths = {
         sha: str(deps.store.path_for(sha, "full").resolve()) for sha in set(assets.values())
     }
-    posters = _render_all(brief, client, template, texts, assets, asset_paths, deps)
+    posters, layout_flags = _render_all(
+        brief, client, template, variants, texts, assets, asset_paths, deps
+    )
     steps.append(StepRecord(step="render"))
+    flags.extend(layout_flags)
 
     flags.extend(check_copy(copy, client.rules, brief.brief))
     steps.append(StepRecord(step="preflight"))
