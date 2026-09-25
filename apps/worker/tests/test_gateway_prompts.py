@@ -8,6 +8,7 @@ from stratum_worker.gateway import (
     BackgroundRequest,
     CaptionRequest,
     EditParseRequest,
+    PostCopyRequest,
     TaskName,
 )
 from stratum_worker.gateway.prompts import VERSION, load, read_text, render
@@ -15,6 +16,7 @@ from stratum_worker.gateway.prompts import VERSION, load, read_text, render
 # sha256 of each prompt file at its current VERSION. Editing a prompt means bumping
 # VERSION[task] in prompts/__init__.py AND updating this table - never just one.
 PINNED: dict[tuple[TaskName, int], str] = {
+    (TaskName.POST_COPY, 1): "405fa711bbc466dd1fc494cbd3d0ca1510f62bec5621d546d59ea645420b8215",
     (
         TaskName.CAPTION_GENERATE,
         1,
@@ -27,6 +29,17 @@ PINNED: dict[tuple[TaskName, int], str] = {
 }
 
 REQUESTS: dict[TaskName, BaseModel] = {
+    TaskName.POST_COPY: PostCopyRequest(
+        brief="20% off boiler servicing, book before 31 October.",
+        client_name="Kowalski Plumbing",
+        trade="plumbing_heating",
+        services=("boiler service", "emergency plumber"),
+        areas=("Manchester", "Didsbury"),
+        allowed_hashtags=("#manchester", "#plumbing"),
+        must_include=("Gas Safe 000000",),
+        banned_claims=("cheapest in Manchester",),
+        photo_description="an engineer kneeling beside a wall-mounted boiler",
+    ),
     TaskName.CAPTION_GENERATE: CaptionRequest(
         brief="Winter boiler checks",
         client_name="Northgate",
@@ -84,3 +97,22 @@ def test_client_text_with_dollar_signs_is_inserted_verbatim() -> None:
 def test_wrong_request_type_is_refused() -> None:
     with pytest.raises(TypeError):
         render(TaskName.EDIT_PARSE, REQUESTS[TaskName.CAPTION_GENERATE])
+
+
+def test_post_copy_prompt_carries_rules_and_limits() -> None:
+    rendered = render(TaskName.POST_COPY, REQUESTS[TaskName.POST_COPY])
+    assert "Gas Safe 000000" in rendered.user
+    assert "cheapest in Manchester" in rendered.user
+    assert "#manchester" in rendered.user
+    assert "boiler service" in rendered.user and "Didsbury" in rendered.user
+    assert "an engineer kneeling" in rendered.user
+    # the first-sentence rule is the discoverability lever; it must be in the prompt
+    assert "first sentence" in rendered.system.lower()
+    assert "JSON" in rendered.system
+
+
+def test_post_copy_prompt_omits_alt_text_when_no_photo_description() -> None:
+    """Inventing a description of a photo nobody looked at is worse than none."""
+    request = REQUESTS[TaskName.POST_COPY].model_copy(update={"photo_description": ""})
+    rendered = render(TaskName.POST_COPY, request)
+    assert "(no photo description)" in rendered.user

@@ -24,7 +24,7 @@ from stratum_worker.gateway.providers.base import ProviderCall
 from stratum_worker.gateway.tasks import TaskName
 
 DEFAULT_BASE_URL = "https://openrouter.ai/api/v1"
-TASKS = frozenset({TaskName.CAPTION_GENERATE, TaskName.EDIT_PARSE})
+TASKS = frozenset({TaskName.POST_COPY, TaskName.CAPTION_GENERATE, TaskName.EDIT_PARSE})
 
 
 @dataclass

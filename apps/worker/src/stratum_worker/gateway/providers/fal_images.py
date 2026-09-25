@@ -31,7 +31,12 @@ DEFAULT_BASE_URL = "https://queue.fal.run"
 POLL_INTERVAL_S = 0.5
 MAX_IMAGE_BYTES = 20 * 1024 * 1024
 # Multiples of 16, close to one megapixel, matching our canvas aspects.
-IMAGE_SIZES = {"1:1": (1024, 1024), "4:5": (1024, 1280), "9:16": (768, 1344)}
+IMAGE_SIZES = {
+    "1:1": (1024, 1024),
+    "4:5": (1024, 1280),
+    "9:16": (768, 1344),
+    "16:9": (1344, 768),
+}
 # URLs in fal's responses are only followed to fal's own hosts, and the API key is
 # only sent to the queue host. A tampered response cannot point us at internal
 # addresses or collect the key.

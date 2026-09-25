@@ -1,0 +1,40 @@
+{
+  "id": "kowalski-plumbing",
+  "name": "Kowalski Plumbing & Heating",
+  "trade": "plumbing_heating",
+  "rules": {
+    "client_id": "kowalski-plumbing",
+    "version": 1,
+    "services": [
+      "boiler service",
+      "boiler repair",
+      "emergency plumber",
+      "bathroom fitting",
+      "radiator installation"
+    ],
+    "areas": [
+      "Manchester",
+      "Didsbury",
+      "Chorlton",
+      "Salford"
+    ],
+    "allowed_hashtags": [
+      "#manchester",
+      "#manchesterplumber",
+      "#plumbing",
+      "#gassafe",
+      "#boilerservice"
+    ],
+    "max_hashtags": 5,
+    "must_include": [
+      "Gas Safe 000000"
+    ],
+    "banned_claims": [
+      "cheapest in Manchester",
+      "cheapest",
+      "no one beats our price",
+      "guaranteed lowest"
+    ],
+    "alt_text_max_chars": 125
+  }
+}

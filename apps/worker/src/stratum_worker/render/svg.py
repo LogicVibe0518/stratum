@@ -83,8 +83,15 @@ def _image_svg(
     if href is None:
         body = _placeholder(x, y, w, h, layer.type)
     else:
+        # A photo may be cropped to fill its box. A logo or a cutout may NOT: it is
+        # the client's own artwork, and a logo with its first letter sliced off is
+        # the most visible way there is to look amateur. `getattr(layer, "fit")`
+        # used to default logos to "cover" - it shipped a cropped logo on the very
+        # first real poster, which is why this is now spelled out by type.
         preserve = (
-            "xMidYMid slice" if getattr(layer, "fit", "cover") == "cover" else "xMidYMid meet"
+            "xMidYMid slice"
+            if isinstance(layer, ImageLayer) and layer.fit == "cover"
+            else "xMidYMid meet"
         )
         body = (
             f'<image x="{x:.2f}" y="{y:.2f}" width="{w:.2f}" height="{h:.2f}" '

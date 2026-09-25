@@ -23,16 +23,19 @@ from stratum_worker.gateway.tasks import (
     BackgroundRequest,
     CaptionRequest,
     EditParseRequest,
+    PostCopyRequest,
     TaskName,
 )
 
 VERSION: dict[TaskName, int] = {
+    TaskName.POST_COPY: 1,
     TaskName.CAPTION_GENERATE: 1,
     TaskName.EDIT_PARSE: 1,
     TaskName.BACKGROUND_CREATE: 1,
 }
 
 FILES: dict[TaskName, str] = {
+    TaskName.POST_COPY: "post_copy.md",
     TaskName.CAPTION_GENERATE: "caption_generate.md",
     TaskName.EDIT_PARSE: "edit_parse.md",
     TaskName.BACKGROUND_CREATE: "background_create.md",
@@ -85,7 +88,30 @@ def load(task: TaskName) -> Prompt:
     return _parse(task, read_text(task))
 
 
+def _list(values: tuple[str, ...]) -> str:
+    return ", ".join(values) or "(none)"
+
+
 def _values(task: TaskName, request: BaseModel) -> dict[str, str]:
+    if task is TaskName.POST_COPY and isinstance(request, PostCopyRequest):
+        return {
+            "client_name": request.client_name,
+            "trade": request.trade or "(not given)",
+            "tone": request.tone,
+            "language": request.language,
+            "platform": request.platform,
+            "services": _list(request.services),
+            "areas": _list(request.areas),
+            "allowed_hashtags": _list(request.allowed_hashtags),
+            "max_hashtags": str(request.max_hashtags),
+            "must_include": _list(request.must_include),
+            "banned_claims": _list(request.banned_claims),
+            "photo_description": request.photo_description or "(no photo description)",
+            "headline_max_chars": str(request.headline_max_chars),
+            "offer_max_chars": str(request.offer_max_chars),
+            "cta_max_chars": str(request.cta_max_chars),
+            "brief": request.brief,
+        }
     if task is TaskName.CAPTION_GENERATE and isinstance(request, CaptionRequest):
         return {
             "client_name": request.client_name,

@@ -26,7 +26,10 @@ LayerId = Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]{0,63}$")]
 ColorToken = Annotated[str, Field(pattern=r"^palette\.[a-z][a-z0-9_]{0,31}$")]
 FontToken = Annotated[str, Field(pattern=r"^font\.[a-z][a-z0-9_]{0,31}$")]
 AssetRef = Annotated[str, Field(pattern=r"^[a-f0-9]{64}$")]
-Aspect = Literal["1:1", "4:5", "9:16"]
+# 4:5 is the Instagram feed default; 1:1 is a free re-render of it. 9:16 (story,
+# reel) and 16:9 (LinkedIn, YouTube) need per-aspect box overrides to look right -
+# see docs/modules/M7-draft-post.md.
+Aspect = Literal["1:1", "4:5", "9:16", "16:9"]
 
 
 class Frozen(BaseModel):

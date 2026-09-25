@@ -1,0 +1,32 @@
+{
+  "client_id": "lone-star-roofing",
+  "version": 1,
+  "palette": {
+    "primary": "#2b2b2b",
+    "secondary": "#a63a2b",
+    "surface": "#f3ebdd",
+    "text": "#2b2b2b",
+    "text_on_primary": "#f3ebdd",
+    "muted": "#7a6a58"
+  },
+  "fonts": {
+    "display": {
+      "family": "Anton",
+      "file": "assets/fonts/Anton-Regular.ttf",
+      "weight": 400,
+      "line_height": 1.05
+    },
+    "body": {
+      "family": "Barlow",
+      "file": "assets/fonts/Barlow-Regular.ttf",
+      "weight": 400,
+      "line_height": 1.25
+    },
+    "body_bold": {
+      "family": "Barlow",
+      "file": "assets/fonts/Barlow-Bold.ttf",
+      "weight": 700,
+      "line_height": 1.25
+    }
+  }
+}

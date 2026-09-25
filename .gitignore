@@ -33,3 +33,8 @@ ml/**/wandb/
 !.vscode/extensions.json
 !.vscode/settings.json
 out/
+
+# Client working folders: real client photos and generated posts never go in git.
+clients/*/photos/*
+!clients/*/photos/.gitkeep
+clients/*/out/

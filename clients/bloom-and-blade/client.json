@@ -1,0 +1,37 @@
+{
+  "id": "bloom-and-blade",
+  "name": "Bloom & Blade Landscaping",
+  "trade": "landscaping",
+  "rules": {
+    "client_id": "bloom-and-blade",
+    "version": 1,
+    "services": [
+      "garden design",
+      "garden maintenance",
+      "planting",
+      "patio laying",
+      "hedge trimming"
+    ],
+    "areas": [
+      "Bristol",
+      "Clifton",
+      "Bedminster",
+      "Redland"
+    ],
+    "allowed_hashtags": [
+      "#bristol",
+      "#bristolgardens",
+      "#gardendesign",
+      "#landscaping"
+    ],
+    "max_hashtags": 4,
+    "must_include": [],
+    "banned_claims": [
+      "stock photo",
+      "cheapest",
+      "instant results",
+      "guaranteed growth"
+    ],
+    "alt_text_max_chars": 125
+  }
+}
