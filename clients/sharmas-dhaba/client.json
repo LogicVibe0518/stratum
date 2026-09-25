@@ -1,0 +1,36 @@
+{
+  "id": "sharmas-dhaba",
+  "name": "Sharma's Dhaba",
+  "trade": "restaurant",
+  "rules": {
+    "client_id": "sharmas-dhaba",
+    "version": 1,
+    "services": [
+      "thali",
+      "street food",
+      "Punjabi food",
+      "takeaway",
+      "catering"
+    ],
+    "areas": [
+      "Southall",
+      "Ealing",
+      "West London"
+    ],
+    "allowed_hashtags": [
+      "#southall",
+      "#southallfood",
+      "#punjabifood",
+      "#londonfood",
+      "#thali"
+    ],
+    "max_hashtags": 5,
+    "must_include": [],
+    "banned_claims": [
+      "halal",
+      "best curry in London",
+      "authentic guarantee"
+    ],
+    "alt_text_max_chars": 125
+  }
+}

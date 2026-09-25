@@ -1,0 +1,32 @@
+{
+  "client_id": "kowalski-plumbing",
+  "version": 1,
+  "palette": {
+    "primary": "#12264a",
+    "secondary": "#ff6a00",
+    "surface": "#f2f4f7",
+    "text": "#12264a",
+    "text_on_primary": "#ffffff",
+    "muted": "#5b6b82"
+  },
+  "fonts": {
+    "display": {
+      "family": "Anton",
+      "file": "assets/fonts/Anton-Regular.ttf",
+      "weight": 400,
+      "line_height": 1.05
+    },
+    "body": {
+      "family": "Barlow",
+      "file": "assets/fonts/Barlow-Regular.ttf",
+      "weight": 400,
+      "line_height": 1.25
+    },
+    "body_bold": {
+      "family": "Barlow",
+      "file": "assets/fonts/Barlow-Bold.ttf",
+      "weight": 700,
+      "line_height": 1.25
+    }
+  }
+}

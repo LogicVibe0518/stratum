@@ -1,0 +1,32 @@
+{
+  "client_id": "sharmas-dhaba",
+  "version": 1,
+  "palette": {
+    "primary": "#e07a1f",
+    "secondary": "#7a1f2b",
+    "surface": "#fff6ec",
+    "text": "#2a1a12",
+    "text_on_primary": "#fff6ec",
+    "muted": "#8a6b57"
+  },
+  "fonts": {
+    "display": {
+      "family": "Anton",
+      "file": "assets/fonts/Anton-Regular.ttf",
+      "weight": 400,
+      "line_height": 1.05
+    },
+    "body": {
+      "family": "Barlow",
+      "file": "assets/fonts/Barlow-Regular.ttf",
+      "weight": 400,
+      "line_height": 1.25
+    },
+    "body_bold": {
+      "family": "Barlow",
+      "file": "assets/fonts/Barlow-Bold.ttf",
+      "weight": 700,
+      "line_height": 1.25
+    }
+  }
+}

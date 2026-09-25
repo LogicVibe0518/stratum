@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 from PIL import Image, ImageChops, ImageStat
-from stratum_spec import BrandKit, PosterSpec, SetText, UnknownToken, apply_ops
+from stratum_spec import BrandKit, PosterSpec, SetText, SwapAsset, UnknownToken, apply_ops
 from stratum_worker.render import build_svg, render_poster
 
 GOLDEN = Path(__file__).parent / "golden" / "offer_4x5.png"
@@ -211,3 +211,21 @@ def test_cli_writes_a_png(tmp_path: Path, repo_root: Path, monkeypatch: pytest.M
     )
     assert code == 0
     assert _image(out.read_bytes()).size == (1080, 1350)
+
+
+def test_a_logo_is_never_cropped(offer: PosterSpec, kit: BrandKit, repo_root: Path) -> None:
+    """The first real poster came out with ")WALS" where KOWALSKI should have been.
+
+    A photo may be sliced to fill its box; a logo is fitted inside it whatever its
+    shape. Checked on the SVG rather than the pixels because it is a rule about
+    intent - a pixel test could pass for the wrong reason.
+    """
+    sha_bg, sha_logo = "a" * 64, "b" * 64
+    spec = apply_ops(
+        offer, [SwapAsset(layer="bg", asset=sha_bg), SwapAsset(layer="logo", asset=sha_logo)]
+    )
+    svg = build_svg(spec, kit, assets={sha_bg: "bg.png", sha_logo: "logo.png"}, root=repo_root)
+    logo_element = next(line for line in svg.splitlines() if "logo.png" in line)
+    bg_element = next(line for line in svg.splitlines() if "bg.png" in line)
+    assert 'preserveAspectRatio="xMidYMid meet"' in logo_element
+    assert 'preserveAspectRatio="xMidYMid slice"' in bg_element

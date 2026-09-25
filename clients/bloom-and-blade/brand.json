@@ -1,0 +1,32 @@
+{
+  "client_id": "bloom-and-blade",
+  "version": 1,
+  "palette": {
+    "primary": "#1f4d2b",
+    "secondary": "#6fa35a",
+    "surface": "#f7f5ef",
+    "text": "#1f4d2b",
+    "text_on_primary": "#f7f5ef",
+    "muted": "#6fa35a"
+  },
+  "fonts": {
+    "display": {
+      "family": "Anton",
+      "file": "assets/fonts/Anton-Regular.ttf",
+      "weight": 400,
+      "line_height": 1.05
+    },
+    "body": {
+      "family": "Barlow",
+      "file": "assets/fonts/Barlow-Regular.ttf",
+      "weight": 400,
+      "line_height": 1.25
+    },
+    "body_bold": {
+      "family": "Barlow",
+      "file": "assets/fonts/Barlow-Bold.ttf",
+      "weight": 700,
+      "line_height": 1.25
+    }
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "client_id": "sparkle-squad",
+  "version": 1,
+  "palette": {
+    "primary": "#19b5b0",
+    "secondary": "#ffd23f",
+    "surface": "#f4fdfd",
+    "text": "#1a1a1a",
+    "text_on_primary": "#1a1a1a",
+    "muted": "#5d8a89"
+  },
+  "fonts": {
+    "display": {
+      "family": "Anton",
+      "file": "assets/fonts/Anton-Regular.ttf",
+      "weight": 400,
+      "line_height": 1.05
+    },
+    "body": {
+      "family": "Barlow",
+      "file": "assets/fonts/Barlow-Regular.ttf",
+      "weight": 400,
+      "line_height": 1.25
+    },
+    "body_bold": {
+      "family": "Barlow",
+      "file": "assets/fonts/Barlow-Bold.ttf",
+      "weight": 700,
+      "line_height": 1.25
+    }
+  }
+}

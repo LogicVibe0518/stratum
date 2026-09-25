@@ -20,6 +20,8 @@ from stratum_worker.gateway.tasks import (
     CaptionResult,
     EditParseRequest,
     EditParseResult,
+    PostCopyRequest,
+    PostCopyResult,
     TaskName,
 )
 
@@ -37,6 +39,8 @@ __all__ = [
     "InvalidProviderOutput",
     "NoProviderAvailable",
     "NullTracer",
+    "PostCopyRequest",
+    "PostCopyResult",
     "ProviderRateLimited",
     "ProviderTimeout",
     "ProviderUnavailable",

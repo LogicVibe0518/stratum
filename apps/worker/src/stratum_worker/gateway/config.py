@@ -106,16 +106,19 @@ class GatewayConfig(_Frozen):
 # real bill.
 _DEFAULTS: dict[str, object] = {
     "tasks": {
+        "post.copy": {"order": ["openrouter", "openai"], "max_output_tokens": 900},
         "caption.generate": {"order": ["openrouter", "openai"], "max_output_tokens": 600},
         "edit.parse": {"order": ["openrouter", "openai"], "max_output_tokens": 400},
         "background.create": {"order": ["fal", "openai"]},
     },
     "models": {
         "openrouter": {
+            "post.copy": "openai/gpt-6-luna",
             "caption.generate": "openai/gpt-6-luna",
             "edit.parse": "openai/gpt-6-luna",
         },
         "openai": {
+            "post.copy": "gpt-6-luna",
             "caption.generate": "gpt-6-luna",
             "edit.parse": "gpt-6-luna",
             "background.create": "gpt-image-2.5-flare",
