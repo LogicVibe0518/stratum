@@ -1,0 +1,161 @@
+{
+  "kowalski-plumbing": [
+    {
+      "slug": "boiler-service-offer",
+      "brief": "20% off boiler servicing for bookings made before 31 October. Gas Safe 000000. Call 0161 496 0000.",
+      "photo_shows": "an engineer kneeling beside a wall-mounted boiler in a tidy kitchen"
+    },
+    {
+      "slug": "winter-ready",
+      "brief": "Get your heating checked before the cold sets in. Same-week appointments across Manchester and Didsbury. Gas Safe 000000.",
+      "photo_shows": "a radiator under a window in a bright living room"
+    },
+    {
+      "slug": "emergency-callout",
+      "brief": "24-hour emergency plumber. Burst pipe or no hot water, call 0161 496 0000. Gas Safe 000000."
+    },
+    {
+      "slug": "radiator-install",
+      "brief": "New radiators fitted in a day. Chorlton and Salford. Gas Safe 000000."
+    },
+    {
+      "slug": "bathroom-fitting",
+      "brief": "Full bathroom fitting, from first drawing to final seal. Ask for a written quote. Gas Safe 000000."
+    },
+    {
+      "slug": "landlord-certs",
+      "brief": "Landlord gas safety certificates booked around your tenants. Gas Safe 000000. Call 0161 496 0000."
+    },
+    {
+      "slug": "christmas-hours",
+      "brief": "We are closed 25 and 26 December but the emergency line stays open. Gas Safe 000000.",
+      "occasion": "Christmas"
+    }
+  ],
+  "sharmas-dhaba": [
+    {
+      "slug": "sunday-thali",
+      "brief": "Sunday thali, GBP 12.50, served 12 to 4. Southall.",
+      "photo_shows": "a steel thali tray with six small bowls of curry and a stack of roti"
+    },
+    {
+      "slug": "jalebi-weekend",
+      "brief": "Fresh jalebi made every weekend morning. Eat in or takeaway.",
+      "photo_shows": "jalebi coiling in hot oil in a wide pan"
+    },
+    {
+      "slug": "catering",
+      "brief": "Catering for family functions, 20 to 200 people. Ask us for a menu."
+    },
+    {
+      "slug": "street-food-night",
+      "brief": "Street food night every Friday from 6pm. Chaat, tikki, kulfi."
+    },
+    {
+      "slug": "diwali-sweets",
+      "brief": "Diwali sweet boxes, order by 8 November for collection in Southall.",
+      "occasion": "Diwali"
+    },
+    {
+      "slug": "lunch-deal",
+      "brief": "Weekday lunch plate GBP 8.90 including chai, 12 to 3."
+    },
+    {
+      "slug": "new-menu",
+      "brief": "Five new Punjabi dishes on the menu from this week. Come and tell us what you think."
+    }
+  ],
+  "lone-star-roofing": [
+    {
+      "slug": "storm-inspection",
+      "brief": "Free roof inspection after the last storm. San Antonio and Stone Oak. We document everything with photos for your records."
+    },
+    {
+      "slug": "roof-replacement",
+      "brief": "Full roof replacement, most homes finished in two days. Financing available through our partner."
+    },
+    {
+      "slug": "gutter-replacement",
+      "brief": "Seamless gutters cut on site to fit your home. Alamo Heights and Bexar County."
+    },
+    {
+      "slug": "hail-damage",
+      "brief": "Hail damage? We will walk your roof, show you what we find, and explain your options honestly."
+    },
+    {
+      "slug": "insurance-help",
+      "brief": "We will meet your insurance adjuster on site and talk them through the damage."
+    },
+    {
+      "slug": "maintenance-plan",
+      "brief": "Twice-yearly roof check, USD 149 a year, keeps small problems small."
+    },
+    {
+      "slug": "thanksgiving",
+      "brief": "Our crews are off for the holiday. Emergency tarping still available.",
+      "occasion": "Thanksgiving"
+    }
+  ],
+  "bloom-and-blade": [
+    {
+      "slug": "autumn-tidy",
+      "brief": "Autumn garden tidy: leaves cleared, beds cut back, everything composted on site. Bristol and Clifton."
+    },
+    {
+      "slug": "garden-design",
+      "brief": "Garden design from a measured survey and a planting plan you can keep."
+    },
+    {
+      "slug": "hedge-trimming",
+      "brief": "Hedges cut and shaped before the nesting season starts again. Redland and Bedminster."
+    },
+    {
+      "slug": "patio-laying",
+      "brief": "Patios laid in reclaimed stone. We take the old slabs away."
+    },
+    {
+      "slug": "spring-planting",
+      "brief": "Spring planting plans drawn up now, planted in March. Bristol."
+    },
+    {
+      "slug": "maintenance",
+      "brief": "Fortnightly garden maintenance, same gardener every visit."
+    },
+    {
+      "slug": "christmas-wreaths",
+      "brief": "Wreaths made from foraged Bristol greenery, collection from 1 December.",
+      "occasion": "Christmas"
+    }
+  ],
+  "sparkle-squad": [
+    {
+      "slug": "deep-clean",
+      "brief": "Deep clean special, USD 199 for a three-bedroom home in South Tampa. Book this month."
+    },
+    {
+      "slug": "move-out",
+      "brief": "Move-out cleaning that gets the deposit back. Tampa and Brandon."
+    },
+    {
+      "slug": "recurring",
+      "brief": "Every two weeks, same team, same day. Recurring cleaning from USD 120 a visit."
+    },
+    {
+      "slug": "office-cleaning",
+      "brief": "Office cleaning after hours so nobody works around a mop. Hillsborough County."
+    },
+    {
+      "slug": "spring-clean",
+      "brief": "Spring clean: baseboards, blinds, inside the oven, behind the fridge."
+    },
+    {
+      "slug": "referral",
+      "brief": "Tell a neighbour about us and you both get USD 25 off your next clean."
+    },
+    {
+      "slug": "holiday-prep",
+      "brief": "Getting the house ready before family arrive. Book the week before.",
+      "occasion": "Christmas"
+    }
+  ]
+}

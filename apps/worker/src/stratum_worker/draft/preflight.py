@@ -13,10 +13,14 @@ decides what to do with a blocker.
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
+from stratum_spec.brand import BrandKit
 from stratum_spec.client import ClientRules
+from stratum_spec.models import LogoLayer, PosterSpec, TextLayer
 
 from stratum_worker.draft.models import Flag, PostCopy
+from stratum_worker.render.text import fit, load_metrics
 
 # Money and percentages: "£49", "$1,299.00", "20%", "20 %".
 CLAIM = re.compile(r"[£$€]\s?\d[\d,]*(?:\.\d{1,2})?|\d+(?:\.\d+)?\s?%")
@@ -25,8 +29,19 @@ LONG_NUMBER = re.compile(r"\d[\d\s()+\-]{4,}\d")
 SENTENCE_END = re.compile(r"(?<=[.!?])\s|\n")
 
 
+# "GBP 12.50" in the brief and "£12.50" on the poster are the same money. Without
+# this, every correctly-priced post is flagged and the check becomes noise that gets
+# ignored - which is worse than not having it, because the one real mispricing then
+# scrolls past with the rest.
+CURRENCY = {"£": "gbp", "$": "usd", "€": "eur", "gbp": "gbp", "usd": "usd", "eur": "eur"}
+
+
 def _normalise(text: str) -> str:
-    return re.sub(r"[\s,]", "", text).casefold()
+    """Strip everything that is presentation, keep everything that is meaning."""
+    folded = re.sub(r"[\s,]", "", text).casefold()
+    for symbol, code in CURRENCY.items():
+        folded = folded.replace(symbol, code)
+    return folded
 
 
 def first_sentence(caption: str) -> str:
@@ -159,4 +174,105 @@ def check_copy(copy: PostCopy, rules: ClientRules, brief: str) -> tuple[Flag, ..
     return tuple(flags)
 
 
-__all__ = ["check_copy", "first_sentence"]
+__all__ = ["check_copy", "check_layout", "first_sentence"]
+
+
+# --- the poster itself ------------------------------------------------------------
+
+# Story and Reel furniture - profile row, caption, buttons - covers roughly this much
+# of a 9:16 screen. Anything inside those bands is there but unreadable.
+STORY_SAFE_TOP = 0.14
+STORY_SAFE_BOTTOM = 0.80
+ELLIPSIS = "…"
+
+
+def check_layout(spec: PosterSpec, kit: BrandKit, *, root: Path) -> tuple[Flag, ...]:
+    """What the rendered poster gets wrong, found without looking at the pixels.
+
+    Every check here re-derives what the renderer will do rather than inspecting the
+    PNG, so it says WHICH layer is wrong and why - something no pixel diff can do.
+    """
+    flags: list[Flag] = []
+    width, height = spec.canvas.size
+
+    for layer in spec.layers:
+        if not layer.visible:
+            continue
+        top, bottom = layer.box.y, layer.box.y + layer.box.h
+
+        if spec.canvas.aspect == "9:16" and isinstance(layer, TextLayer | LogoLayer):
+            if top < STORY_SAFE_TOP:
+                flags.append(
+                    Flag(
+                        code="inside_story_safe_zone",
+                        message=(
+                            f"'{layer.id}' sits under the profile row at the top of a "
+                            f"story, where nobody will read it."
+                        ),
+                    )
+                )
+            elif bottom > STORY_SAFE_BOTTOM:
+                flags.append(
+                    Flag(
+                        code="inside_story_safe_zone",
+                        message=(
+                            f"'{layer.id}' sits behind the caption and buttons at the "
+                            f"bottom of a story."
+                        ),
+                    )
+                )
+
+        if isinstance(layer, LogoLayer):
+            margin = layer.safe_area
+            if (
+                layer.box.x < margin
+                or top < margin
+                or layer.box.x + layer.box.w > 1 - margin
+                or bottom > 1 - margin
+            ):
+                flags.append(
+                    Flag(
+                        code="logo_too_close_to_edge",
+                        message=(
+                            f"The logo is inside its own {margin:.0%} safe margin. "
+                            f"Printed or cropped, it will touch the edge."
+                        ),
+                    )
+                )
+
+        if isinstance(layer, TextLayer):
+            face = kit.font(layer.font)
+            content = layer.content.upper() if layer.uppercase else layer.content
+            fitted = fit(
+                content,
+                load_metrics(str(root / face.file)),
+                box_w_px=layer.box.w * width,
+                box_h_px=layer.box.h * height,
+                min_px=layer.min_size * height,
+                max_px=layer.max_size * height,
+                max_lines=layer.max_lines,
+                line_height=face.line_height,
+            )
+            if fitted.lines and fitted.lines[-1].endswith(ELLIPSIS):
+                flags.append(
+                    Flag(
+                        code="text_truncated",
+                        message=(
+                            f"'{layer.id}' is too long for its box even at the smallest "
+                            f"size, so it has been cut short. Shorten the words."
+                        ),
+                        severity="blocker",
+                    )
+                )
+            elif fitted.size_px <= layer.min_size * height + 0.5:
+                flags.append(
+                    Flag(
+                        code="text_at_minimum_size",
+                        message=(
+                            f"'{layer.id}' had to shrink to its smallest size to fit. "
+                            f"It will be hard to read on a phone."
+                        ),
+                    )
+                )
+
+    return tuple(flags)
