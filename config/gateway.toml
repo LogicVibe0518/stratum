@@ -13,6 +13,11 @@
 # (google/gemini-3.5-flash-lite, gpt-image-1); a wrong id fails closed at load,
 # a wrong PRICE fails open and spends real money, so prices are rounded up.
 
+[tasks."post.copy"]           # every word of a post in one call
+order = ["openrouter", "openai"]
+max_attempts_per_provider = 2
+max_output_tokens = 900
+
 [tasks."caption.generate"]
 order = ["openrouter", "openai"]
 canary_percent = 0          # 0-100: share of traffic sent to `canary` first
@@ -31,10 +36,12 @@ order = ["fal", "openai"]
 # that has itself gone bad. Model diversity belongs in `canary` once the eval
 # harness can prove a second model is as good - guessing one now just adds variance.
 [models.openrouter]
+"post.copy" = "openai/gpt-6-luna"
 "caption.generate" = "openai/gpt-6-luna"
 "edit.parse" = "openai/gpt-6-luna"
 
 [models.openai]
+"post.copy" = "gpt-6-luna"
 "caption.generate" = "gpt-6-luna"
 "edit.parse" = "gpt-6-luna"
 "background.create" = "gpt-image-2.5-flare"   # flare = the fast variant; the poster

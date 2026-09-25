@@ -1,0 +1,39 @@
+{
+  "id": "sparkle-squad",
+  "name": "Sparkle Squad Cleaning",
+  "trade": "home_cleaning",
+  "rules": {
+    "client_id": "sparkle-squad",
+    "version": 1,
+    "services": [
+      "house cleaning",
+      "deep clean",
+      "move-out cleaning",
+      "recurring cleaning",
+      "office cleaning"
+    ],
+    "areas": [
+      "Tampa",
+      "South Tampa",
+      "Brandon",
+      "Hillsborough County"
+    ],
+    "allowed_hashtags": [
+      "#tampa",
+      "#tampacleaning",
+      "#cleaningservice",
+      "#deepclean",
+      "#tampabay"
+    ],
+    "max_hashtags": 5,
+    "must_include": [],
+    "banned_claims": [
+      "licensed",
+      "insured",
+      "bonded",
+      "certified",
+      "guaranteed"
+    ],
+    "alt_text_max_chars": 125
+  }
+}

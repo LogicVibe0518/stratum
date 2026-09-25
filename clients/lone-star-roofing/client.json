@@ -1,0 +1,41 @@
+{
+  "id": "lone-star-roofing",
+  "name": "Lone Star Roofing",
+  "trade": "roofing",
+  "rules": {
+    "client_id": "lone-star-roofing",
+    "version": 1,
+    "services": [
+      "roof replacement",
+      "roof repair",
+      "storm damage repair",
+      "gutter replacement",
+      "roof inspection"
+    ],
+    "areas": [
+      "San Antonio",
+      "Alamo Heights",
+      "Stone Oak",
+      "Bexar County"
+    ],
+    "allowed_hashtags": [
+      "#sanantonio",
+      "#sanantonioroofing",
+      "#roofing",
+      "#stormdamage",
+      "#texasroofing"
+    ],
+    "max_hashtags": 5,
+    "must_include": [],
+    "banned_claims": [
+      "waive your deductible",
+      "we pay your deductible",
+      "no deductible",
+      "deductible covered",
+      "insurance will pay",
+      "free roof",
+      "guaranteed approval"
+    ],
+    "alt_text_max_chars": 125
+  }
+}

@@ -29,10 +29,15 @@ from stratum_worker.gateway.providers.base import ProviderCall
 from stratum_worker.gateway.tasks import BackgroundRequest, TaskName
 
 DEFAULT_BASE_URL = "https://api.openai.com/v1"
-CHAT_TASKS = frozenset({TaskName.CAPTION_GENERATE, TaskName.EDIT_PARSE})
+CHAT_TASKS = frozenset({TaskName.POST_COPY, TaskName.CAPTION_GENERATE, TaskName.EDIT_PARSE})
 TASKS = CHAT_TASKS | {TaskName.BACKGROUND_CREATE}
 # The image endpoint offers few sizes; the compositor cover-crops to the canvas.
-IMAGE_SIZES = {"1:1": "1024x1024", "4:5": "1024x1536", "9:16": "1024x1536"}
+IMAGE_SIZES = {
+    "1:1": "1024x1024",
+    "4:5": "1024x1536",
+    "9:16": "1024x1536",
+    "16:9": "1536x1024",
+}
 
 
 @dataclass
