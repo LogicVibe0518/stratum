@@ -27,7 +27,7 @@ from stratum_spec.ops import (
     apply_op,
     apply_ops,
 )
-from stratum_spec.templates import load_template, load_templates
+from stratum_spec.templates import load_template, load_templates, load_variants, retarget
 
 __all__ = [
     "SCHEMA_VERSION",
@@ -58,5 +58,7 @@ __all__ = [
     "load",
     "load_template",
     "load_templates",
+    "load_variants",
+    "retarget",
     "upgrade",
 ]

@@ -16,6 +16,7 @@ dependencies = [
 [project.scripts]
 stratum-render = "stratum_worker.cli:main"
 stratum-draft = "stratum_worker.draft.cli:main"
+stratum-batch = "stratum_worker.draft.batch:main"
 
 [tool.uv.sources]
 stratum-spec = { workspace = true }
