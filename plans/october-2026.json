@@ -3,159 +3,194 @@
     {
       "slug": "boiler-service-offer",
       "brief": "20% off boiler servicing for bookings made before 31 October. Gas Safe 000000. Call 0161 496 0000.",
-      "photo_shows": "an engineer kneeling beside a wall-mounted boiler in a tidy kitchen"
+      "photo_shows": "an engineer kneeling beside a wall-mounted boiler in a tidy kitchen",
+      "template": "offer_4x5"
     },
     {
       "slug": "winter-ready",
       "brief": "Get your heating checked before the cold sets in. Same-week appointments across Manchester and Didsbury. Gas Safe 000000.",
-      "photo_shows": "a radiator under a window in a bright living room"
+      "photo_shows": "a radiator under a window in a bright living room",
+      "template": "full_bleed"
     },
     {
       "slug": "emergency-callout",
-      "brief": "24-hour emergency plumber. Burst pipe or no hot water, call 0161 496 0000. Gas Safe 000000."
+      "brief": "24-hour emergency plumber. Burst pipe or no hot water, call 0161 496 0000. Gas Safe 000000.",
+      "template": "headline_hero"
     },
     {
       "slug": "radiator-install",
-      "brief": "New radiators fitted in a day. Chorlton and Salford. Gas Safe 000000."
+      "brief": "New radiators fitted in a day. Chorlton and Salford. Gas Safe 000000.",
+      "template": "split_panel"
     },
     {
       "slug": "bathroom-fitting",
-      "brief": "Full bathroom fitting, from first drawing to final seal. Ask for a written quote. Gas Safe 000000."
+      "brief": "Full bathroom fitting, from first drawing to final seal. Ask for a written quote. Gas Safe 000000.",
+      "template": "corner_card"
     },
     {
       "slug": "landlord-certs",
-      "brief": "Landlord gas safety certificates booked around your tenants. Gas Safe 000000. Call 0161 496 0000."
+      "brief": "Landlord gas safety certificates booked around your tenants. Gas Safe 000000. Call 0161 496 0000.",
+      "template": "top_band"
     },
     {
       "slug": "christmas-hours",
       "brief": "We are closed 25 and 26 December but the emergency line stays open. Gas Safe 000000.",
-      "occasion": "Christmas"
+      "occasion": "Christmas",
+      "template": "framed"
     }
   ],
   "sharmas-dhaba": [
     {
       "slug": "sunday-thali",
       "brief": "Sunday thali, GBP 12.50, served 12 to 4. Southall.",
-      "photo_shows": "a steel thali tray with six small bowls of curry and a stack of roti"
+      "photo_shows": "a steel thali tray with six small bowls of curry and a stack of roti",
+      "template": "offer_4x5"
     },
     {
       "slug": "jalebi-weekend",
       "brief": "Fresh jalebi made every weekend morning. Eat in or takeaway.",
-      "photo_shows": "jalebi coiling in hot oil in a wide pan"
+      "photo_shows": "jalebi coiling in hot oil in a wide pan",
+      "template": "full_bleed"
     },
     {
       "slug": "catering",
-      "brief": "Catering for family functions, 20 to 200 people. Ask us for a menu."
+      "brief": "Catering for family functions, 20 to 200 people. Ask us for a menu.",
+      "template": "headline_hero"
     },
     {
       "slug": "street-food-night",
-      "brief": "Street food night every Friday from 6pm. Chaat, tikki, kulfi."
+      "brief": "Street food night every Friday from 6pm. Chaat, tikki, kulfi.",
+      "template": "split_panel"
     },
     {
       "slug": "diwali-sweets",
       "brief": "Diwali sweet boxes, order by 8 November for collection in Southall.",
-      "occasion": "Diwali"
+      "occasion": "Diwali",
+      "template": "corner_card"
     },
     {
       "slug": "lunch-deal",
-      "brief": "Weekday lunch plate GBP 8.90 including chai, 12 to 3."
+      "brief": "Weekday lunch plate GBP 8.90 including chai, 12 to 3.",
+      "template": "top_band"
     },
     {
       "slug": "new-menu",
-      "brief": "Five new Punjabi dishes on the menu from this week. Come and tell us what you think."
+      "brief": "Five new Punjabi dishes on the menu from this week. Come and tell us what you think.",
+      "template": "quote_card"
     }
   ],
   "lone-star-roofing": [
     {
       "slug": "storm-inspection",
-      "brief": "Free roof inspection after the last storm. San Antonio and Stone Oak. We document everything with photos for your records."
+      "brief": "Free roof inspection after the last storm. San Antonio and Stone Oak. We document everything with photos for your records.",
+      "template": "offer_4x5"
     },
     {
       "slug": "roof-replacement",
-      "brief": "Full roof replacement, most homes finished in two days. Financing available through our partner."
+      "brief": "Full roof replacement, most homes finished in two days. Financing available through our partner.",
+      "template": "full_bleed"
     },
     {
       "slug": "gutter-replacement",
-      "brief": "Seamless gutters cut on site to fit your home. Alamo Heights and Bexar County."
+      "brief": "Seamless gutters cut on site to fit your home. Alamo Heights and Bexar County.",
+      "template": "headline_hero"
     },
     {
       "slug": "hail-damage",
-      "brief": "Hail damage? We will walk your roof, show you what we find, and explain your options honestly."
+      "brief": "Hail damage? We will walk your roof, show you what we find, and explain your options honestly.",
+      "template": "split_panel"
     },
     {
       "slug": "insurance-help",
-      "brief": "We will meet your insurance adjuster on site and talk them through the damage."
+      "brief": "We will meet your insurance adjuster on site and talk them through the damage.",
+      "template": "corner_card"
     },
     {
       "slug": "maintenance-plan",
-      "brief": "Twice-yearly roof check, USD 149 a year, keeps small problems small."
+      "brief": "Twice-yearly roof check, USD 149 a year, keeps small problems small.",
+      "template": "quote_card"
     },
     {
       "slug": "thanksgiving",
       "brief": "Our crews are off for the holiday. Emergency tarping still available.",
-      "occasion": "Thanksgiving"
+      "occasion": "Thanksgiving",
+      "template": "framed"
     }
   ],
   "bloom-and-blade": [
     {
       "slug": "autumn-tidy",
-      "brief": "Autumn garden tidy: leaves cleared, beds cut back, everything composted on site. Bristol and Clifton."
+      "brief": "Autumn garden tidy: leaves cleared, beds cut back, everything composted on site. Bristol and Clifton.",
+      "template": "offer_4x5"
     },
     {
       "slug": "garden-design",
-      "brief": "Garden design from a measured survey and a planting plan you can keep."
+      "brief": "Garden design from a measured survey and a planting plan you can keep.",
+      "template": "full_bleed"
     },
     {
       "slug": "hedge-trimming",
-      "brief": "Hedges cut and shaped before the nesting season starts again. Redland and Bedminster."
+      "brief": "Hedges cut and shaped before the nesting season starts again. Redland and Bedminster.",
+      "template": "headline_hero"
     },
     {
       "slug": "patio-laying",
-      "brief": "Patios laid in reclaimed stone. We take the old slabs away."
+      "brief": "Patios laid in reclaimed stone. We take the old slabs away.",
+      "template": "split_panel"
     },
     {
       "slug": "spring-planting",
-      "brief": "Spring planting plans drawn up now, planted in March. Bristol."
+      "brief": "Spring planting plans drawn up now, planted in March. Bristol.",
+      "template": "corner_card"
     },
     {
       "slug": "maintenance",
-      "brief": "Fortnightly garden maintenance, same gardener every visit."
+      "brief": "Fortnightly garden maintenance, same gardener every visit.",
+      "template": "top_band"
     },
     {
       "slug": "christmas-wreaths",
       "brief": "Wreaths made from foraged Bristol greenery, collection from 1 December.",
-      "occasion": "Christmas"
+      "occasion": "Christmas",
+      "template": "framed"
     }
   ],
   "sparkle-squad": [
     {
       "slug": "deep-clean",
-      "brief": "Deep clean special, USD 199 for a three-bedroom home in South Tampa. Book this month."
+      "brief": "Deep clean special, USD 199 for a three-bedroom home in South Tampa. Book this month.",
+      "template": "offer_4x5"
     },
     {
       "slug": "move-out",
-      "brief": "Move-out cleaning that gets the deposit back. Tampa and Brandon."
+      "brief": "Move-out cleaning that gets the deposit back. Tampa and Brandon.",
+      "template": "full_bleed"
     },
     {
       "slug": "recurring",
-      "brief": "Every two weeks, same team, same day. Recurring cleaning from USD 120 a visit."
+      "brief": "Every two weeks, same team, same day. Recurring cleaning from USD 120 a visit.",
+      "template": "headline_hero"
     },
     {
       "slug": "office-cleaning",
-      "brief": "Office cleaning after hours so nobody works around a mop. Hillsborough County."
+      "brief": "Office cleaning after hours so nobody works around a mop. Hillsborough County.",
+      "template": "split_panel"
     },
     {
       "slug": "spring-clean",
-      "brief": "Spring clean: baseboards, blinds, inside the oven, behind the fridge."
+      "brief": "Spring clean: baseboards, blinds, inside the oven, behind the fridge.",
+      "template": "corner_card"
     },
     {
       "slug": "referral",
-      "brief": "Tell a neighbour about us and you both get USD 25 off your next clean."
+      "brief": "Tell a neighbour about us and you both get USD 25 off your next clean.",
+      "template": "quote_card"
     },
     {
       "slug": "holiday-prep",
       "brief": "Getting the house ready before family arrive. Book the week before.",
-      "occasion": "Christmas"
+      "occasion": "Christmas",
+      "template": "framed"
     }
   ]
 }

@@ -1,0 +1,235 @@
+{
+  "schema_version": 1,
+  "template_id": "top_band",
+  "template_version": 1,
+  "brand_kit_version": 1,
+  "canvas": {
+    "aspect": "4:5",
+    "base_width": 1080
+  },
+  "layers": [
+    {
+      "type": "shape",
+      "id": "band",
+      "box": {
+        "x": 0,
+        "y": 0,
+        "w": 1,
+        "h": 0.38
+      },
+      "shape": "rect",
+      "fill": "palette.primary"
+    },
+    {
+      "type": "logo",
+      "id": "logo",
+      "box": {
+        "x": 0.08,
+        "y": 0.05,
+        "w": 0.24,
+        "h": 0.085
+      },
+      "variant": "full",
+      "safe_area": 0.02
+    },
+    {
+      "type": "text",
+      "id": "headline",
+      "box": {
+        "x": 0.08,
+        "y": 0.16,
+        "w": 0.84,
+        "h": 0.17
+      },
+      "content": "HEADLINE",
+      "font": "font.display",
+      "color": "palette.text_on_primary",
+      "align": "left",
+      "max_lines": 3,
+      "min_size": 0.045,
+      "max_size": 0.09,
+      "uppercase": true
+    },
+    {
+      "type": "image",
+      "id": "bg",
+      "box": {
+        "x": 0,
+        "y": 0.36,
+        "w": 1,
+        "h": 0.64
+      },
+      "source": "client",
+      "fit": "cover"
+    },
+    {
+      "type": "shape",
+      "id": "footer",
+      "box": {
+        "x": 0,
+        "y": 0.82,
+        "w": 1,
+        "h": 0.18
+      },
+      "shape": "rect",
+      "fill": "palette.text",
+      "opacity": 0.66
+    },
+    {
+      "type": "text",
+      "id": "offer",
+      "box": {
+        "x": 0.08,
+        "y": 0.845,
+        "w": 0.74,
+        "h": 0.06
+      },
+      "content": "OFFER DETAIL",
+      "font": "font.body",
+      "color": "palette.text_on_dark",
+      "max_lines": 2,
+      "min_size": 0.022,
+      "max_size": 0.038
+    },
+    {
+      "type": "text",
+      "id": "cta",
+      "box": {
+        "x": 0.08,
+        "y": 0.92,
+        "w": 0.74,
+        "h": 0.045
+      },
+      "content": "CALL TO ACTION",
+      "font": "font.body_bold",
+      "color": "palette.text_on_dark",
+      "max_lines": 1,
+      "min_size": 0.018,
+      "max_size": 0.03
+    }
+  ],
+  "aspects": {
+    "9:16": {
+      "band": {
+        "box": {
+          "x": 0,
+          "y": 0,
+          "w": 1,
+          "h": 0.34
+        }
+      },
+      "logo": {
+        "box": {
+          "x": 0.08,
+          "y": 0.17,
+          "w": 0.24,
+          "h": 0.06
+        }
+      },
+      "headline": {
+        "box": {
+          "x": 0.08,
+          "y": 0.24,
+          "w": 0.84,
+          "h": 0.09
+        },
+        "max_size": 0.062
+      },
+      "bg": {
+        "box": {
+          "x": 0,
+          "y": 0.32,
+          "w": 1,
+          "h": 0.48
+        }
+      },
+      "footer": {
+        "box": {
+          "x": 0,
+          "y": 0.66,
+          "w": 1,
+          "h": 0.14
+        }
+      },
+      "offer": {
+        "box": {
+          "x": 0.08,
+          "y": 0.68,
+          "w": 0.78,
+          "h": 0.05
+        },
+        "max_size": 0.026
+      },
+      "cta": {
+        "box": {
+          "x": 0.08,
+          "y": 0.74,
+          "w": 0.78,
+          "h": 0.04
+        },
+        "max_size": 0.021
+      }
+    },
+    "16:9": {
+      "band": {
+        "box": {
+          "x": 0,
+          "y": 0,
+          "w": 0.52,
+          "h": 1
+        }
+      },
+      "logo": {
+        "box": {
+          "x": 0.05,
+          "y": 0.08,
+          "w": 0.17,
+          "h": 0.1
+        }
+      },
+      "headline": {
+        "box": {
+          "x": 0.05,
+          "y": 0.3,
+          "w": 0.42,
+          "h": 0.26
+        },
+        "max_size": 0.11
+      },
+      "bg": {
+        "box": {
+          "x": 0.5,
+          "y": 0,
+          "w": 0.5,
+          "h": 1
+        }
+      },
+      "footer": {
+        "box": {
+          "x": 0.5,
+          "y": 0.74,
+          "w": 0.5,
+          "h": 0.26
+        }
+      },
+      "offer": {
+        "box": {
+          "x": 0.54,
+          "y": 0.78,
+          "w": 0.42,
+          "h": 0.09
+        },
+        "max_size": 0.046
+      },
+      "cta": {
+        "box": {
+          "x": 0.54,
+          "y": 0.89,
+          "w": 0.42,
+          "h": 0.06
+        },
+        "max_size": 0.036
+      }
+    }
+  }
+}

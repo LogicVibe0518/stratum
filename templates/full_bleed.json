@@ -1,0 +1,250 @@
+{
+  "schema_version": 1,
+  "template_id": "full_bleed",
+  "template_version": 1,
+  "brand_kit_version": 1,
+  "canvas": {
+    "aspect": "4:5",
+    "base_width": 1080
+  },
+  "layers": [
+    {
+      "type": "image",
+      "id": "bg",
+      "box": {
+        "x": 0,
+        "y": 0,
+        "w": 1,
+        "h": 1
+      },
+      "source": "client",
+      "fit": "cover"
+    },
+    {
+      "type": "shape",
+      "id": "scrim",
+      "box": {
+        "x": 0,
+        "y": 0.44,
+        "w": 1,
+        "h": 0.56
+      },
+      "shape": "rect",
+      "fill": "palette.text",
+      "opacity": 0.62
+    },
+    {
+      "type": "shape",
+      "id": "rule",
+      "box": {
+        "x": 0.08,
+        "y": 0.5,
+        "w": 0.14,
+        "h": 0.008
+      },
+      "shape": "rect",
+      "fill": "palette.secondary"
+    },
+    {
+      "type": "text",
+      "id": "headline",
+      "box": {
+        "x": 0.08,
+        "y": 0.54,
+        "w": 0.84,
+        "h": 0.18
+      },
+      "content": "HEADLINE",
+      "font": "font.display",
+      "color": "palette.text_on_dark",
+      "align": "left",
+      "max_lines": 3,
+      "min_size": 0.045,
+      "max_size": 0.105,
+      "uppercase": true
+    },
+    {
+      "type": "text",
+      "id": "offer",
+      "box": {
+        "x": 0.08,
+        "y": 0.755,
+        "w": 0.72,
+        "h": 0.07
+      },
+      "content": "OFFER DETAIL",
+      "font": "font.body",
+      "color": "palette.text_on_dark",
+      "max_lines": 2,
+      "min_size": 0.022,
+      "max_size": 0.038
+    },
+    {
+      "type": "text",
+      "id": "cta",
+      "box": {
+        "x": 0.08,
+        "y": 0.86,
+        "w": 0.72,
+        "h": 0.05
+      },
+      "content": "CALL TO ACTION",
+      "font": "font.body_bold",
+      "color": "palette.text_on_dark",
+      "max_lines": 1,
+      "min_size": 0.018,
+      "max_size": 0.03
+    },
+    {
+      "type": "shape",
+      "id": "logo_chip",
+      "box": {
+        "x": 0.058,
+        "y": 0.038,
+        "w": 0.284,
+        "h": 0.129
+      },
+      "shape": "rect",
+      "fill": "palette.text",
+      "opacity": 0.42,
+      "radius": 0.012
+    },
+    {
+      "type": "logo",
+      "id": "logo",
+      "box": {
+        "x": 0.08,
+        "y": 0.06,
+        "w": 0.24,
+        "h": 0.085
+      },
+      "variant": "full",
+      "safe_area": 0.02
+    }
+  ],
+  "aspects": {
+    "9:16": {
+      "logo": {
+        "box": {
+          "x": 0.08,
+          "y": 0.17,
+          "w": 0.24,
+          "h": 0.06
+        }
+      },
+      "scrim": {
+        "box": {
+          "x": 0,
+          "y": 0.38,
+          "w": 1,
+          "h": 0.42
+        }
+      },
+      "rule": {
+        "box": {
+          "x": 0.08,
+          "y": 0.43,
+          "w": 0.14,
+          "h": 0.006
+        }
+      },
+      "headline": {
+        "box": {
+          "x": 0.08,
+          "y": 0.46,
+          "w": 0.84,
+          "h": 0.15
+        },
+        "max_size": 0.085
+      },
+      "offer": {
+        "box": {
+          "x": 0.08,
+          "y": 0.63,
+          "w": 0.78,
+          "h": 0.06
+        },
+        "max_size": 0.028
+      },
+      "cta": {
+        "box": {
+          "x": 0.08,
+          "y": 0.71,
+          "w": 0.78,
+          "h": 0.045
+        },
+        "max_size": 0.022
+      },
+      "logo_chip": {
+        "box": {
+          "x": 0.058,
+          "y": 0.148,
+          "w": 0.284,
+          "h": 0.104
+        }
+      }
+    },
+    "16:9": {
+      "scrim": {
+        "box": {
+          "x": 0,
+          "y": 0,
+          "w": 0.62,
+          "h": 1
+        },
+        "opacity": 0.72
+      },
+      "logo": {
+        "box": {
+          "x": 0.05,
+          "y": 0.09,
+          "w": 0.18,
+          "h": 0.1
+        }
+      },
+      "rule": {
+        "box": {
+          "x": 0.05,
+          "y": 0.27,
+          "w": 0.1,
+          "h": 0.012
+        }
+      },
+      "headline": {
+        "box": {
+          "x": 0.05,
+          "y": 0.32,
+          "w": 0.5,
+          "h": 0.26
+        },
+        "max_size": 0.115
+      },
+      "offer": {
+        "box": {
+          "x": 0.05,
+          "y": 0.62,
+          "w": 0.5,
+          "h": 0.1
+        },
+        "max_size": 0.05
+      },
+      "cta": {
+        "box": {
+          "x": 0.05,
+          "y": 0.76,
+          "w": 0.5,
+          "h": 0.07
+        },
+        "max_size": 0.038
+      },
+      "logo_chip": {
+        "box": {
+          "x": 0.028,
+          "y": 0.068,
+          "w": 0.224,
+          "h": 0.144
+        }
+      }
+    }
+  }
+}
