@@ -10,6 +10,8 @@ dependencies = [
   "pillow>=11.0",
   "numpy>=2.0",
   "httpx>=0.27",
+  "pydantic-settings",
+  "python-dotenv",
 ]
 # M7 adds: dbos. Add when the module starts.
 

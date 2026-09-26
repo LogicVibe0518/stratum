@@ -19,6 +19,9 @@ from fastapi import Depends, FastAPI, Form, Header, HTTPException, UploadFile
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 from stratum_spec import SCHEMA_VERSION
+from stratum_worker.app import service
+from stratum_worker.app.settings import Settings, settings
+from stratum_worker.app.supa import Supa, SupabaseError, close_pool
 from stratum_worker.draft.bindings import BINDINGS
 from stratum_worker.draft.compose import ComposeError
 from stratum_worker.draft.pipeline import DraftError
@@ -28,10 +31,6 @@ from stratum_worker.gateway.gateway import Gateway
 from stratum_worker.gateway.providers.registry import build_router
 from stratum_worker.gateway.tasks import TaskName
 from stratum_worker.gateway.tracing import tracer_from_env
-
-from stratum_api import service
-from stratum_api.settings import Settings, settings
-from stratum_api.supa import Supa, SupabaseError, close_pool
 
 STATIC = Path(__file__).parent / "static"
 
