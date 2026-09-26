@@ -5,8 +5,17 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
+from dotenv import load_dotenv
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Read .env into the real environment, not just into this Settings object.
+#
+# Settings picks up SUPABASE_* from the file either way, but the AI gateway reads
+# os.environ directly - so starting with `uvicorn` instead of `make live` gave a
+# server that signed people in, drafted nothing, and only admitted there were no
+# model providers when somebody typed a tweak. Loading here fixes it for everyone.
+load_dotenv(override=False)
 
 
 class Settings(BaseSettings):

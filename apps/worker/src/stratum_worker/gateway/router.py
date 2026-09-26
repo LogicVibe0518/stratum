@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from stratum_worker.gateway.errors import NoProviderAvailable
 from stratum_worker.gateway.providers.base import Provider
 from stratum_worker.gateway.tasks import TaskName
 
@@ -45,5 +46,8 @@ class Router:
         chain = [self.providers[n] for n in names if n in self.providers]
         usable = [p for p in chain if p.supports(task)]
         if not usable:
-            raise KeyError(f"no provider supports {task}")
+            raise NoProviderAvailable(
+                f"nothing is configured to serve {task}. Check that the right API key is "
+                f"set (see .env.example) and that config/gateway.toml lists a model for it."
+            )
         return usable

@@ -36,9 +36,12 @@
   .card{border:1px solid var(--line);border-radius:var(--radius);padding:12px}
   .card h3{margin:0 0 4px;font-size:15px}
   .muted{color:var(--muted);font-size:13px}
-  .posters{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(210px,1fr))}
-  .posters figure{margin:0;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
-  .posters img{display:block;width:100%;height:auto;background:var(--line)}
+  .posters{display:grid;gap:14px;align-items:start;
+    grid-template-columns:repeat(auto-fill,minmax(200px,1fr))}
+  .posters figure{margin:0;border:1px solid var(--line);border-radius:var(--radius);
+    overflow:hidden;background:var(--paper)}
+  .posters img{display:block;width:100%;height:auto;background:var(--line);min-height:40px}
+  .posters figure.wide{grid-column:span 2}
   .posters figcaption{padding:6px 8px;font-size:12px;color:var(--muted)}
   .flag{border-left:3px solid var(--warn);padding:6px 10px;margin:6px 0;font-size:13px}
   .flag.blocker{border-left-color:var(--bad)}
@@ -322,7 +325,7 @@ async function openPost(id){
   $("statcost").textContent = `$${Number(data.post.cost_usd || 0).toFixed(4)}`;
   $("statflags").textContent = data.flags.length;
   $("renders").innerHTML = data.renders.map(r =>
-    `<figure><img data-src="${r.url}" alt="${r.aspect}">
+    `<figure class="${r.width > r.height ? "wide" : ""}"><img data-src="${r.url}" alt="${r.aspect}">
      <figcaption>${r.aspect} · ${r.width}×${r.height}</figcaption></figure>`).join("");
   await Promise.all([...$("renders").querySelectorAll("img[data-src]")].map(async img => {
     const res = await fetch(img.dataset.src,
