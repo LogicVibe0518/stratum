@@ -13,18 +13,21 @@ the point of writing it this way now.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import tempfile
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
+from pydantic import BaseModel
 from stratum_spec.models import Aspect, PosterSpec
 from stratum_spec.templates import Variants, load_template, load_variants, retarget
 
 from stratum_worker.assets.models import AssetMeta
 from stratum_worker.assets.store import AssetStore
 from stratum_worker.draft.bindings import Binding, binding_for
+from stratum_worker.draft.capacity import measure
 from stratum_worker.draft.clients import Client, load_client
 from stratum_worker.draft.compose import build_spec
 from stratum_worker.draft.models import (
@@ -149,17 +152,32 @@ class Checkpoints:
             except ValueError:
                 self._data = {}  # a corrupt checkpoint file just means redo the work
 
-    def get(self, step: str) -> dict[str, object] | None:
-        value = self._data.get(step)
+    def get(self, step: str, fingerprint: str) -> dict[str, object] | None:
+        """The saved result, but only if it was made from the SAME inputs.
+
+        A cache keyed on the step name alone is not a cache, it is a stale value
+        waiting to happen: changing the template changed how many characters the
+        headline may use, and the old copy came straight back out and overflowed.
+        Keying on a hash of the request means a changed input simply misses.
+        """
+        entry = self._data.get(step)
+        if not isinstance(entry, dict) or entry.get("fingerprint") != fingerprint:
+            return None
+        value = entry.get("value")
         return value if isinstance(value, dict) else None
 
-    def put(self, step: str, value: dict[str, object]) -> None:
-        self._data[step] = value
+    def put(self, step: str, fingerprint: str, value: dict[str, object]) -> None:
+        self._data[step] = {"fingerprint": fingerprint, "value": value}
         self.path.parent.mkdir(parents=True, exist_ok=True)
         handle, tmp = tempfile.mkstemp(dir=self.path.parent, suffix=".tmp")
         with os.fdopen(handle, "w", encoding="utf-8") as file:
             json.dump(self._data, file, indent=2, sort_keys=True)
         os.replace(tmp, self.path)
+
+
+def fingerprint(request: BaseModel) -> str:
+    """A short, stable hash of everything a step was asked to do."""
+    return hashlib.sha256(request.model_dump_json().encode()).hexdigest()[:16]
 
 
 # --- the steps -------------------------------------------------------------------
@@ -212,15 +230,12 @@ async def write_copy(
     brief: PostBrief,
     client: Client,
     binding: Binding,
+    template: PosterSpec,
     deps: Deps,
     checkpoints: Checkpoints,
 ) -> tuple[PostCopy, bool]:
     """The one model call every post makes. Cached, because it costs money."""
-    saved = checkpoints.get("write_copy")
-    if saved is not None:
-        return PostCopy.model_validate(saved), True
-
-    capacity = binding.capacity
+    limits = binding.limits(measure(template, client.kit, root=deps.repo_root))
     request = PostCopyRequest(
         brief=brief.brief if not brief.occasion else f"{brief.brief}\nOccasion: {brief.occasion}",
         client_name=client.name,
@@ -234,10 +249,14 @@ async def write_copy(
         must_include=client.rules.must_include,
         banned_claims=client.rules.banned_claims,
         photo_description=brief.photo_description,
-        headline_max_chars=capacity.get("headline", capacity.get("quote", 60)),
-        offer_max_chars=capacity.get("offer", capacity.get("quote", 120)),
-        cta_max_chars=capacity.get("cta", capacity.get("contact", capacity.get("attribution", 40))),
+        headline_max_chars=limits["headline"],
+        offer_max_chars=limits["offer_detail"],
+        cta_max_chars=limits["cta"],
     )
+    saved = checkpoints.get("write_copy", fingerprint(request))
+    if saved is not None:
+        return PostCopy.model_validate(saved), True
+
     result = await deps.gateway.run(TaskName.POST_COPY, request, agency_id=deps.agency_id)
     assert isinstance(result, PostCopyResult)
     copy = PostCopy(
@@ -248,7 +267,7 @@ async def write_copy(
         hashtags=result.hashtags,
         alt_text=result.alt_text,
     )
-    checkpoints.put("write_copy", copy.model_dump())
+    checkpoints.put("write_copy", fingerprint(request), copy.model_dump())
     return copy, False
 
 
@@ -270,10 +289,6 @@ async def make_background(
     The normal path uses their own picture - that is what they send, and it is free.
     Generating is the fallback, not the product.
     """
-    saved = checkpoints.get("make_background")
-    if saved is not None and isinstance(saved.get("sha256"), str):
-        return str(saved["sha256"]), True
-
     trade = client.trade.replace("_", " ") or "local trade"
     request = BackgroundRequest(
         prompt=(
@@ -283,6 +298,10 @@ async def make_background(
         ),
         aspect=brief.aspects[0],
     )
+    saved = checkpoints.get("make_background", fingerprint(request))
+    if saved is not None and isinstance(saved.get("sha256"), str):
+        return str(saved["sha256"]), True
+
     result = await deps.gateway.run(TaskName.BACKGROUND_CREATE, request, agency_id=deps.agency_id)
     png = getattr(result, "image_png", None)
     if not isinstance(png, bytes):
@@ -294,7 +313,7 @@ async def make_background(
         meta = deps.store.put(temp, source="generated")
     finally:
         temp.unlink(missing_ok=True)
-    checkpoints.put("make_background", {"sha256": meta.sha256})
+    checkpoints.put("make_background", fingerprint(request), {"sha256": meta.sha256})
     return meta.sha256, False
 
 
@@ -373,44 +392,49 @@ async def draft_post(brief: PostBrief, deps: Deps) -> PostDraft:
     flags.extend(photo_flags)
     steps.append(StepRecord(step="ingest_photos"))
 
-    copy, cached = await write_copy(brief, client, binding, deps, checkpoints)
+    copy, cached = await write_copy(brief, client, binding, template, deps, checkpoints)
     steps.append(
         StepRecord(step="write_copy", cached=True)
         if cached
         else tracer.step("write_copy", TaskName.POST_COPY)
     )
 
-    # Photos to layers, best picture first. A template wanting two photos and given
-    # one is a blocker: we will not invent a "before".
+    # Photos to layers, best picture first, by the ROLE the binding declares.
+    # Only a "background" can be invented: generating a "before" for a before/after
+    # would be fabricating the client's own work, which is not a fallback, it is a lie.
     assets: dict[str, str] = {}
-    photo_layers = list(binding.photos)
-    if len(usable) < len(photo_layers):
-        background_only = photo_layers == ["bg"]
-        if background_only:
-            sha, cached_bg = await make_background(brief, client, deps, checkpoints)
-            assets["bg"] = sha
-            steps.append(
-                StepRecord(step="make_background", cached=True)
-                if cached_bg
-                else tracer.step("make_background", TaskName.BACKGROUND_CREATE)
-            )
-            flags.append(
-                Flag(
-                    code="generated_background",
-                    message=(
-                        "No usable photo, so the background was generated. Swap in a "
-                        "real photo when they send one - it always looks better."
-                    ),
-                )
-            )
-        else:
-            raise DraftError(
-                f"{brief.template_id} needs {len(photo_layers)} photos "
-                f"({', '.join(photo_layers)}) and {client.id} has {len(usable)} usable. "
-                f"Add photos to {client.folder / 'photos'} or pick another design."
-            )
-    for layer_id, meta in zip(photo_layers, usable, strict=False):
+    roles = dict(binding.photos)
+    filled = dict(zip(roles, usable, strict=False))
+    for layer_id, meta in filled.items():
         assets[layer_id] = meta.sha256
+
+    missing = [layer_id for layer_id in roles if layer_id not in assets]
+    unfillable = [layer_id for layer_id in missing if roles[layer_id] != "background"]
+    if unfillable:
+        raise DraftError(
+            f"{brief.template_id} needs a real photo for "
+            f"{', '.join(unfillable)}, and {client.id} has "
+            f"{len(usable)} usable. Add photos to {client.folder / 'photos'} "
+            f"or pick another design."
+        )
+    if missing:
+        sha, cached_bg = await make_background(brief, client, deps, checkpoints)
+        for layer_id in missing:
+            assets[layer_id] = sha
+        steps.append(
+            StepRecord(step="make_background", cached=True)
+            if cached_bg
+            else tracer.step("make_background", TaskName.BACKGROUND_CREATE)
+        )
+        flags.append(
+            Flag(
+                code="generated_background",
+                message=(
+                    "No usable photo, so the background was generated. Swap in a real "
+                    "photo when they send one - it always looks better."
+                ),
+            )
+        )
 
     if binding.logo:
         logo = client.logo

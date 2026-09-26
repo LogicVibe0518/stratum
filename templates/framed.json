@@ -1,0 +1,218 @@
+{
+  "schema_version": 1,
+  "template_id": "framed",
+  "template_version": 1,
+  "brand_kit_version": 1,
+  "canvas": {
+    "aspect": "4:5",
+    "base_width": 1080
+  },
+  "layers": [
+    {
+      "type": "shape",
+      "id": "bg",
+      "box": {
+        "x": 0,
+        "y": 0,
+        "w": 1,
+        "h": 1
+      },
+      "shape": "rect",
+      "fill": "palette.primary"
+    },
+    {
+      "type": "image",
+      "id": "bg_photo",
+      "box": {
+        "x": 0.06,
+        "y": 0.08,
+        "w": 0.88,
+        "h": 0.46
+      },
+      "source": "client",
+      "fit": "cover"
+    },
+    {
+      "type": "shape",
+      "id": "rule",
+      "box": {
+        "x": 0.06,
+        "y": 0.58,
+        "w": 0.12,
+        "h": 0.009
+      },
+      "shape": "rect",
+      "fill": "palette.secondary"
+    },
+    {
+      "type": "text",
+      "id": "headline",
+      "box": {
+        "x": 0.06,
+        "y": 0.61,
+        "w": 0.88,
+        "h": 0.16
+      },
+      "content": "HEADLINE",
+      "font": "font.display",
+      "color": "palette.text_on_primary",
+      "align": "left",
+      "max_lines": 3,
+      "min_size": 0.045,
+      "max_size": 0.088,
+      "uppercase": true
+    },
+    {
+      "type": "text",
+      "id": "offer",
+      "box": {
+        "x": 0.06,
+        "y": 0.79,
+        "w": 0.7,
+        "h": 0.06
+      },
+      "content": "OFFER DETAIL",
+      "font": "font.body",
+      "color": "palette.text_on_primary",
+      "max_lines": 2,
+      "min_size": 0.022,
+      "max_size": 0.038
+    },
+    {
+      "type": "text",
+      "id": "cta",
+      "box": {
+        "x": 0.06,
+        "y": 0.88,
+        "w": 0.7,
+        "h": 0.045
+      },
+      "content": "CALL TO ACTION",
+      "font": "font.body_bold",
+      "color": "palette.text_on_primary",
+      "max_lines": 1,
+      "min_size": 0.018,
+      "max_size": 0.03
+    },
+    {
+      "type": "logo",
+      "id": "logo",
+      "box": {
+        "x": 0.68,
+        "y": 0.885,
+        "w": 0.24,
+        "h": 0.07
+      },
+      "variant": "full",
+      "safe_area": 0.02
+    }
+  ],
+  "aspects": {
+    "9:16": {
+      "bg_photo": {
+        "box": {
+          "x": 0.06,
+          "y": 0.17,
+          "w": 0.88,
+          "h": 0.32
+        }
+      },
+      "rule": {
+        "box": {
+          "x": 0.06,
+          "y": 0.53,
+          "w": 0.12,
+          "h": 0.007
+        }
+      },
+      "headline": {
+        "box": {
+          "x": 0.06,
+          "y": 0.56,
+          "w": 0.88,
+          "h": 0.13
+        },
+        "max_size": 0.078
+      },
+      "offer": {
+        "box": {
+          "x": 0.06,
+          "y": 0.7,
+          "w": 0.76,
+          "h": 0.05
+        },
+        "max_size": 0.026
+      },
+      "cta": {
+        "box": {
+          "x": 0.06,
+          "y": 0.755,
+          "w": 0.76,
+          "h": 0.04
+        },
+        "max_size": 0.021
+      },
+      "logo": {
+        "box": {
+          "x": 0.68,
+          "y": 0.74,
+          "w": 0.24,
+          "h": 0.05
+        }
+      }
+    },
+    "16:9": {
+      "bg_photo": {
+        "box": {
+          "x": 0.52,
+          "y": 0.06,
+          "w": 0.42,
+          "h": 0.88
+        }
+      },
+      "rule": {
+        "box": {
+          "x": 0.06,
+          "y": 0.26,
+          "w": 0.1,
+          "h": 0.013
+        }
+      },
+      "headline": {
+        "box": {
+          "x": 0.06,
+          "y": 0.3,
+          "w": 0.4,
+          "h": 0.24
+        },
+        "max_size": 0.105
+      },
+      "offer": {
+        "box": {
+          "x": 0.06,
+          "y": 0.58,
+          "w": 0.38,
+          "h": 0.1
+        },
+        "max_size": 0.046
+      },
+      "cta": {
+        "box": {
+          "x": 0.06,
+          "y": 0.72,
+          "w": 0.38,
+          "h": 0.07
+        },
+        "max_size": 0.036
+      },
+      "logo": {
+        "box": {
+          "x": 0.06,
+          "y": 0.84,
+          "w": 0.18,
+          "h": 0.09
+        }
+      }
+    }
+  }
+}

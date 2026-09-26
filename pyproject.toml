@@ -42,3 +42,18 @@ testpaths = ["packages", "apps"]
 addopts = "-q"
 asyncio_mode = "auto"
 markers = ["live: makes real, paid provider calls; skipped unless STRATUM_LIVE=1 (make live)"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's whole dependency system is `Depends(...)` in a default argument. B008
+# exists to catch mutable defaults, which these are not - they are the framework's
+# documented API. Listing them here is the supported fix; scattering noqa comments
+# over every route would hide real B008s later.
+extend-immutable-calls = [
+    "fastapi.Depends",
+    "fastapi.Header",
+    "fastapi.Query",
+    "fastapi.Form",
+    "fastapi.File",
+    "fastapi.Body",
+    "fastapi.Path",
+]

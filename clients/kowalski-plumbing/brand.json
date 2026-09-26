@@ -7,7 +7,8 @@
     "surface": "#f2f4f7",
     "text": "#12264a",
     "text_on_primary": "#ffffff",
-    "muted": "#5b6b82"
+    "muted": "#5b6b82",
+    "text_on_dark": "#ffffff"
   },
   "fonts": {
     "display": {

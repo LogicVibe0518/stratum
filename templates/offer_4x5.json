@@ -12,27 +12,27 @@
       "type": "image",
       "id": "bg",
       "box": {
-        "x": 0.0,
-        "y": 0.0,
-        "w": 1.0,
-        "h": 1.0
+        "x": 0,
+        "y": 0,
+        "w": 1,
+        "h": 1
       },
       "source": "client",
       "fit": "cover",
-      "dim": 0.25
+      "dim": 0.18
     },
     {
       "type": "shape",
       "id": "band",
       "box": {
-        "x": 0.0,
+        "x": 0,
         "y": 0.58,
-        "w": 1.0,
+        "w": 1,
         "h": 0.42
       },
       "shape": "rect",
       "fill": "palette.primary",
-      "opacity": 0.92
+      "opacity": 0.94
     },
     {
       "type": "text",
@@ -47,9 +47,9 @@
       "font": "font.display",
       "color": "palette.text_on_primary",
       "align": "left",
-      "max_lines": 2,
-      "min_size": 0.05,
-      "max_size": 0.11,
+      "max_lines": 3,
+      "min_size": 0.045,
+      "max_size": 0.105,
       "uppercase": true
     },
     {
@@ -57,41 +57,55 @@
       "id": "offer",
       "box": {
         "x": 0.08,
-        "y": 0.79,
-        "w": 0.6,
+        "y": 0.795,
+        "w": 0.66,
         "h": 0.07
       },
       "content": "OFFER DETAIL",
       "font": "font.body",
       "color": "palette.text_on_primary",
       "max_lines": 2,
-      "min_size": 0.025,
-      "max_size": 0.05
+      "min_size": 0.022,
+      "max_size": 0.038
     },
     {
       "type": "text",
       "id": "cta",
       "box": {
         "x": 0.08,
-        "y": 0.88,
-        "w": 0.6,
+        "y": 0.885,
+        "w": 0.66,
         "h": 0.05
       },
       "content": "CALL TO ACTION",
-      "font": "font.body",
+      "font": "font.body_bold",
       "color": "palette.text_on_primary",
       "max_lines": 1,
-      "min_size": 0.02,
-      "max_size": 0.035
+      "min_size": 0.018,
+      "max_size": 0.03
+    },
+    {
+      "type": "shape",
+      "id": "logo_chip",
+      "box": {
+        "x": 0.658,
+        "y": 0.038,
+        "w": 0.284,
+        "h": 0.129
+      },
+      "shape": "rect",
+      "fill": "palette.text",
+      "opacity": 0.42,
+      "radius": 0.012
     },
     {
       "type": "logo",
       "id": "logo",
       "box": {
-        "x": 0.74,
+        "x": 0.68,
         "y": 0.06,
-        "w": 0.18,
-        "h": 0.1
+        "w": 0.24,
+        "h": 0.085
       },
       "variant": "full",
       "safe_area": 0.02
@@ -101,66 +115,71 @@
     "9:16": {
       "logo": {
         "box": {
-          "x": 0.72,
+          "x": 0.68,
           "y": 0.17,
-          "w": 0.2,
-          "h": 0.07
+          "w": 0.24,
+          "h": 0.06
         }
       },
       "band": {
         "box": {
-          "x": 0.0,
+          "x": 0,
           "y": 0.46,
-          "w": 1.0,
-          "h": 0.34
+          "w": 1,
+          "h": 0.32
         }
       },
       "headline": {
         "box": {
           "x": 0.08,
-          "y": 0.5,
+          "y": 0.49,
           "w": 0.84,
-          "h": 0.14
+          "h": 0.13
         },
-        "min_size": 0.04,
-        "max_size": 0.085
+        "max_size": 0.082
       },
       "offer": {
         "box": {
           "x": 0.08,
-          "y": 0.655,
-          "w": 0.72,
-          "h": 0.06
+          "y": 0.635,
+          "w": 0.74,
+          "h": 0.055
         },
-        "min_size": 0.02,
-        "max_size": 0.038
+        "max_size": 0.028
       },
       "cta": {
         "box": {
           "x": 0.08,
-          "y": 0.73,
-          "w": 0.72,
-          "h": 0.045
+          "y": 0.705,
+          "w": 0.74,
+          "h": 0.042
         },
-        "min_size": 0.016,
-        "max_size": 0.028
+        "max_size": 0.022
+      },
+      "logo_chip": {
+        "box": {
+          "x": 0.658,
+          "y": 0.148,
+          "w": 0.284,
+          "h": 0.104
+        }
       }
     },
     "16:9": {
       "band": {
         "box": {
-          "x": 0.0,
-          "y": 0.0,
+          "x": 0,
+          "y": 0,
           "w": 0.56,
-          "h": 1.0
+          "h": 1
         },
-        "opacity": 0.94
+        "opacity": 0.95
       },
       "logo": {
         "box": {
           "x": 0.05,
-          "y": 0.08,
-          "w": 0.16,
+          "y": 0.09,
+          "w": 0.18,
           "h": 0.1
         }
       },
@@ -171,29 +190,33 @@
           "w": 0.46,
           "h": 0.26
         },
-        "max_lines": 3,
-        "min_size": 0.05,
-        "max_size": 0.11
+        "max_size": 0.115
       },
       "offer": {
         "box": {
           "x": 0.05,
-          "y": 0.6,
+          "y": 0.61,
           "w": 0.46,
           "h": 0.1
         },
-        "min_size": 0.028,
         "max_size": 0.05
       },
       "cta": {
         "box": {
           "x": 0.05,
-          "y": 0.74,
+          "y": 0.75,
           "w": 0.46,
           "h": 0.07
         },
-        "min_size": 0.022,
         "max_size": 0.038
+      },
+      "logo_chip": {
+        "box": {
+          "x": 0.028,
+          "y": 0.068,
+          "w": 0.224,
+          "h": 0.144
+        }
       }
     }
   }

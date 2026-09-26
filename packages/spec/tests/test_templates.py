@@ -14,7 +14,8 @@ OFFER = TEMPLATE_DIR / "offer_4x5.json"
 def test_shipped_templates_are_valid() -> None:
     """Every template in templates/ must validate against the current schema."""
     templates = load_templates(TEMPLATE_DIR)
-    assert set(templates) == {"offer_4x5", "before_after_4x5", "testimonial_1x1"}
+    assert "offer_4x5" in templates
+    assert len(templates) >= 8, "the library is the baseline a layout model must beat"
 
 
 def test_every_template_has_a_logo_and_a_headline_or_quote() -> None:

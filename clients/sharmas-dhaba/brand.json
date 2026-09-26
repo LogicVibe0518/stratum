@@ -6,8 +6,9 @@
     "secondary": "#7a1f2b",
     "surface": "#fff6ec",
     "text": "#2a1a12",
-    "text_on_primary": "#fff6ec",
-    "muted": "#8a6b57"
+    "text_on_primary": "#2a1a12",
+    "muted": "#8a6b57",
+    "text_on_dark": "#fff6ec"
   },
   "fonts": {
     "display": {

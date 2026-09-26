@@ -3,10 +3,19 @@ name = "stratum-api"
 version = "0.0.1"
 description = "Stratum HTTP API"
 requires-python = ">=3.12,<3.13"
-dependencies = ["fastapi", "uvicorn[standard]", "pydantic-settings", "stratum-spec"]
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "pydantic-settings",
+    "python-multipart",
+    "httpx",
+    "stratum-spec",
+    "stratum-worker",
+]
 
 [tool.uv.sources]
 stratum-spec = { workspace = true }
+stratum-worker = { workspace = true }
 
 [build-system]
 requires = ["uv_build"]

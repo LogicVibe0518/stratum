@@ -1,0 +1,223 @@
+{
+  "schema_version": 1,
+  "template_id": "corner_card",
+  "template_version": 1,
+  "brand_kit_version": 1,
+  "canvas": {
+    "aspect": "4:5",
+    "base_width": 1080
+  },
+  "layers": [
+    {
+      "type": "image",
+      "id": "bg",
+      "box": {
+        "x": 0,
+        "y": 0,
+        "w": 1,
+        "h": 1
+      },
+      "source": "client",
+      "fit": "cover",
+      "dim": 0.12
+    },
+    {
+      "type": "shape",
+      "id": "card",
+      "box": {
+        "x": 0.08,
+        "y": 0.5,
+        "w": 0.74,
+        "h": 0.42
+      },
+      "shape": "rect",
+      "fill": "palette.primary",
+      "opacity": 0.96,
+      "radius": 0.02
+    },
+    {
+      "type": "text",
+      "id": "headline",
+      "box": {
+        "x": 0.13,
+        "y": 0.545,
+        "w": 0.64,
+        "h": 0.15
+      },
+      "content": "HEADLINE",
+      "font": "font.display",
+      "color": "palette.text_on_primary",
+      "align": "left",
+      "max_lines": 3,
+      "min_size": 0.045,
+      "max_size": 0.085,
+      "uppercase": true
+    },
+    {
+      "type": "text",
+      "id": "offer",
+      "box": {
+        "x": 0.13,
+        "y": 0.71,
+        "w": 0.6,
+        "h": 0.07
+      },
+      "content": "OFFER DETAIL",
+      "font": "font.body",
+      "color": "palette.text_on_primary",
+      "max_lines": 2,
+      "min_size": 0.022,
+      "max_size": 0.038
+    },
+    {
+      "type": "text",
+      "id": "cta",
+      "box": {
+        "x": 0.13,
+        "y": 0.815,
+        "w": 0.6,
+        "h": 0.05
+      },
+      "content": "CALL TO ACTION",
+      "font": "font.body_bold",
+      "color": "palette.text_on_primary",
+      "max_lines": 1,
+      "min_size": 0.018,
+      "max_size": 0.03
+    },
+    {
+      "type": "shape",
+      "id": "logo_chip",
+      "box": {
+        "x": 0.658,
+        "y": 0.038,
+        "w": 0.284,
+        "h": 0.129
+      },
+      "shape": "rect",
+      "fill": "palette.text",
+      "opacity": 0.42,
+      "radius": 0.012
+    },
+    {
+      "type": "logo",
+      "id": "logo",
+      "box": {
+        "x": 0.68,
+        "y": 0.06,
+        "w": 0.24,
+        "h": 0.085
+      },
+      "variant": "full",
+      "safe_area": 0.02
+    }
+  ],
+  "aspects": {
+    "9:16": {
+      "logo": {
+        "box": {
+          "x": 0.68,
+          "y": 0.17,
+          "w": 0.24,
+          "h": 0.06
+        }
+      },
+      "card": {
+        "box": {
+          "x": 0.08,
+          "y": 0.44,
+          "w": 0.84,
+          "h": 0.32
+        }
+      },
+      "headline": {
+        "box": {
+          "x": 0.12,
+          "y": 0.47,
+          "w": 0.76,
+          "h": 0.13
+        },
+        "max_size": 0.075
+      },
+      "offer": {
+        "box": {
+          "x": 0.12,
+          "y": 0.615,
+          "w": 0.72,
+          "h": 0.055
+        },
+        "max_size": 0.026
+      },
+      "cta": {
+        "box": {
+          "x": 0.12,
+          "y": 0.69,
+          "w": 0.72,
+          "h": 0.042
+        },
+        "max_size": 0.021
+      },
+      "logo_chip": {
+        "box": {
+          "x": 0.658,
+          "y": 0.148,
+          "w": 0.284,
+          "h": 0.104
+        }
+      }
+    },
+    "16:9": {
+      "card": {
+        "box": {
+          "x": 0.05,
+          "y": 0.14,
+          "w": 0.46,
+          "h": 0.72
+        }
+      },
+      "headline": {
+        "box": {
+          "x": 0.09,
+          "y": 0.2,
+          "w": 0.38,
+          "h": 0.26
+        },
+        "max_size": 0.1
+      },
+      "offer": {
+        "box": {
+          "x": 0.09,
+          "y": 0.51,
+          "w": 0.36,
+          "h": 0.11
+        },
+        "max_size": 0.046
+      },
+      "cta": {
+        "box": {
+          "x": 0.09,
+          "y": 0.67,
+          "w": 0.36,
+          "h": 0.08
+        },
+        "max_size": 0.036
+      },
+      "logo": {
+        "box": {
+          "x": 0.78,
+          "y": 0.08,
+          "w": 0.17,
+          "h": 0.1
+        }
+      },
+      "logo_chip": {
+        "box": {
+          "x": 0.758,
+          "y": 0.058,
+          "w": 0.214,
+          "h": 0.144
+        }
+      }
+    }
+  }
+}
