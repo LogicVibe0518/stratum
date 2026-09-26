@@ -49,7 +49,7 @@ def first_sentence(caption: str) -> str:
     return SENTENCE_END.split(caption.strip(), maxsplit=1)[0]
 
 
-def _invented(copy: PostCopy, rules: ClientRules, brief: str) -> list[Flag]:
+def _invented_in(text: str, rules: ClientRules, sources: str) -> list[Flag]:
     """Numbers in the copy that are not in the brief.
 
     This is the check that matters most. A model that turns "20% off" into "25% off",
@@ -57,11 +57,11 @@ def _invented(copy: PostCopy, rules: ClientRules, brief: str) -> list[Flag]:
     client publishes under their own name. Everything numeric must be traceable to
     something a human wrote.
     """
-    allowed = _normalise(brief + " " + " ".join(rules.must_include))
+    allowed = _normalise(sources + " " + " ".join(rules.must_include))
     flags: list[Flag] = []
     seen: set[str] = set()
     for pattern, kind in ((CLAIM, "figure"), (LONG_NUMBER, "number")):
-        for match in pattern.finditer(copy.everything):
+        for match in pattern.finditer(text):
             raw = match.group().strip()
             key = _normalise(raw)
             if len(key) < 2 or key in seen or key in allowed:
@@ -71,7 +71,7 @@ def _invented(copy: PostCopy, rules: ClientRules, brief: str) -> list[Flag]:
                 Flag(
                     code="invented_number",
                     message=(
-                        f"The copy says {raw!r}, which is not in the brief. "
+                        f"The copy says {raw!r}, which nobody asked for. "
                         f"Check this {kind} before anything goes out."
                     ),
                     severity="blocker",
@@ -80,11 +80,16 @@ def _invented(copy: PostCopy, rules: ClientRules, brief: str) -> list[Flag]:
     return flags
 
 
-def check_copy(copy: PostCopy, rules: ClientRules, brief: str) -> tuple[Flag, ...]:
-    """Every rule this client has, checked against what the model actually wrote."""
-    flags: list[Flag] = list(_invented(copy, rules, brief))
-    haystack = copy.everything.casefold()
+def check_claims(text: str, rules: ClientRules, sources: str) -> tuple[Flag, ...]:
+    """The checks that ask "did a human authorise this?", over any text.
 
+    `sources` is everything a person actually wrote: the brief, and every tweak they
+    have typed since. A designer who asks for "50% rather than 20%" has authorised
+    that number - flagging their own instruction as invented would train everyone to
+    ignore the one check that catches a model quietly changing a price.
+    """
+    flags: list[Flag] = list(_invented_in(text, rules, sources))
+    haystack = text.casefold()
     for claim in rules.banned_claims:
         if claim.casefold() in haystack:
             flags.append(
@@ -94,9 +99,8 @@ def check_copy(copy: PostCopy, rules: ClientRules, brief: str) -> tuple[Flag, ..
                     severity="blocker",
                 )
             )
-
     for required in rules.must_include:
-        if required not in copy.everything:
+        if required not in text:
             flags.append(
                 Flag(
                     code="missing_required_phrase",
@@ -104,6 +108,12 @@ def check_copy(copy: PostCopy, rules: ClientRules, brief: str) -> tuple[Flag, ..
                     severity="blocker",
                 )
             )
+    return tuple(flags)
+
+
+def check_copy(copy: PostCopy, rules: ClientRules, brief: str) -> tuple[Flag, ...]:
+    """Every rule this client has, checked against what the model actually wrote."""
+    flags: list[Flag] = list(check_claims(copy.everything, rules, brief))
 
     # Discoverability. Instagram search reads the caption directly and weights the
     # opening most, so the terms people type have to be in the FIRST sentence, not
@@ -175,7 +185,7 @@ def check_copy(copy: PostCopy, rules: ClientRules, brief: str) -> tuple[Flag, ..
     return tuple(flags)
 
 
-__all__ = ["check_copy", "check_layout", "first_sentence"]
+__all__ = ["check_claims", "check_copy", "check_layout", "first_sentence"]
 
 
 # --- the poster itself ------------------------------------------------------------
@@ -261,6 +271,24 @@ def check_layout(spec: PosterSpec, kit: BrandKit, *, root: Path) -> tuple[Flag, 
     """
     flags: list[Flag] = []
     width, height = spec.canvas.size
+
+    # A backing shape exists only to make something else readable. If the thing it
+    # backs is hidden, the shape is a grey rectangle floating in a corner - which is
+    # exactly what shipped the first time a logo was hidden by hand.
+    hidden = {one.id for one in spec.layers if not one.visible}
+    for layer in spec.layers:
+        backed = layer.id.removesuffix("_chip")
+        if layer.visible and layer.id.endswith("_chip") and backed in hidden:
+            flags.append(
+                Flag(
+                    code="orphan_backing",
+                    message=(
+                        f"'{layer.id}' is still showing but '{backed}' is hidden, so "
+                        f"there is a plain shape sitting on the poster for no reason."
+                    ),
+                    severity="blocker",
+                )
+            )
 
     for index, layer in enumerate(spec.layers):
         if not layer.visible:

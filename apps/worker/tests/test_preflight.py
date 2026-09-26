@@ -98,3 +98,26 @@ def test_first_sentence_stops_at_the_first_full_stop() -> None:
     assert first_sentence("Boiler service in Manchester. And more.") == (
         "Boiler service in Manchester."
     )
+
+
+def test_a_backing_shape_left_behind_is_a_blocker() -> None:
+    """Hiding a logo used to leave its chip on the poster - a grey rectangle in the
+    corner with nothing on it. Caught by looking at a render, so now it is a test."""
+    import json
+    from pathlib import Path
+
+    from stratum_spec import BrandKit, load_template
+    from stratum_spec.ops import SetVisible, apply_ops
+    from stratum_worker.draft.preflight import check_layout
+
+    root = Path(__file__).resolve().parents[3]
+    spec = load_template(root / "templates" / "full_bleed.json")
+    kit = BrandKit.model_validate(
+        json.loads((root / "clients" / "kowalski-plumbing" / "brand.json").read_text())
+    )
+    hidden = apply_ops(spec, [SetVisible(layer="logo", visible=False)])
+    codes = {flag.code for flag in check_layout(hidden, kit, root=root)}
+    assert "orphan_backing" in codes
+
+    both = apply_ops(hidden, [SetVisible(layer="logo_chip", visible=False)])
+    assert "orphan_backing" not in {f.code for f in check_layout(both, kit, root=root)}

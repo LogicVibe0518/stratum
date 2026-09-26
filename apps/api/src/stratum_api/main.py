@@ -9,6 +9,7 @@ boundary, so there is no "admin path" to get wrong.
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -22,8 +23,10 @@ from stratum_worker.draft.bindings import BINDINGS
 from stratum_worker.draft.compose import ComposeError
 from stratum_worker.draft.pipeline import DraftError
 from stratum_worker.gateway.config import load_config
+from stratum_worker.gateway.errors import NoProviderAvailable
 from stratum_worker.gateway.gateway import Gateway
 from stratum_worker.gateway.providers.registry import build_router
+from stratum_worker.gateway.tasks import TaskName
 from stratum_worker.gateway.tracing import tracer_from_env
 
 from stratum_api import service
@@ -35,6 +38,13 @@ STATIC = Path(__file__).parent / "static"
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    missing = [task for task, names in provider_coverage().items() if not names]
+    if missing:
+        logging.getLogger("stratum").warning(
+            "no AI provider is configured for: %s. Drafting and plain-English tweaks "
+            "will fail until an API key is set - see .env.example.",
+            ", ".join(missing),
+        )
     yield
     await close_pool()
 
@@ -103,13 +113,36 @@ async def _draft_error(_: Any, exc: Exception) -> Response:
     return Response(content=str(exc)[:500], status_code=422, media_type="text/plain")
 
 
+@app.exception_handler(NoProviderAvailable)
+async def _no_provider(_: Any, exc: NoProviderAvailable) -> Response:
+    """503, not 500: the server is fine, its configuration is not."""
+    return Response(content=str(exc)[:400], status_code=503, media_type="text/plain")
+
+
+def provider_coverage() -> dict[str, list[str]]:
+    """Which AI tasks actually have something configured to serve them."""
+    router = gateway().router
+    return {
+        str(task): sorted(
+            name for name, provider in router.providers.items() if provider.supports(task)
+        )
+        for task in TaskName
+    }
+
+
 @app.get("/healthz")
 def healthz() -> dict[str, object]:
+    coverage = provider_coverage()
+    missing = sorted(task for task, names in coverage.items() if not names)
     return {
-        "status": "ok",
+        "status": "degraded" if missing else "ok",
         "spec_schema_version": SCHEMA_VERSION,
         "templates": sorted(BINDINGS),
         "supabase": settings().configured,
+        "ai_tasks": coverage,
+        # Named rather than implied: a server with no providers used to start
+        # cheerfully and only admit it when somebody typed a tweak.
+        "unserved_tasks": missing,
     }
 
 

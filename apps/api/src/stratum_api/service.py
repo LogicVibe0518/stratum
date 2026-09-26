@@ -20,7 +20,7 @@ from typing import Any
 from pydantic import TypeAdapter, ValidationError
 from stratum_spec import BrandKit, load_template, load_variants, retarget
 from stratum_spec.client import ClientRules
-from stratum_spec.models import Aspect, PosterSpec
+from stratum_spec.models import Aspect, PosterSpec, TextLayer
 from stratum_spec.ops import EditOp, OpError, apply_ops
 from stratum_worker.assets import AssetStore
 from stratum_worker.draft.bindings import binding_for
@@ -28,7 +28,7 @@ from stratum_worker.draft.capacity import measure
 from stratum_worker.draft.compose import ComposeError, build_spec
 from stratum_worker.draft.models import Flag, PostCopy
 from stratum_worker.draft.pipeline import CollectingTracer, DraftError
-from stratum_worker.draft.preflight import check_copy, check_layout
+from stratum_worker.draft.preflight import check_claims, check_copy, check_layout
 from stratum_worker.gateway.gateway import Gateway
 from stratum_worker.gateway.tasks import (
     BackgroundRequest,
@@ -539,6 +539,21 @@ async def tweak(
     }
     asset_paths = {sha: await local_path(ctx, sha) for sha in shas if isinstance(sha, str)}
     renders, flags = await render_versions(ctx, client, post, changed, variants, asset_paths)
+
+    # An edit can change the words on the poster, so the claims are checked again -
+    # against everything a HUMAN has written about this post. A designer asking for
+    # "50% rather than 20%" has authorised that number; flagging their own words back
+    # at them would teach everyone to ignore the check that catches a model quietly
+    # changing a price.
+    history = await ctx.supa.select(
+        "edits", post_id=f"eq.{post['id']}", select="message", order="created_at"
+    )
+    authorised = " ".join(
+        [post["brief"], post.get("occasion", ""), message] + [row["message"] for row in history]
+    )
+    on_poster = "\n".join(one.content for one in changed.layers if isinstance(one, TextLayer))
+    flags = list(flags) + list(check_claims(on_poster, rules_of(client), authorised))
+
     saved, _ = await asyncio.gather(
         save_version(
             ctx, post, changed, renders, flags, note=message[:200], after=latest["version"]
@@ -642,7 +657,10 @@ async def quick(
     elif action in ("headline_bigger", "headline_smaller") and "headline" in ids:
         ops.append(Scale(layer="headline", factor=1.12 if action.endswith("bigger") else 0.9))
     elif action in ("hide_logo", "show_logo") and "logo" in ids:
-        ops.append(SetVisible(layer="logo", visible=action == "show_logo"))
+        visible = action == "show_logo"
+        ops.append(SetVisible(layer="logo", visible=visible))
+        if "logo_chip" in ids:
+            ops.append(SetVisible(layer="logo_chip", visible=visible))
     elif action == "next_photo":
         photos = await ctx.supa.select(
             "assets",
