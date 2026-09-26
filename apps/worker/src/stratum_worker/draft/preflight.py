@@ -17,7 +17,8 @@ from pathlib import Path
 
 from stratum_spec.brand import BrandKit
 from stratum_spec.client import ClientRules
-from stratum_spec.models import LogoLayer, PosterSpec, TextLayer
+from stratum_spec.colour import blend, contrast_ratio, min_contrast_for
+from stratum_spec.models import Box, LogoLayer, PosterSpec, ShapeLayer, TextLayer
 
 from stratum_worker.draft.models import Flag, PostCopy
 from stratum_worker.render.text import fit, load_metrics
@@ -186,6 +187,72 @@ STORY_SAFE_BOTTOM = 0.80
 ELLIPSIS = "…"
 
 
+# What we assume is behind a semi-transparent band when we cannot know. Mid-grey is
+# the honest choice: it is the worst case for BOTH light and dark text, so a poster
+# that passes this check passes over any photograph.
+ASSUMED_BACKDROP = "#808080"
+
+
+def _covers(outer: Box, inner: Box) -> bool:
+    return (
+        outer.x <= inner.x
+        and outer.y <= inner.y
+        and outer.x + outer.w >= inner.x + inner.w
+        and outer.y + outer.h >= inner.y + inner.h
+    )
+
+
+def _backing(spec: PosterSpec, index: int) -> ShapeLayer | None:
+    """The shape a text layer is sitting on, if any.
+
+    Searched backwards from the text layer because list order is z-order: the LAST
+    shape before the text is the one actually visible behind it.
+    """
+    text = spec.layers[index]
+    for layer in reversed(spec.layers[:index]):
+        if isinstance(layer, ShapeLayer) and layer.visible and _covers(layer.box, text.box):
+            return layer
+    return None
+
+
+def _contrast_flags(
+    spec: PosterSpec, index: int, layer: TextLayer, size_fraction: float, kit: BrandKit
+) -> list[Flag]:
+    """Is this text actually readable where it sits?
+
+    Contrast is arithmetic, not taste, and it is the one design rule that is not
+    subjective: below the WCAG floor a real person on a phone in daylight cannot read
+    it. Sharma's Dhaba shipped 35 posters at 2.8:1 before this check existed.
+    """
+    colour = kit.color(layer.color)
+    backing = _backing(spec, index)
+    if backing is None:
+        return [
+            Flag(
+                code="text_directly_on_photo",
+                message=(
+                    f"'{layer.id}' sits straight on the photo with nothing behind it, "
+                    f"so whether it can be read depends on the picture."
+                ),
+            )
+        ]
+    behind = blend(kit.color(backing.fill), ASSUMED_BACKDROP, backing.opacity)
+    ratio = contrast_ratio(colour, behind)
+    needed = min_contrast_for(size_fraction)
+    if ratio >= needed:
+        return []
+    return [
+        Flag(
+            code="low_contrast",
+            message=(
+                f"'{layer.id}' is {ratio:.1f}:1 against what is behind it, and needs "
+                f"{needed:.1f}:1 to be readable. Change the colour, not the words."
+            ),
+            severity="blocker",
+        )
+    ]
+
+
 def check_layout(spec: PosterSpec, kit: BrandKit, *, root: Path) -> tuple[Flag, ...]:
     """What the rendered poster gets wrong, found without looking at the pixels.
 
@@ -195,7 +262,7 @@ def check_layout(spec: PosterSpec, kit: BrandKit, *, root: Path) -> tuple[Flag, 
     flags: list[Flag] = []
     width, height = spec.canvas.size
 
-    for layer in spec.layers:
+    for index, layer in enumerate(spec.layers):
         if not layer.visible:
             continue
         top, bottom = layer.box.y, layer.box.y + layer.box.h
@@ -264,7 +331,9 @@ def check_layout(spec: PosterSpec, kit: BrandKit, *, root: Path) -> tuple[Flag, 
                         severity="blocker",
                     )
                 )
-            elif fitted.size_px <= layer.min_size * height + 0.5:
+            flags.extend(_contrast_flags(spec, index, layer, fitted.size_px / height, kit))
+
+            if fitted.size_px <= layer.min_size * height + 0.5:
                 flags.append(
                     Flag(
                         code="text_at_minimum_size",

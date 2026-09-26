@@ -1,0 +1,183 @@
+{
+  "schema_version": 1,
+  "template_id": "quote_card",
+  "template_version": 1,
+  "brand_kit_version": 1,
+  "canvas": {
+    "aspect": "4:5",
+    "base_width": 1080
+  },
+  "layers": [
+    {
+      "type": "shape",
+      "id": "bg",
+      "box": {
+        "x": 0,
+        "y": 0,
+        "w": 1,
+        "h": 1
+      },
+      "shape": "rect",
+      "fill": "palette.surface"
+    },
+    {
+      "type": "shape",
+      "id": "rule",
+      "box": {
+        "x": 0.08,
+        "y": 0.2,
+        "w": 0.1,
+        "h": 0.012
+      },
+      "shape": "rect",
+      "fill": "palette.secondary"
+    },
+    {
+      "type": "text",
+      "id": "quote",
+      "box": {
+        "x": 0.08,
+        "y": 0.25,
+        "w": 0.84,
+        "h": 0.3
+      },
+      "content": "CUSTOMER QUOTE",
+      "font": "font.display",
+      "color": "palette.text",
+      "align": "left",
+      "max_lines": 5,
+      "min_size": 0.035,
+      "max_size": 0.075
+    },
+    {
+      "type": "text",
+      "id": "attribution",
+      "box": {
+        "x": 0.08,
+        "y": 0.59,
+        "w": 0.7,
+        "h": 0.05
+      },
+      "content": "NAME, SUBURB",
+      "font": "font.body",
+      "color": "palette.text",
+      "max_lines": 2,
+      "min_size": 0.022,
+      "max_size": 0.038
+    },
+    {
+      "type": "image",
+      "id": "bg_photo",
+      "box": {
+        "x": 0,
+        "y": 0.7,
+        "w": 1,
+        "h": 0.3
+      },
+      "source": "client",
+      "fit": "cover"
+    },
+    {
+      "type": "logo",
+      "id": "logo",
+      "box": {
+        "x": 0.08,
+        "y": 0.06,
+        "w": 0.24,
+        "h": 0.085
+      },
+      "variant": "full",
+      "safe_area": 0.02
+    }
+  ],
+  "aspects": {
+    "9:16": {
+      "logo": {
+        "box": {
+          "x": 0.08,
+          "y": 0.17,
+          "w": 0.24,
+          "h": 0.06
+        }
+      },
+      "rule": {
+        "box": {
+          "x": 0.08,
+          "y": 0.3,
+          "w": 0.1,
+          "h": 0.008
+        }
+      },
+      "quote": {
+        "box": {
+          "x": 0.08,
+          "y": 0.34,
+          "w": 0.84,
+          "h": 0.26
+        },
+        "max_size": 0.062
+      },
+      "attribution": {
+        "box": {
+          "x": 0.08,
+          "y": 0.62,
+          "w": 0.74,
+          "h": 0.04
+        },
+        "max_size": 0.026
+      },
+      "bg_photo": {
+        "box": {
+          "x": 0,
+          "y": 0.68,
+          "w": 1,
+          "h": 0.1
+        }
+      }
+    },
+    "16:9": {
+      "rule": {
+        "box": {
+          "x": 0.05,
+          "y": 0.22,
+          "w": 0.08,
+          "h": 0.016
+        }
+      },
+      "quote": {
+        "box": {
+          "x": 0.05,
+          "y": 0.28,
+          "w": 0.55,
+          "h": 0.34
+        },
+        "max_size": 0.095
+      },
+      "attribution": {
+        "box": {
+          "x": 0.05,
+          "y": 0.68,
+          "w": 0.5,
+          "h": 0.07
+        },
+        "max_size": 0.044
+      },
+      "bg_photo": {
+        "box": {
+          "x": 0.66,
+          "y": 0,
+          "w": 0.34,
+          "h": 1
+        }
+      },
+      "logo": {
+        "box": {
+          "x": 0.05,
+          "y": 0.08,
+          "w": 0.16,
+          "h": 0.1
+        }
+      }
+    }
+  }
+}

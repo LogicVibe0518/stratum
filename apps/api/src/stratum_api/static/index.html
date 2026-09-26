@@ -1,0 +1,386 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stratum</title>
+<style>
+  :root{
+    --ink:#111114; --paper:#fbfbfa; --line:#e2e2df; --muted:#6b6b72;
+    --accent:#1d4ed8; --bad:#a3232b; --warn:#8a6d1f; --radius:6px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --ink:#f2f2f0; --paper:#111114; --line:#2c2c31; --muted:#9a9aa2; --accent:#7aa2ff;
+      --bad:#ff8a90; --warn:#e2c46a;
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);
+    font:15px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  header{display:flex;gap:16px;align-items:baseline;padding:14px 16px;border-bottom:1px solid var(--line);
+    position:sticky;top:0;background:var(--paper);z-index:5;flex-wrap:wrap}
+  header b{letter-spacing:.14em;text-transform:uppercase;font-size:13px}
+  main{max-width:1180px;margin:0 auto;padding:16px}
+  button,input,select,textarea{font:inherit;color:inherit;background:transparent;
+    border:1px solid var(--line);border-radius:var(--radius);padding:8px 10px}
+  button{cursor:pointer;border-color:var(--ink)}
+  button:hover{background:var(--ink);color:var(--paper)}
+  button.ghost{border-color:var(--line)}
+  button[disabled]{opacity:.45;cursor:progress}
+  input,select,textarea{width:100%}
+  label{display:block;margin:10px 0 4px;font-size:12px;letter-spacing:.08em;
+    text-transform:uppercase;color:var(--muted)}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fill,minmax(230px,1fr))}
+  .card{border:1px solid var(--line);border-radius:var(--radius);padding:12px}
+  .card h3{margin:0 0 4px;font-size:15px}
+  .muted{color:var(--muted);font-size:13px}
+  .posters{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(210px,1fr))}
+  .posters figure{margin:0;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+  .posters img{display:block;width:100%;height:auto;background:var(--line)}
+  .posters figcaption{padding:6px 8px;font-size:12px;color:var(--muted)}
+  .flag{border-left:3px solid var(--warn);padding:6px 10px;margin:6px 0;font-size:13px}
+  .flag.blocker{border-left-color:var(--bad)}
+  .stat{border:1px solid var(--line);border-radius:var(--radius);padding:8px 12px;min-width:110px}
+  .stat b{display:block;font-size:20px}
+  .stat span{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+  a{color:var(--accent)}
+  .hide{display:none}
+  .err{color:var(--bad);font-size:13px;white-space:pre-wrap}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  td,th{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
+  @media (max-width:640px){ main{padding:12px} }
+</style>
+</head>
+<body>
+<header>
+  <b>Stratum</b>
+  <span class="muted" id="who"></span>
+  <span style="flex:1"></span>
+  <button class="ghost hide" id="back">All clients</button>
+  <button class="ghost hide" id="signout">Sign out</button>
+</header>
+<main>
+  <section id="auth">
+    <h2>Sign in</h2>
+    <label>Email</label><input id="email" type="email" autocomplete="email">
+    <label>Password</label><input id="password" type="password" autocomplete="current-password">
+    <div class="row" style="margin-top:12px">
+      <button id="signin">Sign in</button>
+      <button class="ghost" id="signup">Create an account</button>
+    </div>
+    <div class="err" id="autherr"></div>
+  </section>
+
+  <section id="join" class="hide">
+    <h2>Name your agency</h2>
+    <p class="muted">If someone invited you, this joins their agency instead.</p>
+    <label>Agency name</label><input id="agency" placeholder="Nimble Informatics">
+    <div class="row" style="margin-top:12px"><button id="dojoin">Continue</button></div>
+    <div class="err" id="joinerr"></div>
+  </section>
+
+  <section id="clients" class="hide">
+    <div class="row"><h2 style="flex:1">Clients</h2>
+      <button class="ghost" id="newclient">Add a client</button></div>
+    <div class="grid" id="clientlist"></div>
+  </section>
+
+  <section id="client" class="hide">
+    <h2 id="clientname"></h2>
+    <div class="row">
+      <label style="margin:0">Photos and logo
+        <input type="file" id="upload" accept="image/*" multiple></label>
+      <select id="uploadkind" style="width:auto"><option value="photo">photo</option>
+        <option value="logo">logo</option></select>
+      <span class="muted" id="uploadnote"></span>
+    </div>
+    <div class="posters" id="assets" style="margin:12px 0"></div>
+
+    <div class="card">
+      <h3>New post</h3>
+      <label>What is the post about?</label>
+      <textarea id="brief" rows="3" placeholder="20% off boiler servicing, book before 31 October. Gas Safe 000000. Call 0161 496 0000."></textarea>
+      <div class="row">
+        <div style="flex:1;min-width:180px"><label>Design</label>
+          <select id="design"></select></div>
+        <div style="flex:1;min-width:180px"><label>Short name</label>
+          <input id="slug" placeholder="boiler-offer"></div>
+      </div>
+      <label>What does the photo show? (for alt text)</label>
+      <input id="photonote" placeholder="an engineer beside a wall-mounted boiler">
+      <div class="row" style="margin-top:12px"><button id="make">Make the post</button>
+        <span class="muted" id="makenote"></span></div>
+      <div class="err" id="makeerr"></div>
+    </div>
+
+    <h3 style="margin-top:22px">Posts</h3>
+    <div class="grid" id="postlist"></div>
+  </section>
+
+  <section id="post" class="hide">
+    <div class="row"><h2 style="flex:1" id="postslug"></h2>
+      <button class="ghost" id="download">Download all</button></div>
+    <div class="row" style="margin-bottom:12px">
+      <div class="stat"><b id="statver">–</b><span>version</span></div>
+      <div class="stat"><b id="stattime">–</b><span>last change</span></div>
+      <div class="stat"><b id="statcost">–</b><span>cost so far</span></div>
+      <div class="stat"><b id="statflags">–</b><span>to check</span></div>
+    </div>
+    <div class="posters" id="renders"></div>
+    <div id="flaglist" style="margin-top:14px"></div>
+
+    <div class="card" style="margin-top:18px">
+      <h3>Instant changes</h3>
+      <p class="muted">No model, no cost — just a re-render.</p>
+      <div class="row" id="quick"></div>
+      <div class="err" id="quickerr"></div>
+    </div>
+
+    <div class="card" style="margin-top:18px">
+      <h3>Change something</h3>
+      <p class="muted">Plain English. "Make the logo bigger", "shorter headline",
+        "use the other photo", "darker background".</p>
+      <div class="row">
+        <input id="tweak" placeholder="make the logo bigger" style="flex:1;min-width:220px">
+        <button id="dotweak">Apply</button>
+      </div>
+      <div class="err" id="tweakerr"></div>
+    </div>
+
+    <h3 style="margin-top:22px">History</h3>
+    <table id="history"></table>
+  </section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const show = (id) => ["auth","join","clients","client","post"].forEach(
+  s => $(s).classList.toggle("hide", s !== id));
+let CONF = null, SESSION = null, CLIENT = null, POST = null;
+
+const save = () => localStorage.setItem("stratum.session", JSON.stringify(SESSION || null));
+const load = () => { try { return JSON.parse(localStorage.getItem("stratum.session") || "null"); }
+                     catch { return null; } };
+
+async function auth(path, body){
+  const r = await fetch(`${CONF.url}/auth/v1/${path}`, {
+    method:"POST", headers:{ "Content-Type":"application/json", apikey: CONF.key },
+    body: JSON.stringify(body) });
+  const data = await r.json();
+  if(!r.ok) throw new Error(data.msg || data.error_description || data.message || "sign in failed");
+  return data;
+}
+
+async function api(path, options = {}){
+  const headers = Object.assign({ Authorization:`Bearer ${SESSION.access_token}` },
+                                options.headers || {});
+  if(options.json){ headers["Content-Type"] = "application/json";
+                    options.body = JSON.stringify(options.json); delete options.json; }
+  const r = await fetch(`/api${path}`, Object.assign({}, options, { headers }));
+  if(r.status === 401){ SESSION = null; save(); show("auth"); throw new Error("please sign in again"); }
+  if(!r.ok) throw new Error((await r.text()) || r.statusText);
+  const type = r.headers.get("content-type") || "";
+  return type.includes("json") ? r.json() : r.blob();
+}
+
+function busy(button, on, label){
+  button.disabled = on;
+  if(on){ button.dataset.label = button.textContent; button.textContent = label || "working…"; }
+  else if(button.dataset.label){ button.textContent = button.dataset.label; }
+}
+
+async function start(){
+  CONF = await (await fetch("/api/config")).json();
+  SESSION = load();
+  if(!SESSION){ show("auth"); return; }
+  try{
+    const me = await api("/me");
+    if(!me || !me.agency_id){ show("join"); return; }
+    $("who").textContent = `${me.agency_name} · ${me.role}`;
+    $("signout").classList.remove("hide");
+    await clients();
+  }catch(e){ show("auth"); $("autherr").textContent = e.message; }
+}
+
+$("signin").onclick = async () => {
+  try{ SESSION = await auth("token?grant_type=password",
+        { email:$("email").value.trim(), password:$("password").value });
+       save(); await start(); }
+  catch(e){ $("autherr").textContent = e.message; }
+};
+$("signup").onclick = async () => {
+  try{
+    const out = await auth("signup", { email:$("email").value.trim(), password:$("password").value });
+    SESSION = out.access_token ? out : await auth("token?grant_type=password",
+      { email:$("email").value.trim(), password:$("password").value });
+    save(); await start();
+  }catch(e){ $("autherr").textContent = e.message; }
+};
+$("dojoin").onclick = async () => {
+  try{ await api("/onboard", { method:"POST", json:{ agency_name:$("agency").value.trim() } });
+       await start(); }
+  catch(e){ $("joinerr").textContent = e.message; }
+};
+$("signout").onclick = () => { SESSION = null; save(); location.reload(); };
+$("back").onclick = () => clients();
+
+async function clients(){
+  const rows = await api("/clients");
+  $("clientlist").innerHTML = rows.length ? "" :
+    `<p class="muted">No clients yet. Add one to begin.</p>`;
+  rows.forEach(c => {
+    const card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML = `<h3>${c.name}</h3><div class="muted">${c.trade || "—"}</div>`;
+    card.onclick = () => openClient(c);
+    $("clientlist").append(card);
+  });
+  $("back").classList.add("hide");
+  show("clients");
+}
+
+$("newclient").onclick = async () => {
+  const name = prompt("Client name"); if(!name) return;
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,60);
+  const brand = { client_id: slug, version: 1,
+    palette:{ primary:"#12264a", secondary:"#ff6a00", surface:"#f2f4f7", text:"#12264a",
+              text_on_primary:"#ffffff", text_on_dark:"#ffffff", muted:"#5b6b82" },
+    fonts:{ display:{family:"Anton",file:"assets/fonts/Anton-Regular.ttf",line_height:1.05},
+            body:{family:"Barlow",file:"assets/fonts/Barlow-Regular.ttf",line_height:1.25},
+            body_bold:{family:"Barlow",file:"assets/fonts/Barlow-Bold.ttf",weight:700,line_height:1.25} } };
+  const rules = { client_id: slug, version: 1 };
+  try{
+    const c = await api("/clients", { method:"POST",
+      json:{ slug, name, trade:prompt("Trade (plumbing, roofing…)") || "", brand, rules } });
+    await openClient(c);
+  }catch(e){ alert(e.message); }
+};
+
+async function openClient(c){
+  CLIENT = c;
+  $("clientname").textContent = c.name;
+  $("back").classList.remove("hide");
+  const designs = await api("/designs");
+  $("design").innerHTML = designs.map(d => `<option>${d}</option>`).join("");
+  await Promise.all([assets(), posts()]);
+  show("client");
+}
+
+async function assets(){
+  const rows = await api(`/clients/${CLIENT.id}/assets`);
+  $("assets").innerHTML = rows.map(a => `<figure><img src="${a.url}" alt="">
+    <figcaption>${a.kind}${(a.flags||[]).length ? " · " + a.flags.join(", ") : ""}</figcaption>
+    </figure>`).join("") || `<p class="muted">No photos yet — the background will be generated.</p>`;
+}
+
+$("upload").onchange = async (event) => {
+  const files = [...event.target.files]; if(!files.length) return;
+  $("uploadnote").textContent = `uploading ${files.length}…`;
+  for(const file of files){
+    const form = new FormData(); form.append("file", file); form.append("kind", $("uploadkind").value);
+    try{ await api(`/clients/${CLIENT.id}/assets`, { method:"POST", body: form }); }
+    catch(e){ $("uploadnote").textContent = e.message; return; }
+  }
+  $("uploadnote").textContent = "done"; event.target.value = ""; await assets();
+};
+
+async function posts(){
+  const rows = await api(`/posts?client_id=${CLIENT.id}`);
+  $("postlist").innerHTML = rows.map(p =>
+    `<div class="card" data-id="${p.id}"><h3>${p.slug}</h3>
+     <div class="muted">${p.template_id} · ${p.status}</div></div>`).join("")
+    || `<p class="muted">No posts yet.</p>`;
+  [...$("postlist").children].forEach(el => {
+    if(el.dataset.id) el.onclick = () => openPost(el.dataset.id);
+  });
+}
+
+$("make").onclick = async () => {
+  const brief = $("brief").value.trim();
+  const slug = ($("slug").value.trim() ||
+    brief.toLowerCase().split(/\s+/).slice(0,4).join("-")).replace(/[^a-z0-9-]/g,"").slice(0,70);
+  if(!brief || !slug){ $("makeerr").textContent = "a brief and a short name, please"; return; }
+  $("makeerr").textContent = ""; busy($("make"), true, "making…");
+  const started = performance.now();
+  try{
+    const out = await api("/posts", { method:"POST", json:{
+      client_id: CLIENT.id, brief, slug, template_id: $("design").value,
+      photo_note: $("photonote").value.trim(), aspects:["4:5","1:1","9:16","16:9"] }});
+    $("makenote").textContent = `${((performance.now()-started)/1000).toFixed(1)}s`;
+    $("brief").value = ""; $("slug").value = ""; $("photonote").value = "";
+    await openPost(out.post.id);
+  }catch(e){ $("makeerr").textContent = e.message; }
+  finally{ busy($("make"), false); }
+};
+
+async function openPost(id){
+  POST = id;
+  const data = await api(`/posts/${id}`);
+  $("postslug").textContent = `${data.client.name} · ${data.post.slug}`;
+  $("statver").textContent = data.latest ? `v${data.latest.version}` : "–";
+  $("statcost").textContent = `$${Number(data.post.cost_usd || 0).toFixed(4)}`;
+  $("statflags").textContent = data.flags.length;
+  $("renders").innerHTML = data.renders.map(r =>
+    `<figure><img data-src="${r.url}" alt="${r.aspect}">
+     <figcaption>${r.aspect} · ${r.width}×${r.height}</figcaption></figure>`).join("");
+  await Promise.all([...$("renders").querySelectorAll("img[data-src]")].map(async img => {
+    const res = await fetch(img.dataset.src,
+      { headers:{ Authorization:`Bearer ${SESSION.access_token}` } });
+    if(res.ok) img.src = URL.createObjectURL(await res.blob());
+  }));
+  $("flaglist").innerHTML = data.flags.map(f =>
+    `<div class="flag ${f.severity}">${f.message}</div>`).join("");
+  $("history").innerHTML = "<tr><th>change</th><th>result</th><th>took</th></tr>" +
+    data.edits.map(e => `<tr><td>${e.message}</td><td>${e.outcome}</td>
+      <td>${(e.latency_ms/1000).toFixed(1)}s</td></tr>`).join("");
+  await quickButtons();
+  show("post");
+}
+
+async function quickButtons(){
+  const actions = await api("/quick");
+  $("quick").innerHTML = "";
+  Object.entries(actions).forEach(([key, label]) => {
+    const b = document.createElement("button");
+    b.className = "ghost"; b.textContent = label;
+    b.onclick = async () => {
+      $("quickerr").textContent = ""; busy(b, true);
+      const started = performance.now();
+      try{
+        const form = new FormData(); form.append("action", key);
+        await api(`/posts/${POST}/quick`, { method:"POST", body: form });
+        $("stattime").textContent = `${((performance.now()-started)/1000).toFixed(1)}s`;
+        await openPost(POST);
+      }catch(e){ $("quickerr").textContent = e.message; }
+      finally{ busy(b, false); }
+    };
+    $("quick").append(b);
+  });
+}
+
+$("dotweak").onclick = async () => {
+  const message = $("tweak").value.trim(); if(!message) return;
+  $("tweakerr").textContent = ""; busy($("dotweak"), true);
+  const started = performance.now();
+  try{
+    const out = await api(`/posts/${POST}/tweak`, { method:"POST", json:{ message } });
+    $("stattime").textContent = `${((performance.now()-started)/1000).toFixed(1)}s`;
+    if(out.outcome && out.outcome !== "applied"){ $("tweakerr").textContent = out.why || out.outcome; }
+    else { $("tweak").value = ""; }
+    await openPost(POST);
+  }catch(e){ $("tweakerr").textContent = e.message; }
+  finally{ busy($("dotweak"), false); }
+};
+
+$("download").onclick = async () => {
+  const blob = await api(`/posts/${POST}/download`);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a"); a.href = url; a.download = "post.zip"; a.click();
+  URL.revokeObjectURL(url);
+};
+
+start();
+</script>
+</body>
+</html>
