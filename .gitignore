@@ -15,6 +15,7 @@ node_modules/
 # Env and secrets
 .env
 .env.*
+.env.worker
 !.env.example
 *.pem
 *.key

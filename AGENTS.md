@@ -18,7 +18,7 @@ compositor renders it. AI models may generate a *background*, never a finished p
 7. **Immutable versions.** Poster versions are never mutated; edits create a new version.
 8. **Versioned spec schema.** Every spec has `schema_version`; changes ship with an upgrader + test.
 9. **Idempotency keys on every command endpoint.**
-10. **Tenancy everywhere.** Every row has `agency_id`; RLS on every table; tenant comes from the verified token, never the request body. Workers use a restricted DB role and set the tenant per transaction.
+10. **Tenancy everywhere.** Every row has `agency_id`; RLS on every table; tenant comes from the verified token, never the request body. The queue worker is the one process that holds a credential able to cross agencies, and it uses it for exactly two statements - claim a job, settle a job - in `stratum_worker/queue/ledger.py`. All work on a job runs through `factory(job.agency_id)`, a client scoped to that one agency, so the database refuses a cross-tenant write even if the code asks for one. The API never holds that key at all and drops it from its environment at import if it finds it.
 11. **Content addressing.** Assets and renders are stored by SHA-256; render cache key = hash(spec, template version, renderer version, fonts).
 
 ## Never
