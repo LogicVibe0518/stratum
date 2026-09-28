@@ -10,7 +10,8 @@ Only edit apps/api/src/stratum_api/static/index.html and add
 apps/api/tests/test_ui_safety.py. Do not change any Python in apps/ or packages/.
 Keep it one HTML file with plain JavaScript: no npm, no build step, no frameworks.
 Use the CSS tokens, the esc() helper and the session code from the brief verbatim.
-Work screen by screen in the order the brief lists, and run `make check` at the end.
+Work through sections 1 to 7 in order, screen by screen, and run `make check` at the end.
+Do not commit or push; I will do that after review.
 Finish with a report: what you changed, what you could not do, anything you guessed.
 ```
 
@@ -223,6 +224,73 @@ def test_the_page_never_uses_browser_prompts() -> None:
 def test_the_page_refreshes_sessions() -> None:
     assert "grant_type=refresh_token" in PAGE
 ```
+
+## 7. The agreed product screens (from the UI review, 28 Sep)
+
+These come from Rushil's UI research as reviewed on 28 Sep. Build them after sections
+1 to 6, with the same tokens and components. They use only API routes that exist today.
+
+**7.1 Home is "Needs you", not a dashboard.** An agency's unit of work is the client's
+month, not a prompt box. Above the client grid on the Clients screen, add a "Needs you"
+card fed by `GET /api/posts` (no `client_id`: every post in the agency) and
+`GET /api/clients` (to show client names). Three short lists, each capped at 6 rows with a
+"Show all" link that expands it:
+
+- **With the client:** status `review`, oldest first (the longest wait on top).
+- **Drafts to finish:** status `draft`, newest first.
+- **Approved:** status `approved`, newest first (ready to export).
+
+Each row: client name, post slug, status badge, and age in mono (`3d`, `5h`). Clicking a
+row opens that post. Empty lists are hidden. If all three are empty, show one line:
+"Nothing needs you right now."
+
+**7.2 See the post where the client will see it.** On the Post screen, above the stage,
+add a segmented control: **Canvas** (today's stage, with the black/grey/white toggle),
+**Feed**, **Story**, **Grid**, plus a Light/Dark switch that applies to Feed, Story and Grid.
+All three frames are brand-neutral: no platform names, logos, icons or wordmarks anywhere.
+
+- **Feed:** a 390px-wide phone column: a round avatar with the client's initials, the
+  client name, the post's 4:5 render at full column width, a row of four plain outline
+  icons drawn with inline SVG (heart, comment, share, save), then the caption from
+  `post.words.caption` and hashtags, clamped to 2 lines with "more" that expands it.
+- **Story:** a 9:16 frame at 390px wide showing the 9:16 render. If the post has no 9:16
+  render, show the frame empty with one line: "This post has no Story format yet."
+- **Grid:** the client's latest 9 posts (from `GET /api/posts?client_id=`, then
+  `GET /api/posts/{id}` for each post's renders, fetched in parallel), in a 3-column grid
+  of 3:4 portrait tiles (`object-fit: cover`), with this post outlined in `var(--focus)`.
+  Posts with no render yet show a skeleton tile.
+
+Frame colours come from the Light/Dark switch, never from the app theme: light =
+white background, `#0a0a0a` text; dark = `#000` background, `#f5f5f5` text. Every
+caption and name goes through `esc()`.
+
+**7.3 Deliberately not in this brief**
+
+- The month grid for planning and approval: posts need a planned date first, a database
+  change Claude will make. It becomes its own brief.
+- Client review screens: brief C5.
+- Glowing borders, magnetic buttons, 3D tilt, parallax, Aceternity and Magic UI: landing
+  page only, later. A tool used all day needs calm.
+- Glass effects: the 8px blur behind an open dialog (section 2) is the only one.
+- A metrics dashboard, scheduling to platforms, X or LinkedIn previews: dropped for now.
+
+**7.4 Add to `apps/api/tests/test_ui_safety.py`:**
+
+```python
+def test_previews_stay_brand_neutral() -> None:
+    lowered = PAGE.lower()
+    for name in ("instagram", "facebook", "tiktok", "linkedin"):
+        assert name not in lowered
+```
+
+**Acceptance for section 7 (Claude checks these too):**
+
+- [ ] "Needs you" shows the right posts in each list, oldest review first, and hides
+      empty lists.
+- [ ] Feed, Story and Grid render for a post with 4:5, 1:1 and 9:16 renders, and degrade
+      as described for a post without 9:16.
+- [ ] The Light/Dark switch changes only the frames, not the app.
+- [ ] No platform names or logos anywhere; the test above passes.
 
 ## Acceptance (Claude checks each of these in review)
 
