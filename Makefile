@@ -1,8 +1,15 @@
 .PHONY: setup sync check lint fmt type test live api
 
+# Git hooks are shared by every worktree of a repo, and pre-commit writes the path of
+# THIS checkout's Python into them. Installing from a worktree would point the main
+# checkout's hooks at a folder that is deleted with the worktree, breaking every push.
 setup:
 	uv sync --all-packages
-	uv run pre-commit install --install-hooks
+	@if [ "$$(git rev-parse --git-dir)" = "$$(git rev-parse --git-common-dir)" ]; then \
+		uv run pre-commit install --install-hooks; \
+	else \
+		echo "In a worktree: git hooks belong to the main checkout, so they were left alone."; \
+	fi
 
 sync:
 	uv sync --all-packages --quiet
