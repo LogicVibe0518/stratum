@@ -277,6 +277,117 @@ body.gate main > section { width: min(380px, 100%); }
   gap: 12px;
   color: var(--muted);
 }
+.grid > p, .posters > p, .assets > p, .stage > p,
+.grid > .empty-note, .posters > .empty-note, .assets > .empty-note {
+  grid-column: 1 / -1;
+}
+#back { display: none; }
+.needs { margin-bottom: 20px; display: flex; flex-direction: column; gap: 16px; }
+.needs h2 { margin: 0; }
+.needs-list { display: flex; flex-direction: column; gap: 4px; }
+.needs-list h3 { margin: 0 0 6px; font-size: 13px; color: var(--muted); font-weight: 500; }
+.needs-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  height: auto;
+  min-height: 36px;
+  padding: 8px 10px;
+  text-align: left;
+  font-weight: 400;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+}
+.needs-row:hover:not(:disabled) { background: var(--raised); }
+.needs-row span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.preview-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; width: 100%; }
+.frame {
+  width: min(390px, 100%);
+  background: var(--frame-bg, #000);
+  color: var(--frame-fg, #f5f5f5);
+  border-radius: var(--radius);
+  overflow: hidden;
+  border: 1px solid var(--line);
+}
+.frame[data-frame="light"] { --frame-bg: #ffffff; --frame-fg: #0a0a0a; }
+.frame[data-frame="dark"] { --frame-bg: #000000; --frame-fg: #f5f5f5; }
+.feed-head { display: flex; align-items: center; gap: 10px; padding: 12px; }
+.avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--frame-fg);
+  color: var(--frame-bg);
+  font-weight: 600;
+  font-size: 12px;
+  flex: none;
+}
+.feed-name { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.feed-photo { display: block; width: 100%; height: auto; background: var(--frame-bg); }
+.feed-actions {
+  display: flex;
+  gap: 4px;
+  padding: 8px 8px 0;
+}
+.feed-actions button {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--frame-fg);
+  border-radius: 6px;
+}
+.feed-actions button:hover:not(:disabled) { background: transparent; opacity: 0.7; }
+.feed-actions svg { display: block; width: 22px; height: 22px; margin: 0 auto; }
+.feed-copy { padding: 8px 12px 14px; }
+.feed-caption {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+.feed-caption.open { display: block; -webkit-line-clamp: unset; overflow: visible; }
+.feed-more {
+  height: auto;
+  padding: 6px 0 0;
+  border: 0;
+  background: transparent;
+  color: var(--frame-fg);
+  opacity: 0.65;
+  font-weight: 500;
+}
+.feed-more:hover:not(:disabled) { background: transparent; opacity: 1; }
+.story-shot { width: 100%; aspect-ratio: 9 / 16; background: var(--frame-bg); }
+.story-shot img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.story-empty { padding: 24px 16px; text-align: center; }
+.grid-frame {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 2px;
+  background: var(--frame-bg);
+  padding: 2px;
+  width: min(390px, 100%);
+}
+.grid-tile {
+  aspect-ratio: 3 / 4;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--frame-fg) 8%, var(--frame-bg));
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  height: auto;
+  width: 100%;
+}
+.grid-tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.grid-tile.current { outline: 2px solid var(--focus); outline-offset: -2px; }
+.grid-tile .skeleton { width: 100%; height: 100%; border-radius: 0; }
 .client-layout, .post-layout {
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr);
@@ -559,15 +670,29 @@ button, input, select, textarea, .card, .badge, .drop, .switch-ui, .toast {
   main { width: min(1240px, calc(100% - 32px)); margin: 16px auto 32px; }
   .stats { grid-template-columns: 1fr 1fr; }
 }
-@media (max-width: 480px) {
-  header.top { height: auto; min-height: 56px; flex-wrap: wrap; padding: 8px 16px; gap: 8px; }
-  .bar-right { width: 100%; margin-left: 0; }
+@media (max-width: 640px) {
+  header.top {
+    height: 56px;
+    min-height: 56px;
+    flex-wrap: nowrap;
+    padding: 0 16px;
+    gap: 8px;
+  }
+  .who { display: none !important; }
+  .crumbs { gap: 0; }
+  .crumbs .sep, .crumbs .crumb { display: none; }
+  .crumbs [aria-current="page"] { max-width: 14ch; }
+  #back:not(.hide) { display: inline-flex; }
+  .wordmark { display: none; }
+  .bar-right { flex-wrap: nowrap; width: auto; margin-left: auto; }
+  .needs-row { grid-template-columns: minmax(0, 1fr) auto; }
 }
 </style>
 </head>
 <body>
 <header class="top">
   <span class="wordmark">Stratum</span>
+  <button type="button" class="ghost hide" id="back" aria-label="Back">Back</button>
   <nav id="crumbs" class="crumbs" aria-label="Breadcrumb"></nav>
   <div class="bar-right">
     <span id="who" class="muted who hide"></span>
@@ -579,7 +704,6 @@ button, input, select, textarea, .card, .badge, .drop, .switch-ui, .toast {
         <button type="button" role="menuitemradio" data-theme-value="dark" aria-checked="false">Dark</button>
       </div>
     </div>
-    <button type="button" class="secondary hide" id="download">Download all</button>
     <button type="button" class="ghost hide" id="signout">Sign out</button>
   </div>
 </header>
@@ -621,6 +745,7 @@ button, input, select, textarea, .card, .badge, .drop, .switch-ui, .toast {
       <h1>Clients <span class="count mono" id="clientcount"></span></h1>
       <button type="button" class="primary" id="newclient">New client</button>
     </div>
+    <div class="card needs" id="needsyou"></div>
     <div class="grid" id="clientlist"></div>
   </section>
 
@@ -681,6 +806,10 @@ button, input, select, textarea, .card, .badge, .drop, .switch-ui, .toast {
   </section>
 
   <section id="post" class="hide">
+    <div class="section-head">
+      <h1 id="posttitle"></h1>
+      <button type="button" class="secondary" id="download">Download all</button>
+    </div>
     <div class="stats">
       <div class="stat"><b id="statver">–</b><span>version</span></div>
       <div class="stat"><b id="stattime">–</b><span>last change</span></div>
@@ -689,12 +818,27 @@ button, input, select, textarea, .card, .badge, .drop, .switch-ui, .toast {
     </div>
     <div class="post-layout">
       <div class="stage-wrap">
+        <div class="preview-bar">
+          <div class="segment" id="viewseg" role="radiogroup" aria-label="How to look at the post">
+            <button type="button" role="radio" data-view="canvas" aria-checked="true">Canvas</button>
+            <button type="button" role="radio" data-view="feed" aria-checked="false">Feed</button>
+            <button type="button" role="radio" data-view="story" aria-checked="false">Story</button>
+            <button type="button" role="radio" data-view="grid" aria-checked="false">Grid</button>
+          </div>
+          <div class="segment hide" id="frameseg" role="radiogroup" aria-label="Frame light or dark">
+            <button type="button" role="radio" data-frame="light" aria-checked="false">Light</button>
+            <button type="button" role="radio" data-frame="dark" aria-checked="true">Dark</button>
+          </div>
+        </div>
         <div class="segment" id="canvasseg" role="radiogroup" aria-label="Canvas behind the poster">
           <button type="button" role="radio" data-canvas="black" aria-checked="false">Black</button>
           <button type="button" role="radio" data-canvas="grey" aria-checked="true">Grey</button>
           <button type="button" role="radio" data-canvas="white" aria-checked="false">White</button>
         </div>
         <div class="stage" id="stage" data-canvas="grey"></div>
+        <div class="frame hide" id="feedview" data-frame="dark"></div>
+        <div class="frame hide" id="storyview" data-frame="dark"></div>
+        <div class="frame grid-frame hide" id="gridview" data-frame="dark"></div>
       </div>
       <aside class="side">
         <section>
@@ -764,8 +908,8 @@ function show(id) {
   document.body.classList.toggle("gate", id === "auth" || id === "join");
   $("signout").classList.toggle("hide", id === "auth");
   $("who").classList.toggle("hide", id === "auth" || id === "join");
-  $("download").classList.toggle("hide", id !== "post");
   $("crumbs").classList.toggle("hide", id === "auth" || id === "join");
+  if (id === "auth" || id === "join") $("back").classList.add("hide");
 }
 
 let CONF = null, SESSION = null, CLIENT = null, POST = null;
@@ -776,6 +920,8 @@ let making = false;
 let changing = false;
 let uploadKind = "photo";
 let canvas = "grey";
+let previewKind = "canvas";
+let frameMode = "dark";
 let dialogReturn = null;
 const inflight = new Map();
 const previewURLs = [];
@@ -972,10 +1118,16 @@ function setCrumbs(parts) {
   });
   const parent = [...parts].reverse().find((part) => part.action);
   upAction = parent ? parent.action : null;
+  $("back").classList.toggle("hide", !upAction);
 }
 
 function slugify(value, max) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, max);
+}
+
+function designLabel(id) {
+  const text = String(id ?? "").replaceAll("_", " ").trim();
+  return text ? text.charAt(0).toUpperCase() + text.slice(1) : "";
 }
 
 function themeLabel(theme) {
@@ -1143,18 +1295,112 @@ function paintClients(rows) {
   }
 }
 
+function paintNeedsYou(posts, clientRows) {
+  const box = $("needsyou");
+  box.replaceChildren();
+  const heading = document.createElement("h2");
+  heading.textContent = "Needs you";
+  box.append(heading);
+  const names = new Map((clientRows || []).map((row) => [row.id, row.name || ""]));
+  const groups = [
+    {
+      title: "With the client",
+      items: (posts || [])
+        .filter((post) => post.status === "review")
+        .sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at)),
+    },
+    {
+      title: "Drafts to finish",
+      items: (posts || [])
+        .filter((post) => post.status === "draft")
+        .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at)),
+    },
+    {
+      title: "Approved",
+      items: (posts || [])
+        .filter((post) => post.status === "approved")
+        .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at)),
+    },
+  ].filter((group) => group.items.length);
+  if (!groups.length) {
+    const line = document.createElement("p");
+    line.className = "muted";
+    line.textContent = "Nothing needs you right now.";
+    box.append(line);
+    return;
+  }
+  for (const group of groups) box.append(needsGroup(group, names));
+}
+
+function needsGroup(group, names) {
+  const wrap = document.createElement("div");
+  wrap.className = "needs-list";
+  const title = document.createElement("h3");
+  title.textContent = group.title;
+  wrap.append(title);
+  const list = document.createElement("div");
+  wrap.append(list);
+  let expanded = false;
+  const draw = () => {
+    list.replaceChildren();
+    const rows = expanded ? group.items : group.items.slice(0, 6);
+    for (const post of rows) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "needs-row";
+      const client = document.createElement("span");
+      client.textContent = names.get(post.client_id) || "Client";
+      const slug = document.createElement("span");
+      slug.className = "muted";
+      slug.textContent = post.slug || "";
+      const age = document.createElement("span");
+      age.className = "mono subtle";
+      age.textContent = ageLabel(post.created_at);
+      button.append(client, slug, statusBadge(post.status), age);
+      button.addEventListener("click", () => { openPost(post.id); });
+      list.append(button);
+    }
+  };
+  draw();
+  if (group.items.length > 6) {
+    const more = document.createElement("button");
+    more.type = "button";
+    more.className = "ghost";
+    more.textContent = "Show all";
+    more.addEventListener("click", () => {
+      expanded = !expanded;
+      more.textContent = expanded ? "Show less" : "Show all";
+      draw();
+    });
+    wrap.append(more);
+  }
+  return wrap;
+}
+
+function ageLabel(value) {
+  const then = Date.parse(value);
+  if (!Number.isFinite(then)) return "";
+  const seconds = Math.max(0, Math.floor((Date.now() - then) / 1000));
+  if (seconds < 3600) return `${Math.max(1, Math.floor(seconds / 60))}m`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
+  return `${Math.floor(seconds / 86400)}d`;
+}
+
 async function clients() {
   const token = ++viewToken;
   show("clients");
   setCrumbs([{ label: "Clients" }]);
   $("clientlist").replaceChildren(skeletons(6, "card-skel"));
+  $("needsyou").replaceChildren(skeletons(1, "card-skel"));
   try {
-    const rows = await api("/clients");
+    const [rows, posts] = await Promise.all([api("/clients"), api("/posts")]);
     if (token !== viewToken) return;
+    paintNeedsYou(posts, rows);
     paintClients(rows);
   } catch (err) {
     if (token !== viewToken) return;
     $("clientlist").replaceChildren();
+    $("needsyou").replaceChildren();
     if (!SESSION) {
       show("auth");
       $("autherr").textContent = sentence(err);
@@ -1256,7 +1502,7 @@ function paintPosts(rows) {
     title.textContent = post.slug || "";
     const design = document.createElement("span");
     design.className = "muted";
-    design.textContent = post.template_id || "";
+    design.textContent = designLabel(post.template_id);
     card.append(title, design, statusBadge(post.status));
     card.addEventListener("click", () => { openPost(post.id); });
     list.append(card);
@@ -1325,7 +1571,7 @@ async function assets() {
   list.replaceChildren();
   if (!rows.length) {
     const note = document.createElement("p");
-    note.className = "muted";
+    note.className = "muted empty-note";
     note.textContent = "No photos yet. The background will be generated.";
     list.append(note);
     return;
@@ -1353,7 +1599,7 @@ async function assets() {
 
 function fillDesigns(designs) {
   $("design").innerHTML = designs.map((id) =>
-    `<option value="${esc(id)}">${esc(id)}</option>`).join("");
+    `<option value="${esc(id)}">${esc(designLabel(id))}</option>`).join("");
 }
 
 async function openClient(client) {
@@ -1725,7 +1971,7 @@ function paintStage(renders, fade) {
   stage.replaceChildren();
   if (!renders.length) {
     const note = document.createElement("p");
-    note.className = "muted";
+    note.className = "muted empty-note";
     note.textContent = "Nothing rendered yet.";
     stage.append(note);
     return;
@@ -1737,13 +1983,198 @@ function paintStage(renders, fade) {
   loadPreviews(stage, fade, gen);
 }
 
+function findRender(renders, aspect) {
+  return (renders || []).find((render) => render.aspect === aspect) || null;
+}
+
+function initials(name) {
+  const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
+  const letters = ((parts[0] && parts[0][0]) || "") + ((parts[1] && parts[1][0]) || "");
+  return (letters || "?").toUpperCase();
+}
+
+function outlineIcon(kind) {
+  const svg = {
+    heart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20s-7-4.6-7-9.1A3.9 3.9 0 0 1 12 7.2 3.9 3.9 0 0 1 19 10.9C19 15.4 12 20 12 20z"/></svg>',
+    comment: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 6h14v10H8l-3 3z"/></svg>',
+    send: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
+    mark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 5h10v14l-5-3-5 3z"/></svg>',
+  };
+  const button = document.createElement("button");
+  button.type = "button";
+  button.tabIndex = -1;
+  button.setAttribute("aria-hidden", "true");
+  button.innerHTML = svg[kind];
+  return button;
+}
+
+function captionText(post) {
+  const words = (post && post.words) || {};
+  const tags = Array.isArray(words.hashtags) ? words.hashtags.join(" ") : "";
+  return [words.caption || "", tags].filter(Boolean).join(" ");
+}
+
+function applyFrameMode() {
+  for (const id of ["feedview", "storyview", "gridview"]) {
+    $(id).dataset.frame = frameMode;
+  }
+  for (const button of $("frameseg").querySelectorAll("button")) {
+    button.setAttribute("aria-checked", button.dataset.frame === frameMode ? "true" : "false");
+  }
+}
+
+function setPreview(kind) {
+  previewKind = kind === "feed" || kind === "story" || kind === "grid" ? kind : "canvas";
+  $("stage").classList.toggle("hide", previewKind !== "canvas");
+  $("canvasseg").classList.toggle("hide", previewKind !== "canvas");
+  $("feedview").classList.toggle("hide", previewKind !== "feed");
+  $("storyview").classList.toggle("hide", previewKind !== "story");
+  $("gridview").classList.toggle("hide", previewKind !== "grid");
+  $("frameseg").classList.toggle("hide", previewKind === "canvas");
+  for (const button of $("viewseg").querySelectorAll("button")) {
+    button.setAttribute("aria-checked", button.dataset.view === previewKind ? "true" : "false");
+  }
+  syncPreview(false);
+}
+
+function paintFeed() {
+  const root = $("feedview");
+  root.replaceChildren();
+  applyFrameMode();
+  const client = (POSTDATA && POSTDATA.client) || {};
+  const post = (POSTDATA && POSTDATA.post) || {};
+  const render = findRender((POSTDATA && POSTDATA.renders) || [], "4:5");
+  const head = document.createElement("div");
+  head.className = "feed-head";
+  const avatar = document.createElement("span");
+  avatar.className = "avatar";
+  avatar.textContent = initials(client.name);
+  const name = document.createElement("span");
+  name.className = "feed-name";
+  name.textContent = client.name || "";
+  head.append(avatar, name);
+  root.append(head);
+  if (render) {
+    const img = document.createElement("img");
+    img.className = "feed-photo";
+    img.alt = "";
+    img.dataset.src = safeSrc(render.url);
+    root.append(img);
+    loadPreviews(root, false, ++previewGen);
+  }
+  const actions = document.createElement("div");
+  actions.className = "feed-actions";
+  actions.append(outlineIcon("heart"), outlineIcon("comment"), outlineIcon("send"), outlineIcon("mark"));
+  root.append(actions);
+  const copy = document.createElement("div");
+  copy.className = "feed-copy";
+  const caption = document.createElement("p");
+  caption.className = "feed-caption";
+  caption.textContent = captionText(post);
+  copy.append(caption);
+  const more = document.createElement("button");
+  more.type = "button";
+  more.className = "feed-more hide";
+  more.textContent = "more";
+  more.addEventListener("click", () => {
+    caption.classList.add("open");
+    more.classList.add("hide");
+  });
+  copy.append(more);
+  root.append(copy);
+  requestAnimationFrame(() => {
+    if (caption.scrollHeight > caption.clientHeight + 1) more.classList.remove("hide");
+  });
+}
+
+function paintStory() {
+  const root = $("storyview");
+  root.replaceChildren();
+  applyFrameMode();
+  const render = findRender((POSTDATA && POSTDATA.renders) || [], "9:16");
+  if (!render) {
+    const note = document.createElement("p");
+    note.className = "story-empty";
+    note.textContent = "This post has no Story format yet.";
+    root.append(note);
+    return;
+  }
+  const shot = document.createElement("div");
+  shot.className = "story-shot";
+  const img = document.createElement("img");
+  img.alt = "";
+  img.dataset.src = safeSrc(render.url);
+  shot.append(img);
+  root.append(shot);
+  loadPreviews(root, false, ++previewGen);
+}
+
+async function paintGrid() {
+  const root = $("gridview");
+  root.replaceChildren();
+  applyFrameMode();
+  const clientId = POSTDATA && POSTDATA.client && POSTDATA.client.id;
+  const currentId = POSTDATA && POSTDATA.post && POSTDATA.post.id;
+  if (!clientId) return;
+  root.append(skeletons(9, "asset-skel"));
+  const token = viewToken;
+  try {
+    const posts = await api(`/posts?client_id=${encodeURIComponent(clientId)}`);
+    if (token !== viewToken || previewKind !== "grid") return;
+    const latest = (posts || []).slice(0, 9);
+    const details = await Promise.all(latest.map(async (post) => {
+      try { return await api(`/posts/${post.id}`); }
+      catch { return { renders: [] }; }
+    }));
+    if (token !== viewToken || previewKind !== "grid") return;
+    root.replaceChildren();
+    applyFrameMode();
+    for (let i = 0; i < latest.length; i += 1) {
+      const detail = details[i];
+      const tile = document.createElement("div");
+      tile.className = "grid-tile";
+      if (latest[i].id === currentId) tile.classList.add("current");
+      const renders = (detail && detail.renders) || [];
+      const render = findRender(renders, "4:5") || renders[0];
+      if (!render) {
+        const skel = document.createElement("div");
+        skel.className = "skeleton";
+        tile.append(skel);
+      } else {
+        const img = document.createElement("img");
+        img.alt = "";
+        img.dataset.src = safeSrc(render.url);
+        tile.append(img);
+      }
+      root.append(tile);
+    }
+    loadPreviews(root, false, ++previewGen);
+  } catch (err) {
+    if (token !== viewToken || !SESSION) return;
+    root.replaceChildren();
+    const note = document.createElement("p");
+    note.className = "story-empty";
+    note.textContent = sentence(err);
+    root.append(note);
+  }
+}
+
+function syncPreview(fade) {
+  applyFrameMode();
+  if (previewKind === "feed") paintFeed();
+  else if (previewKind === "story") paintStory();
+  else if (previewKind === "grid") paintGrid();
+  else paintStage((POSTDATA && POSTDATA.renders) || [], fade);
+}
+
 function paintPost(data, options) {
   POSTDATA = data;
   const opts = options || {};
+  $("posttitle").textContent = (data.post && data.post.slug) || "";
   paintStats(data, opts.lastChange);
   paintFlags(data.flags || []);
   paintHistory(data.edits || []);
-  paintStage(data.renders || [], Boolean(opts.fade));
+  syncPreview(Boolean(opts.fade));
   const client = data.client || {};
   const post = data.post || {};
   setCrumbs([
@@ -1938,6 +2369,22 @@ function wireRadios(container) {
 }
 wireRadios($("kindseg"));
 wireRadios($("canvasseg"));
+wireRadios($("viewseg"));
+wireRadios($("frameseg"));
+
+for (const button of $("viewseg").querySelectorAll("button")) {
+  button.addEventListener("click", () => setPreview(button.dataset.view));
+}
+for (const button of $("frameseg").querySelectorAll("button")) {
+  button.addEventListener("click", () => {
+    frameMode = button.dataset.frame === "light" ? "light" : "dark";
+    applyFrameMode();
+  });
+}
+
+$("back").addEventListener("click", () => {
+  if (upAction) upAction();
+});
 
 $("themebtn").addEventListener("click", (event) => {
   event.stopPropagation();

@@ -13,3 +13,9 @@ def test_the_page_never_uses_browser_prompts() -> None:
 
 def test_the_page_refreshes_sessions() -> None:
     assert "grant_type=refresh_token" in PAGE
+
+
+def test_previews_stay_brand_neutral() -> None:
+    lowered = PAGE.lower()
+    for name in ("instagram", "facebook", "tiktok", "linkedin"):
+        assert name not in lowered
