@@ -5,13 +5,17 @@ One SQLite file holds every table as JSON rows, and a folder holds storage. Seve
 processes can share it, which is what makes the kill -9 test real: the workers are
 separate processes, and one of them really dies.
 
-Two things are copied faithfully because the tests depend on them:
+Three things are copied faithfully because the tests depend on them:
 - SqliteLedger.claim is claim_job's WHERE clause, line for line. SQLite serialises
   writers, so one UPDATE ... WHERE id = (SELECT ... LIMIT 1) is as exclusive as
   FOR UPDATE SKIP LOCKED - it waits where Postgres would skip, which changes speed,
   not correctness. The Postgres function itself is tested in test_queue_contract.py.
 - FakeSupa is scoped to one agency the way row-level security scopes a user: it
   cannot see, write or store anything belonging to another agency.
+- Brand-kit versions behave as the brand_kit_history triggers make them: a client's
+  first kit is version 1, every change of colours is the next number and is kept in
+  brand_kits, and nobody writes brand_kits directly. The triggers themselves are
+  tested in test_brand_kits_contract.py.
 
 Everything else is only as much PostgREST as service.draft uses.
 """
@@ -44,7 +48,10 @@ UNIQUE: dict[str, tuple[str, ...]] = {
     "post_versions": ("post_id", "version"),
     "renders": ("post_version_id", "aspect"),
     "jobs": ("agency_id", "idempotency_key"),
+    "brand_kits": ("client_id", "version"),
 }
+# Written only by the database's own triggers; a signed-in user may only read them.
+READ_ONLY = {"brand_kits"}
 
 DEFAULTS: dict[str, dict[str, Any]] = {
     "clients": {"trade": "", "archived": False},
@@ -89,7 +96,13 @@ def connect(path: Path) -> sqlite3.Connection:
 def _matches(doc: dict[str, Any], filters: dict[str, str]) -> bool:
     for column, expression in filters.items():
         op, _, want = expression.partition(".")
-        have = doc.get(column)
+        if "->>" in column:
+            # PostgREST's JSON path filter, e.g. brand->>version=eq.3
+            outer, _, key = column.partition("->>")
+            inner = doc.get(outer)
+            have = inner.get(key) if isinstance(inner, dict) else None
+        else:
+            have = doc.get(column)
         if op == "is" and want == "null":
             if have is not None:
                 return False
@@ -100,6 +113,23 @@ def _matches(doc: dict[str, Any], filters: dict[str, str]) -> bool:
         if text != want:
             return False
     return True
+
+
+def _next_brand(old: Any, new: Any) -> tuple[Any, bool]:
+    """clients.brand as stamp_brand_version leaves it, and whether it is a new version."""
+    if not isinstance(new, dict):
+        raise SupabaseError(400, "a brand kit must be a JSON object")
+    if old is None:
+        return {**new, "version": 1}, True
+
+    def content(brand: Any) -> Any:
+        return (
+            {k: v for k, v in brand.items() if k != "version"} if isinstance(brand, dict) else brand
+        )
+
+    if content(new) == content(old):
+        return old, False
+    return {**new, "version": int(old.get("version", 1)) + 1}, True
 
 
 def _sort_key(value: object) -> tuple[int, float, str]:
@@ -130,6 +160,22 @@ class FakeSupa(Supa):
             (table, doc["id"], doc.get("agency_id"), json.dumps(doc)),
         )
 
+    def _record_brand(self, db: sqlite3.Connection, client: dict[str, Any], now: str) -> None:
+        brand = client["brand"]
+        self._write(
+            db,
+            "brand_kits",
+            {
+                "id": str(uuid.uuid4()),
+                "agency_id": client["agency_id"],
+                "client_id": client["id"],
+                "version": brand["version"],
+                "kit": brand,
+                "created_by": None,
+                "created_at": now,
+            },
+        )
+
     async def select(self, table: str, **params: str) -> list[JSON]:
         order = params.pop("order", "")
         limit = params.pop("limit", "")
@@ -147,6 +193,8 @@ class FakeSupa(Supa):
         batch = rows if isinstance(rows, list) else [rows]
         out: list[JSON] = []
         now = stamp(self._world.clock())
+        if table in READ_ONLY:
+            raise SupabaseError(403, f"permission denied for table {table}")
         with self._world.db() as db:
             db.execute("begin immediate")
             try:
@@ -169,7 +217,13 @@ class FakeSupa(Supa):
                         if not upsert:
                             raise SupabaseError(409, f"duplicate key value violates unique {key}")
                         doc = {**clash, **row}
+                    versioned = False
+                    if table == "clients":
+                        before = clash["brand"] if clash is not None else None
+                        doc["brand"], versioned = _next_brand(before, doc.get("brand"))
                     self._write(db, table, doc)
+                    if versioned:
+                        self._record_brand(db, doc, now)
                     existing.append(doc)
                     out.append(doc)
                 db.execute("commit")
@@ -182,13 +236,23 @@ class FakeSupa(Supa):
         now = stamp(self._world.clock())
         changes = {k: (now if v in ("now", "now()") else v) for k, v in values.items()}
         out: list[JSON] = []
+        if table in READ_ONLY:
+            raise SupabaseError(403, f"permission denied for table {table}")
         with self._world.db() as db:
             db.execute("begin immediate")
             try:
                 for row in self._rows(db, table):
                     if _matches(row, filters):
-                        row.update(changes)
+                        versioned = False
+                        if table == "clients" and "brand" in changes:
+                            before = row["brand"]
+                            row.update(changes)
+                            row["brand"], versioned = _next_brand(before, changes["brand"])
+                        else:
+                            row.update(changes)
                         self._write(db, table, row)
+                        if versioned:
+                            self._record_brand(db, row, now)
                         out.append(row)
                 db.execute("commit")
             except BaseException:
