@@ -89,9 +89,13 @@ def connect(path: Path) -> sqlite3.Connection:
 def _matches(doc: dict[str, Any], filters: dict[str, str]) -> bool:
     for column, expression in filters.items():
         op, _, want = expression.partition(".")
-        if op != "eq":
-            raise NotImplementedError(f"fake PostgREST only supports eq, not {expression!r}")
         have = doc.get(column)
+        if op == "is" and want == "null":
+            if have is not None:
+                return False
+            continue
+        if op != "eq":
+            raise NotImplementedError(f"fake PostgREST supports eq and is.null, not {expression!r}")
         text = json.dumps(have) if isinstance(have, bool) else str(have)
         if text != want:
             return False

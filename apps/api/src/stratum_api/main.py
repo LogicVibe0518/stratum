@@ -15,13 +15,13 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import Depends, FastAPI, Form, Header, HTTPException, UploadFile
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel, Field
 from stratum_spec import SCHEMA_VERSION
-from stratum_worker.app import service
+from stratum_worker.app import reviews, service
 from stratum_worker.app.settings import Settings, settings
 from stratum_worker.app.supa import Supa, SupabaseError, close_pool
 from stratum_worker.draft.bindings import BINDINGS
@@ -520,6 +520,133 @@ async def preview_image(
 @app.get("/api/designs")
 def designs() -> list[str]:
     return sorted(BINDINGS)
+
+
+# --- client review links ----------------------------------------------------------
+#
+# Making a link runs as the designer, so row-level security decides which posts they
+# may send. Opening one and deciding run as the anonymous role, through the two
+# database functions in migration 20260928125400; nothing here can read a table on
+# the client's behalf.
+
+# The token travels in the URL. no-referrer stops the browser handing it to any other
+# site the page talks to; no-store keeps it out of shared caches; noindex keeps a
+# forwarded link out of search engines.
+PRIVATE = {
+    "Cache-Control": "no-store",
+    "Referrer-Policy": "no-referrer",
+    "X-Robots-Tag": "noindex, nofollow",
+}
+LINK_FAILED = "This review link has expired or is not valid. Ask your designer for a new one."
+
+
+class NewReview(BaseModel):
+    client_id: str
+    post_ids: list[str] = Field(min_length=1, max_length=reviews.MAX_POSTS)
+    days: int = Field(default=reviews.DEFAULT_DAYS, ge=reviews.MIN_DAYS, le=reviews.MAX_DAYS)
+    title: str = Field(default="", max_length=200)
+
+
+class Pin(BaseModel):
+    x: float = Field(ge=0, le=1)
+    y: float = Field(ge=0, le=1)
+    # The format the client was looking at when they tapped, e.g. "4:5".
+    aspect: str | None = Field(default=None, max_length=8)
+
+
+class Decision(BaseModel):
+    item_id: str
+    verdict: Literal["approved", "changes"]
+    comment: str = Field(default="", max_length=2000)
+    pin: Pin | None = None
+
+
+def anonymous(conf: Settings = Depends(config)) -> Supa:
+    """A client with no user token: the database sees the anonymous role."""
+    if not conf.configured:
+        raise HTTPException(503, "the server has no Supabase configuration")
+    return Supa(
+        base_rest=conf.rest_url,
+        base_storage=conf.storage_url,
+        api_key=conf.supabase_key,
+        access_token=conf.supabase_key,
+        bucket=conf.bucket,
+    )
+
+
+@app.post("/api/reviews")
+async def create_review(body: NewReview, ctx: service.Context = Depends(context)) -> Any:
+    try:
+        return await reviews.create_review(
+            ctx,
+            client_id=body.client_id,
+            post_ids=body.post_ids,
+            days=body.days,
+            title=body.title,
+        )
+    except reviews.ReviewError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@app.get("/api/reviews")
+async def list_reviews(client_id: str, ctx: service.Context = Depends(context)) -> Any:
+    """This client's review links, newest first, each marked open, expired or revoked."""
+    return await reviews.list_reviews(ctx.supa, client_id)
+
+
+@app.post("/api/reviews/{review_id}/revoke")
+async def revoke_review(review_id: str, ctx: service.Context = Depends(context)) -> Any:
+    if not await reviews.revoke(ctx.supa, review_id):
+        raise HTTPException(404, "no such review, or it was already revoked")
+    return {"revoked": True}
+
+
+@app.get("/api/posts/{post_id}/feedback")
+async def post_feedback(post_id: str, ctx: service.Context = Depends(context)) -> Any:
+    """Every verdict clients have given on this post, newest first."""
+    items = await ctx.supa.select(
+        "review_items", post_id=f"eq.{post_id}", select="id,review_id,version_id"
+    )
+    found: list[dict[str, Any]] = []
+    for item in items:
+        decisions = await ctx.supa.select(
+            "review_decisions",
+            review_item_id=f"eq.{item['id']}",
+            select="verdict,comment,pin,created_at",
+            order="created_at.desc",
+        )
+        found.extend({**d, "version_id": item["version_id"]} for d in decisions)
+    return sorted(found, key=lambda d: str(d.get("created_at", "")), reverse=True)
+
+
+@app.get("/r/{token}")
+def review_page(token: str) -> FileResponse:
+    # The page itself knows nothing; it asks /api/review/{token}, which asks the database.
+    return FileResponse(STATIC / "review.html", headers=PRIVATE)
+
+
+@app.get("/api/review/{token}")
+async def open_review(token: str, anon: Supa = Depends(anonymous)) -> Any:
+    found = await reviews.open_review(anon, token)
+    if found is None:
+        raise HTTPException(404, LINK_FAILED, headers=PRIVATE)
+    return JSONResponse(found, headers=PRIVATE)
+
+
+@app.post("/api/review/{token}/decide")
+async def decide_review(token: str, body: Decision, anon: Supa = Depends(anonymous)) -> Any:
+    try:
+        result = await reviews.decide(
+            anon,
+            token,
+            item_id=body.item_id,
+            verdict=body.verdict,
+            comment=body.comment,
+            pin=body.pin.model_dump(exclude_none=True) if body.pin else None,
+        )
+    except reviews.ReviewError as exc:
+        raise HTTPException(400, str(exc), headers=PRIVATE) from exc
+    return JSONResponse(result, headers=PRIVATE)
 
 
 @app.get("/")
