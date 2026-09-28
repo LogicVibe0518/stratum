@@ -296,3 +296,51 @@ async def test_claim_skips_a_locked_row_instead_of_waiting() -> None:
         finally:
             await other.close()
         assert await conn.fetch("select * from stratum.claim_job('worker-b', 60)")
+
+
+@pytest.mark.skipif(not PG_URL, reason="set STRATUM_TEST_DATABASE_URL")
+async def test_the_database_decides_who_asked_for_a_job() -> None:
+    """requested_by comes from the caller's token, never from what the caller wrote.
+
+    The worker signs a token for this user and acts as them, so a value the caller
+    could choose would let agency A's user run a job as agency B's user.
+    """
+    async for conn, _ in fresh_database():
+        agency = await conn.fetchval(
+            "insert into stratum.agencies (name) values ('T') returning id"
+        )
+        alice, mallory, bob = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        await conn.executemany(
+            "insert into auth.users (id) values ($1)", [(u,) for u in (alice, mallory, bob)]
+        )
+
+        async def as_user(user: uuid.UUID, sql: str, *args: Any, db: Any = conn) -> Any:
+            async with db.transaction():
+                await db.execute("select set_config('request.jwt.claim.sub', $1, true)", str(user))
+                return await db.fetchval(sql, *args)
+
+        async def requester(job_id: Any, db: Any = conn) -> Any:
+            return await db.fetchval("select requested_by from stratum.jobs where id = $1", job_id)
+
+        # Alice writes a job that names Mallory. The database writes Alice.
+        job = await as_user(
+            alice,
+            "insert into stratum.jobs (agency_id, kind, payload, requested_by) "
+            "values ($1, 'draft_post', '{}', $2) returning id",
+            agency,
+            mallory,
+        )
+        assert await requester(job) == alice
+
+        # She cannot rename it afterwards either.
+        rename = "update stratum.jobs set requested_by = $2 where id = $1"
+        await as_user(alice, rename, job, mallory)
+        assert await requester(job) == alice
+
+        # The worker's own writes carry no user and leave it alone.
+        await conn.execute("update stratum.jobs set status = 'done' where id = $1", job)
+        assert await requester(job) == alice
+
+        # Bob re-sends the post: now Bob is the one who asked.
+        await as_user(bob, "update stratum.jobs set status = 'queued' where id = $1", job)
+        assert await requester(job) == bob

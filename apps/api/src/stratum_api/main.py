@@ -383,7 +383,9 @@ async def _enqueue_post(body: NewPost, ctx: service.Context) -> dict[str, Any]:
         ctx.supa,
         agency_id=ctx.agency_id,
         kind=jobs.DRAFT_POST,
-        payload={"post_id": post_id, "requested_by": ctx.user_id},
+        # No requester in the payload: the database stamps jobs.requested_by from the
+        # caller's token, so it cannot name someone else (migration 20260927174950).
+        payload={"post_id": post_id},
         key=key,
     )
     return {"job_id": job["id"]}

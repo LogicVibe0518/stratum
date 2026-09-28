@@ -55,7 +55,7 @@ async def add_job(world: World, agency: str, *, payload: dict[str, Any] | None =
 def worker(world: World, handler: Handler, *, lease: int = 60, factory: Any = None) -> QueueWorker:
     return QueueWorker(
         ledger=world.ledger(),
-        factory=factory or world.factory,
+        factory=factory or world.scoped,
         deps=Deps(settings=world.settings(REPO), gateway=fake.gateway()),
         lease_seconds=lease,
         worker_id="w-1",
@@ -128,9 +128,9 @@ async def test_all_work_goes_through_the_client_for_the_jobs_agency(world: World
     asked: list[str] = []
     seen: list[str] = []
 
-    def factory(agency_id: str) -> Supa:
-        asked.append(agency_id)
-        return world.factory(agency_id)
+    def factory(job: Job) -> Supa:
+        asked.append(job.agency_id)
+        return world.scoped(job)
 
     async def record(job: Job, client: Supa, deps: Deps) -> dict[str, Any]:
         assert isinstance(client, FakeSupa)
@@ -225,7 +225,7 @@ async def test_draft_post_runs_the_real_service_through_the_queue(tmp_path: Path
     job_id = await add_job(world, agency, payload={"post_id": post_id})
     loop = QueueWorker(
         ledger=world.ledger(),
-        factory=world.factory,
+        factory=world.scoped,
         deps=Deps(settings=world.settings(REPO), gateway=fake.gateway()),
     )
     assert await loop.run_once()
@@ -245,8 +245,8 @@ async def test_a_factory_handing_back_another_agency_is_refused(tmp_path: Path) 
         "jobs", {"agency_id": "agency-x", "kind": "draft_post", "payload": {"post_id": post_id}}
     )
 
-    def wrong(_: str) -> Supa:
-        return world.factory(agency)  # a buggy factory: ignores the agency it was given
+    def wrong(_: Job) -> Supa:
+        return world.factory(agency)  # a buggy factory: ignores the job it was given
 
     loop = QueueWorker(
         ledger=world.ledger(),
@@ -272,7 +272,7 @@ async def test_a_reclaimed_job_does_not_draft_the_post_twice(tmp_path: Path) -> 
     post_id = await _post(world, agency, client, "boiler-offer")
     job_id = await add_job(world, agency, payload={"post_id": post_id})
     deps = Deps(settings=world.settings(REPO), gateway=fake.gateway())
-    first = QueueWorker(ledger=world.ledger(), factory=world.factory, deps=deps)
+    first = QueueWorker(ledger=world.ledger(), factory=world.scoped, deps=deps)
     assert await first.run_once()
     assert row(world, job_id)["status"] == "done"
 
@@ -281,7 +281,7 @@ async def test_a_reclaimed_job_does_not_draft_the_post_twice(tmp_path: Path) -> 
         {"status": "queued", "attempts": 0, "leased_by": None, "leased_until": None},
         id=f"eq.{job_id}",
     )
-    second = QueueWorker(ledger=world.ledger(), factory=world.factory, deps=deps)
+    second = QueueWorker(ledger=world.ledger(), factory=world.scoped, deps=deps)
     assert await second.run_once()
 
     state = row(world, job_id)

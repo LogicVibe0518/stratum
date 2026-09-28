@@ -1,9 +1,9 @@
-"""The queue loop: claim a job, do it as that job's agency, write down what happened.
+"""The queue loop: claim a job, do it as the person who asked, write down what happened.
 
 Nothing here holds a credential. Claiming and settling go through an injected Ledger;
-the work itself goes through `factory(job.agency_id)`, a client that can only see
-that one agency. A job for agency A therefore cannot read or write agency B's rows
-even if this code had a bug in it - the database would refuse.
+the work itself goes through `factory(job)`, a client that acts as the job's requester
+and so can only see that person's agency. A job for agency A therefore cannot read or
+write agency B's rows even if this code had a bug in it - the database would refuse.
 """
 
 from __future__ import annotations
@@ -60,8 +60,10 @@ PERMANENT: tuple[type[BaseException], ...] = (
 
 
 class DraftPayload(BaseModel):
+    # Who asked is NOT read from here any more: a payload is written by the caller, so
+    # it could name anyone. The requester is the job's requested_by column, which the
+    # database stamps itself. Old payloads that still carry the field parse fine.
     post_id: str
-    requested_by: str | None = None
 
 
 @dataclass(frozen=True)
@@ -118,7 +120,7 @@ async def draft_post(job: Job, client: Supa, deps: Deps) -> dict[str, Any]:
         settings=deps.settings,
         gateway=deps.gateway,
         agency_id=job.agency_id,
-        user_id=payload.requested_by,
+        user_id=job.requested_by,
     )
     version = await service.draft(ctx, post, clients[0])
     return {"post_id": post["id"], "version_id": version["id"], "version": version["version"]}
@@ -163,7 +165,7 @@ class QueueWorker:
             handler = self.handlers.get(job.kind)
             if handler is None:
                 raise DraftError(f"no handler for job kind {job.kind!r}")
-            client = self.factory(job.agency_id)
+            client = self.factory(job)
             result = await asyncio.wait_for(
                 handler(job, client, self.deps), timeout=work_timeout(self.lease_seconds)
             )
@@ -247,8 +249,8 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="stratum-queue", description=__doc__)
     parser.add_argument(
         "--factory",
-        help="package.module:callable returning the scoped ClientFactory (required "
-        "unless --fake-db)",
+        help="package.module:callable returning the scoped ClientFactory, normally "
+        "stratum_worker.queue.identity:from_env (required unless --fake-db)",
     )
     parser.add_argument("--concurrency", type=int, default=2)
     parser.add_argument("--lease", type=int, default=DEFAULT_LEASE_S)
@@ -264,13 +266,14 @@ def main(argv: list[str] | None = None) -> None:
         from stratum_worker.queue import fake
 
         world = fake.World(Path(args.fake_db))
-        ledger, factory = world.ledger(), world.factory
+        ledger, factory = world.ledger(), world.scoped
         deps = Deps(settings=world.settings(), gateway=fake.gateway(args.model_delay))
     else:
         if not args.factory:
             raise SystemExit(
-                "stratum-queue needs --factory package.module:callable. The scoped client "
-                "factory is deliberately not part of this repo's generated code."
+                "stratum-queue needs --factory package.module:callable, normally "
+                "stratum_worker.queue.identity:from_env. It is never implied: the one "
+                "place a credential is made should be named on the command line."
             )
         from stratum_worker.app.settings import settings
         from stratum_worker.gateway.config import load_config
