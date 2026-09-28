@@ -92,18 +92,29 @@ def _plain(record: Any) -> dict[str, Any]:
 
 
 class PgLedger:
-    """The same two operations PostgrestLedger performs, issued as SQL."""
+    """The same two operations PostgrestLedger performs, issued as SQL.
+
+    Each runs as service_role, the role PostgREST uses for the worker's key, so a
+    missing grant fails here and not on the first live claim.
+    """
 
     def __init__(self, conn: Any) -> None:
         self.conn = conn
 
     async def claim(self, worker: str, lease_seconds: int) -> Job | None:
-        rows = await self.conn.fetch(
-            "select * from stratum.claim_job($1, $2)", worker, lease_seconds
-        )
+        async with self.conn.transaction():
+            await self.conn.execute("set local role service_role")
+            rows = await self.conn.fetch(
+                "select * from stratum.claim_job($1, $2)", worker, lease_seconds
+            )
         return Job.model_validate(_plain(rows[0])) if rows else None
 
     async def settle(self, job: Job, worker: str, values: dict[str, Any]) -> bool:
+        async with self.conn.transaction():
+            await self.conn.execute("set local role service_role")
+            return await self._settle(job, worker, values)
+
+    async def _settle(self, job: Job, worker: str, values: dict[str, Any]) -> bool:
         done = await self.conn.fetch(
             """
             update stratum.jobs set
@@ -344,3 +355,45 @@ async def test_the_database_decides_who_asked_for_a_job() -> None:
         # Bob re-sends the post: now Bob is the one who asked.
         await as_user(bob, "update stratum.jobs set status = 'queued' where id = $1", job)
         assert await requester(job) == bob
+
+
+async def test_the_service_role_key_can_claim_and_settle_and_nothing_else() -> None:
+    """The worker's key reads every agency's queue, so what it may write is kept tiny."""
+    async for conn, _ in fresh_database():
+        agency = await conn.fetchval(
+            "insert into stratum.agencies (name) values ('T') returning id"
+        )
+        job = await conn.fetchval(
+            "insert into stratum.jobs (agency_id, kind, payload) "
+            "values ($1, 'draft_post', '{}') returning id",
+            agency,
+        )
+
+        async def as_service(sql: str, *args: Any, db: Any = conn) -> Any:
+            async with db.transaction():
+                await db.execute("set local role service_role")
+                return await db.fetch(sql, *args)
+
+        [claimed] = await as_service("select id from stratum.claim_job('w', 60)")
+        assert claimed["id"] == job
+        assert await as_service(
+            "update stratum.jobs set status = 'done', result = '{}', last_error = '', "
+            "leased_until = null, updated_at = now() "
+            "where id = $1 and leased_by = 'w' and status = 'running' returning id",
+            job,
+        )
+        refused = [
+            ('update stratum.jobs set payload = \'{"post_id": "x"}\' where id = $1', job),
+            ("update stratum.jobs set agency_id = agency_id where id = $1", job),
+            ("update stratum.jobs set requested_by = null where id = $1", job),
+            ("delete from stratum.jobs where id = $1", job),
+            (
+                "insert into stratum.jobs (agency_id, kind, payload) "
+                "values ($1, 'draft_post', '{}')",
+                agency,
+            ),
+            ("select count(*) from stratum.posts where agency_id = $1", agency),
+        ]
+        for sql, arg in refused:
+            with pytest.raises(Exception, match="permission denied"):
+                await as_service(sql, arg)

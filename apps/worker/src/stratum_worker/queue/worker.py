@@ -45,6 +45,24 @@ from stratum_worker.queue.ledger import Ledger
 log = logging.getLogger("stratum.queue")
 
 DEFAULT_LEASE_S = 180
+# While the queue is unreachable, wait idle_s, then twice that, and so on up to this.
+MAX_IDLE_S = 30.0
+# The database said no to the worker's own key: a wrong key, or grants missing. Asking
+# again cannot change the answer, so the worker stops and says why.
+REFUSED = frozenset({401, 403})
+
+
+class QueueRefused(RuntimeError):
+    """The database refused the queue's own credential. Retrying cannot fix that."""
+
+
+def refused_message(exc: SupabaseError) -> str:
+    return (
+        f"the database refused the queue's service-role key ({exc.status}: {exc.detail}). "
+        "Check that SUPABASE_SERVICE_ROLE_KEY in .env.worker is this project's service_role "
+        "key, and that the service_role grants migration has been applied."
+    )
+
 
 # Errors that will fail the same way however often they are retried, and where each
 # retry would pay for another model call first: a design with no photo for a slot, a
@@ -193,17 +211,41 @@ class QueueWorker:
         return True
 
     async def run(self, stop: asyncio.Event) -> None:
+        failures = 0
         while not stop.is_set():
             try:
                 handled = await self.run_once()
-            except (SupabaseError, httpx.HTTPError):
+                failures = 0
+            except (SupabaseError, httpx.HTTPError) as exc:
+                if isinstance(exc, SupabaseError) and exc.status in REFUSED:
+                    raise QueueRefused(refused_message(exc)) from exc
                 # The ledger itself is unreachable. Nothing was claimed, or a claim
-                # we cannot settle will simply lease-expire; wait and ask again.
-                log.exception("queue unavailable", extra={"worker": self.worker_id})
+                # we cannot settle will simply lease-expire; wait longer each time and
+                # ask again. One traceback, then one line per retry.
+                failures += 1
+                self._unavailable(exc, failures)
                 handled = False
             if not handled:
                 with contextlib.suppress(TimeoutError):
-                    await asyncio.wait_for(stop.wait(), timeout=self.idle_s)
+                    await asyncio.wait_for(stop.wait(), timeout=self.pause(failures))
+
+    def pause(self, failures: int) -> float:
+        """Seconds to wait before asking again: idle_s, then doubling up to MAX_IDLE_S."""
+        if failures == 0:
+            return self.idle_s
+        return min(MAX_IDLE_S, self.idle_s * 2.0**failures)
+
+    def _unavailable(self, exc: BaseException, failures: int) -> None:
+        fields = {"worker": self.worker_id, "failures": failures}
+        if failures == 1:
+            log.warning("queue unavailable", extra=fields, exc_info=exc)
+        else:
+            log.warning(
+                "queue still unavailable, next try in %.0fs: %s",
+                self.pause(failures),
+                exc,
+                extra=fields,
+            )
 
 
 async def run_pool(
@@ -228,7 +270,18 @@ async def run_pool(
         )
         for slot in range(concurrency)
     ]
-    await asyncio.gather(*(one.run(stop) for one in workers))
+
+    async def supervised(one: QueueWorker) -> None:
+        try:
+            await one.run(stop)
+        except QueueRefused:
+            stop.set()  # every other loop holds the same key and would hit the same wall
+            raise
+
+    outcomes = await asyncio.gather(*(supervised(one) for one in workers), return_exceptions=True)
+    for outcome in outcomes:
+        if isinstance(outcome, BaseException):
+            raise outcome
 
 
 # --- console script ----------------------------------------------------------------
@@ -296,7 +349,10 @@ def main(argv: list[str] | None = None) -> None:
             ledger, factory, deps, concurrency=args.concurrency, stop=stop, lease_seconds=args.lease
         )
 
-    asyncio.run(go())
+    try:
+        asyncio.run(go())
+    except QueueRefused as exc:
+        raise SystemExit(f"stratum-queue: {exc}") from None
 
 
 if __name__ == "__main__":

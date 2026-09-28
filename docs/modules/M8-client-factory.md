@@ -47,3 +47,22 @@
     uv run stratum-queue --factory stratum_worker.queue.identity:from_env --concurrency 2
 
 Then make a post in the web app with "run in the background" ticked.
+
+## Found on the first live run (28 Sep)
+
+The first real `stratum-queue` run failed every claim with `permission denied for
+schema stratum`, and logged a full traceback twice a second until stopped.
+
+- **Cause:** PostgREST runs the service-role key as the `service_role` database role.
+  That role skips row-level security but still needs grants, and it had none on
+  `stratum`. The contract tests ran as the database owner, so they could not see it.
+- **Fix:** migration `20260928132943_queue_service_role_grants` (applied live) grants
+  exactly what `ledger.py` does: `claim_job`, reading `jobs`, and updating the six
+  columns `settle()` writes. The key still cannot change a job's payload, agency or
+  requester, or touch any other table.
+- **Guard:** the queue contract tests now claim and settle as `service_role`. Without
+  the migration they fail with the same error the live worker hit, and a new test
+  lists what that role must be refused.
+- **The worker now stops on a refused key** (401 or 403) with one sentence saying which
+  setting to check, and backs off from 1s up to 30s when the database is only
+  unreachable, printing one traceback and then one line per retry.

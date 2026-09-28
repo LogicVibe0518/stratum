@@ -290,3 +290,74 @@ async def test_a_reclaimed_job_does_not_draft_the_post_twice(tmp_path: Path) -> 
     assert state["result"]["post_id"] == post_id
     versions = await world.factory(agency).select("post_versions", post_id=f"eq.{post_id}")
     assert [v["version"] for v in versions] == [1]
+
+
+# --- when the queue itself says no ---------------------------------------------------
+
+
+class RefusingLedger:
+    """What PostgREST answers when the key is wrong or the grants are missing."""
+
+    def __init__(self, status: int = 403) -> None:
+        self.status = status
+        self.calls = 0
+
+    async def claim(self, worker: str, lease_seconds: int) -> Job | None:
+        self.calls += 1
+        raise SupabaseError(self.status, '{"message":"permission denied for schema stratum"}')
+
+    async def settle(self, job: Job, worker: str, values: dict[str, Any]) -> bool:
+        raise AssertionError("nothing was claimed")
+
+
+@pytest.mark.parametrize("status", [401, 403])
+async def test_a_refused_key_stops_every_loop_with_one_clear_message(
+    world: World, status: int
+) -> None:
+    from stratum_worker.queue.worker import QueueRefused, run_pool
+
+    ledger = RefusingLedger(status)
+    stop = asyncio.Event()
+    with pytest.raises(QueueRefused, match="SUPABASE_SERVICE_ROLE_KEY"):
+        await asyncio.wait_for(
+            run_pool(
+                ledger,  # type: ignore[arg-type]
+                world.scoped,
+                Deps(settings=world.settings(), gateway=fake.gateway()),
+                concurrency=3,
+                stop=stop,
+                idle_s=0.01,
+            ),
+            timeout=5,
+        )
+    # At most one question per loop, then everything stops: no retry storm.
+    assert 1 <= ledger.calls <= 3 and stop.is_set()
+
+
+async def test_an_unreachable_queue_is_asked_less_often_each_time(world: World) -> None:
+    import httpx
+
+    class Down:
+        calls = 0
+
+        async def claim(self, worker: str, lease_seconds: int) -> Job | None:
+            Down.calls += 1
+            raise httpx.ConnectError("no route to host")
+
+        async def settle(self, job: Job, worker: str, values: dict[str, Any]) -> bool:
+            raise AssertionError("nothing was claimed")
+
+    loop = QueueWorker(
+        ledger=Down(),  # type: ignore[arg-type]
+        factory=world.scoped,
+        deps=Deps(settings=world.settings(), gateway=fake.gateway()),
+        worker_id="w-1",
+        idle_s=1.0,
+    )
+    assert [loop.pause(n) for n in (0, 1, 2, 3, 4, 5, 6)] == [1, 2, 4, 8, 16, 30, 30]
+    stop = asyncio.Event()
+    task = asyncio.create_task(loop.run(stop))
+    await asyncio.sleep(0.2)  # the first retry is 2s away
+    stop.set()
+    await asyncio.wait_for(task, timeout=3)
+    assert Down.calls == 1
