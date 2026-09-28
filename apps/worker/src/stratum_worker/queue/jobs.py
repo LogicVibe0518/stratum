@@ -23,14 +23,15 @@ ERROR_MAX_CHARS = 1000
 
 
 class ClientFactory(Protocol):
-    """agency_id -> a database client that can see that agency and nothing else.
+    """A claimed job -> a database client that can see that job's agency and nothing else.
 
-    The queue calls this with the job's agency and does ALL draft work through what it
-    returns. It never builds credentials itself. The real implementation is written and
-    reviewed by a human; the only ones in this repo are test doubles.
+    The queue calls this once per job and does ALL of the job's work through what it
+    returns. It is handed the whole job, not just an agency id, because the real
+    implementation (identity.ScopedClientFactory) acts as the person who asked for
+    the job and keeps its credential alive only as long as the job's lease.
     """
 
-    def __call__(self, agency_id: str) -> Supa: ...
+    def __call__(self, job: Job) -> Supa: ...
 
 
 class Job(BaseModel):
@@ -48,6 +49,9 @@ class Job(BaseModel):
     last_error: str = ""
     leased_by: str | None = None
     leased_until: datetime | None = None
+    # Stamped by the database from auth.uid() (migration 20260927174950), so it
+    # cannot be chosen by whoever wrote the job. The worker acts as this person.
+    requested_by: str | None = None
     run_after: datetime
     created_at: datetime
     # claim_job stamps updated_at with the database's now(), so on a freshly claimed

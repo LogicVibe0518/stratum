@@ -1,9 +1,9 @@
-"""The queue loop: claim a job, do it as that job's agency, write down what happened.
+"""The queue loop: claim a job, do it as the person who asked, write down what happened.
 
 Nothing here holds a credential. Claiming and settling go through an injected Ledger;
-the work itself goes through `factory(job.agency_id)`, a client that can only see
-that one agency. A job for agency A therefore cannot read or write agency B's rows
-even if this code had a bug in it - the database would refuse.
+the work itself goes through `factory(job)`, a client that acts as the job's requester
+and so can only see that person's agency. A job for agency A therefore cannot read or
+write agency B's rows even if this code had a bug in it - the database would refuse.
 """
 
 from __future__ import annotations
@@ -45,6 +45,24 @@ from stratum_worker.queue.ledger import Ledger
 log = logging.getLogger("stratum.queue")
 
 DEFAULT_LEASE_S = 180
+# While the queue is unreachable, wait idle_s, then twice that, and so on up to this.
+MAX_IDLE_S = 30.0
+# The database said no to the worker's own key: a wrong key, or grants missing. Asking
+# again cannot change the answer, so the worker stops and says why.
+REFUSED = frozenset({401, 403})
+
+
+class QueueRefused(RuntimeError):
+    """The database refused the queue's own credential. Retrying cannot fix that."""
+
+
+def refused_message(exc: SupabaseError) -> str:
+    return (
+        f"the database refused the queue's service-role key ({exc.status}: {exc.detail}). "
+        "Check that SUPABASE_SERVICE_ROLE_KEY in .env.worker is this project's service_role "
+        "key, and that the service_role grants migration has been applied."
+    )
+
 
 # Errors that will fail the same way however often they are retried, and where each
 # retry would pay for another model call first: a design with no photo for a slot, a
@@ -60,8 +78,10 @@ PERMANENT: tuple[type[BaseException], ...] = (
 
 
 class DraftPayload(BaseModel):
+    # Who asked is NOT read from here any more: a payload is written by the caller, so
+    # it could name anyone. The requester is the job's requested_by column, which the
+    # database stamps itself. Old payloads that still carry the field parse fine.
     post_id: str
-    requested_by: str | None = None
 
 
 @dataclass(frozen=True)
@@ -118,7 +138,7 @@ async def draft_post(job: Job, client: Supa, deps: Deps) -> dict[str, Any]:
         settings=deps.settings,
         gateway=deps.gateway,
         agency_id=job.agency_id,
-        user_id=payload.requested_by,
+        user_id=job.requested_by,
     )
     version = await service.draft(ctx, post, clients[0])
     return {"post_id": post["id"], "version_id": version["id"], "version": version["version"]}
@@ -158,12 +178,16 @@ class QueueWorker:
         if job is None:
             return False
         fields = {"agency_id": job.agency_id, "job_id": job.id, "worker": self.worker_id}
+        name = f"{job.kind} {job.id[:8]}"
+        log.info(
+            "%s: started, attempt %d of %d", name, job.attempts, job.max_attempts, extra=fields
+        )
         started = time.monotonic()
         try:
             handler = self.handlers.get(job.kind)
             if handler is None:
                 raise DraftError(f"no handler for job kind {job.kind!r}")
-            client = self.factory(job.agency_id)
+            client = self.factory(job)
             result = await asyncio.wait_for(
                 handler(job, client, self.deps), timeout=work_timeout(self.lease_seconds)
             )
@@ -173,7 +197,11 @@ class QueueWorker:
             values = failed_values(job, describe_error(exc), elapsed_s=elapsed, permanent=permanent)
             kept = await self.ledger.settle(job, self.worker_id, values)
             log.warning(
-                "job failed",
+                "%s: failed after %.1fs, %s: %s",
+                name,
+                elapsed,
+                "will retry" if values["status"] == "queued" else "giving up",
+                values["last_error"],
                 extra={**fields, "attempt": job.attempts, "next": values["status"], "kept": kept},
                 exc_info=exc,
             )
@@ -187,21 +215,56 @@ class QueueWorker:
             "worker": self.worker_id,
         }
         if not await self.ledger.settle(job, self.worker_id, done_values(result)):
-            log.warning("lease lost before completion; result discarded", extra=fields)
+            log.warning("%s: lease lost before completion; result discarded", name, extra=fields)
+        else:
+            log.info("%s: done in %.1fs", name, work, extra=fields)
         return True
 
     async def run(self, stop: asyncio.Event) -> None:
+        failures = 0
         while not stop.is_set():
             try:
                 handled = await self.run_once()
-            except (SupabaseError, httpx.HTTPError):
+                if failures:
+                    log.info("queue reachable again after %d failed tries", failures)
+                failures = 0
+            except (SupabaseError, httpx.HTTPError) as exc:
+                if isinstance(exc, SupabaseError) and exc.status in REFUSED:
+                    raise QueueRefused(refused_message(exc)) from exc
                 # The ledger itself is unreachable. Nothing was claimed, or a claim
-                # we cannot settle will simply lease-expire; wait and ask again.
-                log.exception("queue unavailable", extra={"worker": self.worker_id})
+                # we cannot settle will simply lease-expire; wait longer each time and
+                # ask again.
+                failures += 1
+                self._unavailable(exc, failures)
                 handled = False
             if not handled:
                 with contextlib.suppress(TimeoutError):
-                    await asyncio.wait_for(stop.wait(), timeout=self.idle_s)
+                    await asyncio.wait_for(stop.wait(), timeout=self.pause(failures))
+
+    def pause(self, failures: int) -> float:
+        """Seconds to wait before asking again: idle_s, then doubling up to MAX_IDLE_S."""
+        if failures == 0:
+            return self.idle_s
+        return min(MAX_IDLE_S, self.idle_s * 2.0**failures)
+
+    def _unavailable(self, exc: BaseException, failures: int) -> None:
+        """One line per failed try. A traceback only for the unexpected.
+
+        A dropped connection or a timeout is routine on a laptop (sleep, Wi-Fi, an idle
+        connection closed by the other side) and its traceback says nothing new, so it
+        gets one line. Anything else, such as a 500 from the database, prints its
+        traceback once, the first time.
+        """
+        fields = {"worker": self.worker_id, "failures": failures}
+        routine = isinstance(exc, httpx.TransportError)
+        why = type(exc).__name__ if routine else str(exc)
+        log.warning(
+            "queue unreachable (%s), next try in %.0fs",
+            why,
+            self.pause(failures),
+            extra=fields,
+            exc_info=exc if failures == 1 and not routine else None,
+        )
 
 
 async def run_pool(
@@ -226,7 +289,18 @@ async def run_pool(
         )
         for slot in range(concurrency)
     ]
-    await asyncio.gather(*(one.run(stop) for one in workers))
+
+    async def supervised(one: QueueWorker) -> None:
+        try:
+            await one.run(stop)
+        except QueueRefused:
+            stop.set()  # every other loop holds the same key and would hit the same wall
+            raise
+
+    outcomes = await asyncio.gather(*(supervised(one) for one in workers), return_exceptions=True)
+    for outcome in outcomes:
+        if isinstance(outcome, BaseException):
+            raise outcome
 
 
 # --- console script ----------------------------------------------------------------
@@ -243,19 +317,29 @@ def _load_factory(target: str) -> ClientFactory:
     return made  # type: ignore[no-any-return]
 
 
+def configure_logging() -> None:
+    """One readable line per job; silence while idle."""
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S"
+    )
+    # httpx logs every request at INFO, which for a worker asking "any jobs?" every
+    # second is a wall of identical lines that hides the ones that matter.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="stratum-queue", description=__doc__)
     parser.add_argument(
         "--factory",
-        help="package.module:callable returning the scoped ClientFactory (required "
-        "unless --fake-db)",
+        help="package.module:callable returning the scoped ClientFactory, normally "
+        "stratum_worker.queue.identity:from_env (required unless --fake-db)",
     )
     parser.add_argument("--concurrency", type=int, default=2)
     parser.add_argument("--lease", type=int, default=DEFAULT_LEASE_S)
     parser.add_argument("--fake-db", help="run against a local SQLite stand-in, no network")
     parser.add_argument("--model-delay", type=float, default=0.5, help="fake mode only")
     args = parser.parse_args(argv)
-    logging.basicConfig(level=logging.INFO)
+    configure_logging()
 
     ledger: Ledger
     if args.fake_db:
@@ -264,13 +348,14 @@ def main(argv: list[str] | None = None) -> None:
         from stratum_worker.queue import fake
 
         world = fake.World(Path(args.fake_db))
-        ledger, factory = world.ledger(), world.factory
+        ledger, factory = world.ledger(), world.scoped
         deps = Deps(settings=world.settings(), gateway=fake.gateway(args.model_delay))
     else:
         if not args.factory:
             raise SystemExit(
-                "stratum-queue needs --factory package.module:callable. The scoped client "
-                "factory is deliberately not part of this repo's generated code."
+                "stratum-queue needs --factory package.module:callable, normally "
+                "stratum_worker.queue.identity:from_env. It is never implied: the one "
+                "place a credential is made should be named on the command line."
             )
         from stratum_worker.app.settings import settings
         from stratum_worker.gateway.config import load_config
@@ -289,11 +374,18 @@ def main(argv: list[str] | None = None) -> None:
         for sig in (signal.SIGTERM, signal.SIGINT):
             with contextlib.suppress(NotImplementedError, RuntimeError):
                 loop.add_signal_handler(sig, stop.set)
+        log.info(
+            "stratum-queue: %d workers waiting for jobs. Quiet means idle. Ctrl+C to stop.",
+            args.concurrency,
+        )
         await run_pool(
             ledger, factory, deps, concurrency=args.concurrency, stop=stop, lease_seconds=args.lease
         )
 
-    asyncio.run(go())
+    try:
+        asyncio.run(go())
+    except QueueRefused as exc:
+        raise SystemExit(f"stratum-queue: {exc}") from None
 
 
 if __name__ == "__main__":

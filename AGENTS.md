@@ -12,13 +12,13 @@ compositor renders it. AI models may generate a *background*, never a finished p
 1. **Poster = layer spec.** Layers: background, subject cutout, shapes, logo, text. Never bake text or logos into generated images.
 2. **Logos are always the client's original file.** Never generated, traced or recoloured by a model.
 3. **Real product pixels are sacred.** "Generate around, paste the truth back": model output goes behind; original product pixels go on top via mask.
-4. **Commands go through workflows (DBOS); reads go straight to Postgres.** No slow or multi-step work inside an HTTP request.
+4. **Slow commands go through the Postgres job queue (`stratum_worker/queue`); reads go straight to Postgres.** No slow or multi-step work inside an HTTP request. DBOS is not used: the lease queue covers what it was wanted for.
 5. **Every AI call goes through the task gateway** (`caption.generate`, `edit.parse`, `background.create`, ...). Application code never imports a vendor SDK directly.
 6. **Model output is data, never code or markup.** Validate every model output with Pydantic; edit ops must pass the allowlist + template slot schema.
 7. **Immutable versions.** Poster versions are never mutated; edits create a new version.
 8. **Versioned spec schema.** Every spec has `schema_version`; changes ship with an upgrader + test.
 9. **Idempotency keys on every command endpoint.**
-10. **Tenancy everywhere.** Every row has `agency_id`; RLS on every table; tenant comes from the verified token, never the request body. The queue worker is the one process that holds a credential able to cross agencies, and it uses it for exactly two statements - claim a job, settle a job - in `stratum_worker/queue/ledger.py`. All work on a job runs through `factory(job.agency_id)`, a client scoped to that one agency, so the database refuses a cross-tenant write even if the code asks for one. The API never holds that key at all and drops it from its environment at import if it finds it.
+10. **Tenancy everywhere.** Every row has `agency_id`; RLS on every table; tenant comes from the verified token, never the request body. The queue worker is the one process that holds credentials able to cross agencies: the service-role key, used for exactly two statements - claim a job, settle a job - in `stratum_worker/queue/ledger.py`; and the JWT secret, used only in `stratum_worker/queue/identity.py` to sign a token for the job's requester that expires with the job's lease. All work on a job runs through `factory(job)`, a client acting as that person, so the database refuses a cross-tenant write even if the code asks for one. `jobs.requested_by` is stamped by the database from `auth.uid()`; never mint a credential from a value a user can write. The API holds neither key and drops the service-role key from its environment at import if it finds it.
 11. **Content addressing.** Assets and renders are stored by SHA-256; render cache key = hash(spec, template version, renderer version, fonts).
 
 ## Never
@@ -30,14 +30,14 @@ compositor renders it. AI models may generate a *background*, never a finished p
 - Never edit files under `benchmarks/v1/` — create `v2` instead.
 
 ## Stack
-Python 3.12 · uv workspace · FastAPI · Pydantic v2 · DBOS · Postgres (Supabase) · resvg + HarfBuzz (uharfbuzz) + Pillow ·
-Next.js + TypeScript + react-konva + shadcn/ui (apps/web) · pytest + Hypothesis · ruff · mypy (strict on packages/) ·
+Python 3.12 · uv workspace · FastAPI · Pydantic v2 · Postgres (Supabase) with a lease-based job queue · resvg + HarfBuzz (uharfbuzz) + Pillow ·
+One-file web UI served by FastAPI (`apps/api/static`) for the pilot; Next.js + shadcn/ui later · pytest + Hypothesis · ruff · mypy (strict on packages/) ·
 Langfuse (AI traces) · Sentry · OpenTelemetry.
 
 ## Repo map
 - `packages/spec` — the layer spec + edit-op schema (source of truth). Pure Python, no I/O.
 - `apps/api` — FastAPI: auth, commands (start workflows), reads.
-- `apps/worker` — DBOS workflows, compositor, image ops, AI gateway calls.
+- `apps/worker` — the job queue, compositor, image ops, AI gateway calls.
 - `apps/web` — Next.js editor + client review page.
 - `ml/` — command-model data, training, evals.
 - `benchmarks/` — frozen Client Lab benchmark (5 fictional clients). Read-only per version.

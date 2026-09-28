@@ -54,15 +54,22 @@ class PostgrestLedger:
         return bool(rows)
 
 
-def privileged_client(env_file: Path = WORKER_ENV) -> Supa:
-    """The service-role client, from the worker's own environment only.
+def worker_env(env_file: Path = WORKER_ENV) -> dict[str, str]:
+    """The worker's settings: the process environment over .env.worker.
 
-    Read from the process environment (how a deployed worker gets it) or from
-    .env.worker (how a laptop gets it). Never from .env, which the API also reads.
+    A deployed worker gets its secrets from the environment; a laptop gets them from
+    .env.worker. Never from .env, which the API also reads.
     """
     file = {k: v for k, v in dotenv_values(env_file).items() if v} if env_file.is_file() else {}
-    url = os.environ.get("SUPABASE_URL") or file.get("SUPABASE_URL") or ""
-    key = os.environ.get(KEY) or file.get(KEY) or ""
+    live = {k: v for k, v in os.environ.items() if v}
+    return {**file, **live}
+
+
+def privileged_client(env_file: Path = WORKER_ENV) -> Supa:
+    """The service-role client, from the worker's own environment only."""
+    env = worker_env(env_file)
+    url = env.get("SUPABASE_URL", "")
+    key = env.get(KEY, "")
     if not url or not key:
         raise RuntimeError(
             f"the queue needs SUPABASE_URL and {KEY} in the worker's environment or "

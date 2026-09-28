@@ -294,8 +294,18 @@ class World:
         return _Db(self.path)
 
     def factory(self, agency_id: str) -> Supa:
-        """The test double for ClientFactory: a client that sees one agency only."""
+        """A client that sees one agency only, the way row-level security scopes a user."""
         return FakeSupa(self, agency_id)
+
+    def scoped(self, job: Job) -> Supa:
+        """The test double for ClientFactory.
+
+        The real factory acts as job.requested_by and lets the database find their
+        agency. The stand-in has no users, so it scopes by the job's agency directly;
+        who may appear in requested_by is the database's rule, tested against real
+        Postgres in test_queue_contract.
+        """
+        return FakeSupa(self, job.agency_id)
 
     def ledger(self) -> SqliteLedger:
         return SqliteLedger(self)

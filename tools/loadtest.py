@@ -238,7 +238,7 @@ async def run_bench(
     workers = asyncio.create_task(
         run_pool(
             world.ledger(),
-            world.factory,
+            world.scoped,
             deps,
             concurrency=concurrency,
             stop=stop,
