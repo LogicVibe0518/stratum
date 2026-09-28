@@ -50,6 +50,22 @@ def build_providers(
     return providers
 
 
+def offline_router(results: list[dict[str, object]], *, delay_s: float = 0.0) -> Router:
+    """Every task answered by FakeProvider: real routing, no network, no spend.
+
+    For tests and `--fake` runs. `results` are handed out in order, one per call.
+    """
+    from stratum_worker.gateway.providers.fake import FakeProvider
+    from stratum_worker.gateway.router import TaskPolicy
+    from stratum_worker.gateway.tasks import TaskName
+
+    provider = FakeProvider(results=results, cost_usd=0.0, delay_s=delay_s)
+    return Router(
+        providers={"fake": provider},
+        policies={task: TaskPolicy(order=("fake",)) for task in TaskName},
+    )
+
+
 def build_router(
     config: GatewayConfig,
     env: Mapping[str, str] | None = None,
