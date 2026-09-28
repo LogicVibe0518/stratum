@@ -396,3 +396,45 @@ def test_polling_requests_are_not_logged_one_by_one() -> None:
 
     configure_logging()
     assert logging.getLogger("httpx").getEffectiveLevel() == logging.WARNING
+
+
+async def test_a_dropped_connection_is_one_line_and_recovery_is_announced(
+    world: World, caplog: pytest.LogCaptureFixture
+) -> None:
+    import httpx
+
+    class Blip:
+        """Fails twice the way a sleeping laptop does, then answers normally."""
+
+        calls = 0
+
+        async def claim(self, worker: str, lease_seconds: int) -> Job | None:
+            Blip.calls += 1
+            if Blip.calls == 1:
+                raise httpx.ReadError("connection reset")
+            if Blip.calls == 2:
+                raise httpx.ReadTimeout("timed out")
+            return None
+
+        async def settle(self, job: Job, worker: str, values: dict[str, Any]) -> bool:
+            raise AssertionError("nothing was claimed")
+
+    loop = QueueWorker(
+        ledger=Blip(),  # type: ignore[arg-type]
+        factory=world.scoped,
+        deps=Deps(settings=world.settings(), gateway=fake.gateway()),
+        worker_id="w-1",
+        idle_s=0.001,
+    )
+    stop = asyncio.Event()
+    with caplog.at_level("INFO", logger="stratum.queue"):
+        task = asyncio.create_task(loop.run(stop))
+        while Blip.calls < 3:
+            await asyncio.sleep(0.01)
+        stop.set()
+        await asyncio.wait_for(task, timeout=3)
+    lines = [r.getMessage() for r in caplog.records]
+    assert lines[0].startswith("queue unreachable (ReadError), next try in")
+    assert lines[1].startswith("queue unreachable (ReadTimeout), next try in")
+    assert lines[2] == "queue reachable again after 2 failed tries"
+    assert all(r.exc_info is None for r in caplog.records)

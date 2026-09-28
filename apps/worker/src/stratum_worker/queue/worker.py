@@ -225,13 +225,15 @@ class QueueWorker:
         while not stop.is_set():
             try:
                 handled = await self.run_once()
+                if failures:
+                    log.info("queue reachable again after %d failed tries", failures)
                 failures = 0
             except (SupabaseError, httpx.HTTPError) as exc:
                 if isinstance(exc, SupabaseError) and exc.status in REFUSED:
                     raise QueueRefused(refused_message(exc)) from exc
                 # The ledger itself is unreachable. Nothing was claimed, or a claim
                 # we cannot settle will simply lease-expire; wait longer each time and
-                # ask again. One traceback, then one line per retry.
+                # ask again.
                 failures += 1
                 self._unavailable(exc, failures)
                 handled = False
@@ -246,16 +248,23 @@ class QueueWorker:
         return min(MAX_IDLE_S, self.idle_s * 2.0**failures)
 
     def _unavailable(self, exc: BaseException, failures: int) -> None:
+        """One line per failed try. A traceback only for the unexpected.
+
+        A dropped connection or a timeout is routine on a laptop (sleep, Wi-Fi, an idle
+        connection closed by the other side) and its traceback says nothing new, so it
+        gets one line. Anything else, such as a 500 from the database, prints its
+        traceback once, the first time.
+        """
         fields = {"worker": self.worker_id, "failures": failures}
-        if failures == 1:
-            log.warning("queue unavailable", extra=fields, exc_info=exc)
-        else:
-            log.warning(
-                "queue still unavailable, next try in %.0fs: %s",
-                self.pause(failures),
-                exc,
-                extra=fields,
-            )
+        routine = isinstance(exc, httpx.TransportError)
+        why = type(exc).__name__ if routine else str(exc)
+        log.warning(
+            "queue unreachable (%s), next try in %.0fs",
+            why,
+            self.pause(failures),
+            extra=fields,
+            exc_info=exc if failures == 1 and not routine else None,
+        )
 
 
 async def run_pool(
