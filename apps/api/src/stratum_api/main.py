@@ -21,6 +21,7 @@ from fastapi import Depends, FastAPI, Form, Header, HTTPException, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel, Field
 from stratum_spec import SCHEMA_VERSION
+from stratum_spec.models import Aspect
 from stratum_worker.app import reviews, service
 from stratum_worker.app.settings import Settings, settings
 from stratum_worker.app.supa import Supa, SupabaseError, close_pool
@@ -488,6 +489,34 @@ async def download(post_id: str, ctx: service.Context = Depends(context)) -> Res
         content=data,
         media_type="application/zip",
         headers={"Content-Disposition": f'attachment; filename="{post["slug"]}.zip"'},
+    )
+
+
+PPTX = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+
+
+@app.get("/api/posts/{post_id}/canva.pptx")
+async def canva_deck(
+    post_id: str, aspect: Aspect = "4:5", ctx: service.Context = Depends(context)
+) -> Response:
+    """The latest version at one size, as a PowerPoint file with every layer editable.
+
+    Canva imports it with each headline, shape, photo and the logo as its own layer.
+    """
+    post, client = await _post_and_client(ctx, post_id)
+    if aspect not in post["aspects"]:
+        raise HTTPException(404, f"this post has no {aspect} version")
+    versions = await ctx.supa.select(
+        "post_versions", post_id=f"eq.{post_id}", select="id", order="version.desc", limit="1"
+    )
+    if not versions:
+        raise HTTPException(404, "nothing drafted yet")
+    data = await service.export_deck(ctx, post, client, versions[0]["id"], aspect)
+    name = f"{post['slug']}-{aspect.replace(':', 'x')}.pptx"
+    return Response(
+        content=data,
+        media_type=PPTX,
+        headers={"Content-Disposition": f'attachment; filename="{name}"'},
     )
 
 
