@@ -10,6 +10,8 @@ dependencies = [
   "pillow>=11.0",
   "numpy>=2.0",
   "httpx>=0.27",
+  "pydantic-settings",
+  "python-dotenv",
 ]
 # M7 adds: dbos. Add when the module starts.
 
@@ -17,6 +19,7 @@ dependencies = [
 stratum-render = "stratum_worker.cli:main"
 stratum-draft = "stratum_worker.draft.cli:main"
 stratum-batch = "stratum_worker.draft.batch:main"
+stratum-queue = "stratum_worker.queue.worker:main"
 
 [tool.uv.sources]
 stratum-spec = { workspace = true }

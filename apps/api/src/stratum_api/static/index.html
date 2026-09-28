@@ -114,6 +114,7 @@
       <label>What does the photo show? (for alt text)</label>
       <input id="photonote" placeholder="an engineer beside a wall-mounted boiler">
       <div class="row" style="margin-top:12px"><button id="make">Make the post</button>
+        <label class="muted"><input type="checkbox" id="queued"> run in the background</label>
         <span class="muted" id="makenote"></span></div>
       <div class="err" id="makeerr"></div>
     </div>
@@ -306,16 +307,31 @@ $("make").onclick = async () => {
   if(!brief || !slug){ $("makeerr").textContent = "a brief and a short name, please"; return; }
   $("makeerr").textContent = ""; busy($("make"), true, "making…");
   const started = performance.now();
+  const queued = $("queued").checked;
   try{
-    const out = await api("/posts", { method:"POST", json:{
+    const out = await api(`/posts${queued ? "?queue=true" : ""}`, { method:"POST", json:{
       client_id: CLIENT.id, brief, slug, template_id: $("design").value,
       photo_note: $("photonote").value.trim(), aspects:["4:5","1:1","9:16","16:9"] }});
+    const postId = queued ? await waitForJob(out.job_id, started) : out.post.id;
     $("makenote").textContent = `${((performance.now()-started)/1000).toFixed(1)}s`;
     $("brief").value = ""; $("slug").value = ""; $("photonote").value = "";
-    await openPost(out.post.id);
+    await openPost(postId);
   }catch(e){ $("makeerr").textContent = e.message; }
   finally{ busy($("make"), false); }
 };
+
+// Queue mode: the request returned at once with a job id; ask every 2s how it is going.
+async function waitForJob(jobId, started){
+  for(;;){
+    const job = await api(`/jobs/${jobId}`);
+    const took = ((performance.now()-started)/1000).toFixed(0);
+    if(job.status === "done") return job.result.post_id;
+    if(job.status === "failed") throw new Error(job.last_error || "the draft failed");
+    const retry = job.attempts > 1 || job.last_error ? ` · attempt ${job.attempts} of ${job.max_attempts}` : "";
+    $("makenote").textContent = `${job.status}${retry} · ${took}s`;
+    await new Promise(resolve => setTimeout(resolve, 2000));
+  }
+}
 
 async function openPost(id){
   POST = id;

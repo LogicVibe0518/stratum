@@ -10,8 +10,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -19,6 +21,9 @@ from fastapi import Depends, FastAPI, Form, Header, HTTPException, UploadFile
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 from stratum_spec import SCHEMA_VERSION
+from stratum_worker.app import service
+from stratum_worker.app.settings import Settings, settings
+from stratum_worker.app.supa import Supa, SupabaseError, close_pool
 from stratum_worker.draft.bindings import BINDINGS
 from stratum_worker.draft.compose import ComposeError
 from stratum_worker.draft.pipeline import DraftError
@@ -28,10 +33,30 @@ from stratum_worker.gateway.gateway import Gateway
 from stratum_worker.gateway.providers.registry import build_router
 from stratum_worker.gateway.tasks import TaskName
 from stratum_worker.gateway.tracing import tracer_from_env
+from stratum_worker.queue import jobs
 
-from stratum_api import service
-from stratum_api.settings import Settings, settings
-from stratum_api.supa import Supa, SupabaseError, close_pool
+SERVICE_ROLE_KEY = "SUPABASE_SERVICE_ROLE_KEY"
+
+
+def forget_service_role_key() -> None:
+    """Drop the service-role key from this process if it is present.
+
+    The key belongs to the queue worker (.env.worker), never to the API. If it
+    reached this process anyway - an old .env, a shell that exported it - it is
+    removed before anything else runs, so no code path here can ever pick it up.
+
+    Be clear about what this buys. On one laptop the same user can read both env
+    files, so this is hygiene, not a security boundary. It BECOMES a boundary when
+    the API and the worker deploy as two services with separate environment config:
+    the API's environment then simply never contains the key. Calling this at
+    import keeps the API honest about that today, and
+    test_service_key_is_not_in_the_api_environment keeps the call here. Do not
+    "simplify" it away.
+    """
+    os.environ.pop(SERVICE_ROLE_KEY, None)
+
+
+forget_service_role_key()
 
 STATIC = Path(__file__).parent / "static"
 
@@ -270,9 +295,13 @@ async def list_posts(
 
 
 @app.post("/api/posts")
-async def create_post(body: NewPost, ctx: service.Context = Depends(context)) -> dict[str, Any]:
+async def create_post(
+    body: NewPost, queue: bool = False, ctx: service.Context = Depends(context)
+) -> dict[str, Any]:
     if body.template_id not in BINDINGS:
         raise HTTPException(400, f"unknown design {body.template_id!r}")
+    if queue:
+        return await _enqueue_post(body, ctx)
     rows = await ctx.supa.insert(
         "posts",
         {
@@ -293,6 +322,80 @@ async def create_post(body: NewPost, ctx: service.Context = Depends(context)) ->
         raise HTTPException(404, "no such client")
     version = await service.draft(ctx, post, clients[0])
     return {"post": post, "version": version}
+
+
+async def _enqueue_post(body: NewPost, ctx: service.Context) -> dict[str, Any]:
+    """Create the post and queue its draft. Returns at once; a worker does the rest.
+
+    Idempotent on client + slug: sending the same post twice returns the same job -
+    and if that job has given up, sending it again is how you retry it. The unique
+    (client_id, slug) on posts is what settles a race between two identical requests:
+    the loser gets a 409 from the database and returns the winner's job instead.
+    """
+    key = jobs.idempotency_key(body.client_id, body.slug)
+    existing = await jobs.find(ctx.supa, ctx.agency_id, key)
+    if existing is not None:
+        # The same post twice returns the same job - unless that job gave up, in
+        # which case sending it again is a retry and it goes back in the queue. The
+        # alternative is that "upload a logo and make the post again" can never work,
+        # because the key is taken and the answer is always the old failure.
+        if jobs.describe(existing, datetime.now(UTC))["status"] == "failed":
+            await jobs.requeue(ctx.supa, str(existing["id"]))
+        return {"job_id": existing["id"]}
+    clients = await ctx.supa.select("clients", id=f"eq.{body.client_id}", select="id")
+    if not clients:
+        raise HTTPException(404, "no such client")
+    try:
+        rows = await ctx.supa.insert(
+            "posts",
+            {
+                "agency_id": ctx.agency_id,
+                "client_id": body.client_id,
+                "slug": body.slug,
+                "brief": body.brief,
+                "template_id": body.template_id,
+                "aspects": body.aspects,
+                "photo_note": body.photo_note,
+                "occasion": body.occasion,
+                "created_by": ctx.user_id,
+            },
+        )
+        post_id = str(rows[0]["id"])
+    except SupabaseError as exc:
+        if exc.status != 409:
+            raise
+        raced = await jobs.find(ctx.supa, ctx.agency_id, key)
+        if raced is not None:
+            return {"job_id": raced["id"]}
+        # The post exists but its job does not: an earlier request died between the
+        # two inserts. Queue it now - unless that post was already drafted inline,
+        # in which case the slug really is taken.
+        same = await ctx.supa.select(
+            "posts", client_id=f"eq.{body.client_id}", slug=f"eq.{body.slug}", select="id"
+        )
+        drafted = same and await ctx.supa.select(
+            "post_versions", post_id=f"eq.{same[0]['id']}", select="id", limit="1"
+        )
+        if not same or drafted:
+            raise
+        post_id = str(same[0]["id"])
+    job = await jobs.enqueue(
+        ctx.supa,
+        agency_id=ctx.agency_id,
+        kind=jobs.DRAFT_POST,
+        payload={"post_id": post_id, "requested_by": ctx.user_id},
+        key=key,
+    )
+    return {"job_id": job["id"]}
+
+
+@app.get("/api/jobs/{job_id}")
+async def get_job(job_id: str, ctx: service.Context = Depends(context)) -> dict[str, Any]:
+    """Status, attempts, last error and result. Row-level security scopes the lookup."""
+    rows = await ctx.supa.select("jobs", id=f"eq.{job_id}", select="*")
+    if not rows:
+        raise HTTPException(404, "no such job")
+    return jobs.describe(rows[0], datetime.now(UTC))
 
 
 @app.get("/api/posts/{post_id}")

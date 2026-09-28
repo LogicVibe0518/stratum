@@ -22,6 +22,9 @@ from stratum_spec import BrandKit, load_template, load_variants, retarget
 from stratum_spec.client import ClientRules
 from stratum_spec.models import Aspect, PosterSpec, TextLayer
 from stratum_spec.ops import EditOp, OpError, apply_ops
+
+from stratum_worker.app.settings import Settings
+from stratum_worker.app.supa import Supa
 from stratum_worker.assets import AssetStore
 from stratum_worker.draft.bindings import binding_for
 from stratum_worker.draft.capacity import measure
@@ -38,9 +41,6 @@ from stratum_worker.gateway.tasks import (
     PostCopyResult,
     TaskName,
 )
-
-from stratum_api.settings import Settings
-from stratum_api.supa import Supa
 
 OPS = TypeAdapter(list[EditOp])
 # Wide enough that a poster still looks right on a laptop, small enough that four of

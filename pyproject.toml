@@ -18,6 +18,7 @@ dev = [
   "httpx",
   "pillow",
   "pytest-asyncio",
+  "asyncpg",
 ]
 
 [tool.ruff]
