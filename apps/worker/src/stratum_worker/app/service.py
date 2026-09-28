@@ -22,6 +22,7 @@ from stratum_spec import BrandKit, load_template, load_variants, retarget
 from stratum_spec.client import ClientRules
 from stratum_spec.models import Aspect, PosterSpec, TextLayer
 from stratum_spec.ops import EditOp, OpError, apply_ops
+from stratum_spec.templates import Variants
 
 from stratum_worker.app.settings import Settings
 from stratum_worker.app.supa import Supa
@@ -572,10 +573,80 @@ async def tweak(
     return version
 
 
+OPEN_IN_CANVA = """How to finish these posts in Canva
+
+1. In Canva, choose Create a design, then Import file.
+2. Pick a .pptx file from this folder. Each post size has its own file.
+3. Every headline, shape, photo and the logo arrives as its own layer, so you can
+   move, restyle or replace any of them. Text stays text.
+
+The caption and hashtags are in the -caption.txt file, and in the notes under each
+design. The .png files are the finished posts exactly as the client approved them.
+"""
+
+
+@dataclass(frozen=True)
+class _Prepared:
+    spec: PosterSpec
+    variants: Variants
+    kit: BrandKit
+    assets: dict[str, str]
+
+
+async def _prepare(
+    ctx: Context, post: dict[str, Any], client: dict[str, Any], version_id: str
+) -> _Prepared:
+    """What both exports need: the version's spec, its template variants, the brand
+    kit and a local file for every asset it uses."""
+    versions = await ctx.supa.select("post_versions", id=f"eq.{version_id}", select="spec")
+    if not versions:
+        raise DraftError("that version is gone")
+    spec = PosterSpec.model_validate(versions[0]["spec"])
+    variants = load_variants(ctx.settings.templates_dir / f"{post['template_id']}.json")
+    bound = {getattr(one, "asset", None) for one in spec.layers if getattr(one, "asset", None)}
+    assets = {s: await local_path(ctx, s) for s in bound if isinstance(s, str)}
+    return _Prepared(spec, variants, brand_of(client), assets)
+
+
+def caption_text(post: dict[str, Any]) -> str:
+    words = post.get("words") or {}
+    caption = str(words.get("caption", ""))
+    tags = " ".join(words.get("hashtags") or [])
+    return f"{caption}\n\n{tags}".strip()
+
+
+def _deck(ready: _Prepared, ctx: Context, post: dict[str, Any], aspect: str) -> bytes:
+    from stratum_worker.export import export_pptx
+
+    one = retarget(ready.spec, aspect, ready.variants)
+    return export_pptx(
+        one,
+        ready.kit,
+        assets=ready.assets,
+        root=ctx.settings.repo_root,
+        title=f"{post['slug']} {aspect}",
+        notes=caption_text(post),
+    )
+
+
+async def export_deck(
+    ctx: Context, post: dict[str, Any], client: dict[str, Any], version_id: str, aspect: str
+) -> bytes:
+    """One post at one size as an editable PowerPoint file, for opening in Canva."""
+    if aspect not in post["aspects"]:
+        raise DraftError(f"this post has no {aspect} version")
+    ready = await _prepare(ctx, post, client, version_id)
+    return await asyncio.to_thread(_deck, ready, ctx, post, aspect)
+
+
 async def bundle(
     ctx: Context, post: dict[str, Any], client: dict[str, Any], version_id: str
 ) -> bytes:
-    """Everything a person needs to post, in one zip: full-size images and the caption.
+    """Everything a person needs to post or keep editing, in one zip.
+
+    For each size: the finished PNG, and a PowerPoint file with every layer
+    editable, for finishing in Canva. Plus the caption, the alt text and a short
+    note on opening the files in Canva.
 
     Rebuilt from the stored spec rather than downloaded from storage. What is kept in
     storage is a small preview for the screen, because a designer nudging a logo
@@ -585,35 +656,39 @@ async def bundle(
     """
     from stratum_worker.render import render_poster
 
-    versions = await ctx.supa.select("post_versions", id=f"eq.{version_id}", select="spec")
-    if not versions:
-        raise DraftError("that version is gone")
-    spec = PosterSpec.model_validate(versions[0]["spec"])
-    path = ctx.settings.templates_dir / f"{post['template_id']}.json"
-    variants = load_variants(path)
-    kit = brand_of(client)
-    bound = {getattr(one, "asset", None) for one in spec.layers if getattr(one, "asset", None)}
-    asset_paths = {s: await local_path(ctx, s) for s in bound if isinstance(s, str)}
+    ready = await _prepare(ctx, post, client, version_id)
 
-    def draw(aspect: str) -> tuple[str, bytes]:
-        one = retarget(spec, aspect, variants)
-        return aspect, render_poster(one, kit, assets=asset_paths, root=ctx.settings.repo_root)
+    def draw(aspect: str) -> tuple[str, bytes, bytes]:
+        one = retarget(ready.spec, aspect, ready.variants)
+        png = render_poster(one, ready.kit, assets=ready.assets, root=ctx.settings.repo_root)
+        return aspect, png, _deck(ready, ctx, post, aspect)
 
     drawn = await asyncio.gather(*(asyncio.to_thread(draw, aspect) for aspect in post["aspects"]))
+    slug = post["slug"]
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
-        for aspect, data in drawn:
-            archive.writestr(f"{post['slug']}-{aspect.replace(':', 'x')}.png", data)
+        for aspect, png, deck in drawn:
+            shape = aspect.replace(":", "x")
+            archive.writestr(f"{slug}-{shape}.png", png)
+            archive.writestr(f"{slug}-{shape}.pptx", deck)
+        archive.writestr(f"{slug}-caption.txt", caption_text(post) + "\n")
         words = post.get("words") or {}
-        caption = words.get("caption", "")
-        tags = " ".join(words.get("hashtags") or [])
-        archive.writestr(f"{post['slug']}-caption.txt", f"{caption}\n\n{tags}\n".strip() + "\n")
         if words.get("alt_text"):
-            archive.writestr(f"{post['slug']}-alt-text.txt", words["alt_text"] + "\n")
+            archive.writestr(f"{slug}-alt-text.txt", words["alt_text"] + "\n")
+        archive.writestr("OPEN-IN-CANVA.txt", OPEN_IN_CANVA)
     return buffer.getvalue()
 
 
-__all__ = ["ComposeError", "Context", "DraftError", "bundle", "draft", "store_image", "tweak"]
+__all__ = [
+    "ComposeError",
+    "Context",
+    "DraftError",
+    "bundle",
+    "draft",
+    "export_deck",
+    "store_image",
+    "tweak",
+]
 
 
 # --- the free path ----------------------------------------------------------------
