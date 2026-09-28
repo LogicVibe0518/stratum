@@ -4,249 +4,1430 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Stratum</title>
+<script>
+try {
+  var storedTheme = localStorage.getItem("stratum.theme");
+  if (storedTheme === "light" || storedTheme === "dark" || storedTheme === "system") {
+    document.documentElement.setAttribute("data-theme", storedTheme);
+  }
+} catch (e) {}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-  :root{
-    --ink:#111114; --paper:#fbfbfa; --line:#e2e2df; --muted:#6b6b72;
-    --accent:#1d4ed8; --bad:#a3232b; --warn:#8a6d1f; --radius:6px;
+:root {
+  --bg: #09090b; --surface: #111113; --raised: #18181b; --line: #27272a;
+  --line-strong: #3f3f46; --text: #fafafa; --muted: #a1a1aa; --subtle: #71717a;
+  --focus: #60a5fa; --good: #22c55e; --warn: #f59e0b; --bad: #ef4444;
+  --radius: 10px; --radius-sm: 8px; --speed: 150ms;
+  --font: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  color-scheme: dark;
+}
+:root[data-theme="light"] {
+  --bg: #ffffff; --surface: #fafafa; --raised: #f4f4f5; --line: #e4e4e7;
+  --line-strong: #d4d4d8; --text: #09090b; --muted: #52525b; --subtle: #71717a;
+  --focus: #2563eb; color-scheme: light;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #ffffff; --surface: #fafafa; --raised: #f4f4f5; --line: #e4e4e7;
+    --line-strong: #d4d4d8; --text: #09090b; --muted: #52525b; --subtle: #71717a;
+    --focus: #2563eb; color-scheme: light;
   }
-  @media (prefers-color-scheme: dark){
-    :root:not([data-theme="light"]){
-      --ink:#f2f2f0; --paper:#111114; --line:#2c2c31; --muted:#9a9aa2; --accent:#7aa2ff;
-      --bad:#ff8a90; --warn:#e2c46a;
-    }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+
+* { box-sizing: border-box; }
+html { background: var(--bg); color: var(--text); }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.5 var(--font);
+  overflow-wrap: break-word;
+}
+h1, h2, h3 { font-weight: 600; letter-spacing: -0.01em; }
+h1 { font-size: 22px; margin: 0; }
+h2 { font-size: 16px; margin: 0 0 12px; }
+h3 { font-size: 15px; margin: 0; }
+p { margin: 0; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button {
+  height: 36px;
+  padding: 0 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  font-weight: 500;
+}
+button:active:not(:disabled) { transform: scale(0.98); }
+button:disabled { cursor: default; }
+button.primary { background: var(--text); color: var(--bg); border-color: var(--text); }
+button.primary:hover:not(:disabled) { opacity: 0.92; }
+button.secondary { border-color: var(--line-strong); background: transparent; color: var(--text); }
+button.secondary:hover:not(:disabled) { background: var(--raised); }
+button.ghost { border-color: transparent; background: transparent; color: var(--text); }
+button.ghost:hover:not(:disabled) { background: var(--raised); }
+button.busy { color: transparent; }
+button.busy::after {
+  content: "";
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  top: 50%;
+  left: 50%;
+  margin: -7px 0 0 -7px;
+  border-radius: 50%;
+  border: 2px solid var(--text);
+  border-right-color: transparent;
+  animation: spin 0.7s linear infinite;
+}
+button.primary.busy::after { border-color: var(--bg); border-right-color: transparent; }
+button { position: relative; }
+@keyframes spin { to { transform: rotate(360deg); } }
+input, select, textarea {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  height: 36px;
+}
+textarea {
+  height: auto;
+  min-height: 72px;
+  resize: none;
+  line-height: 1.5;
+  display: block;
+}
+input:hover, select:hover, textarea:hover { border-color: var(--line-strong); }
+label { display: block; margin: 12px 0 4px; color: var(--muted); font-size: 13px; font-weight: 500; }
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+button.card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  height: auto;
+  text-align: left;
+  font-weight: 400;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px;
+  color: var(--text);
+}
+button.card:hover:not(:disabled) { border-color: var(--line-strong); background: var(--surface); opacity: 1; }
+.card-title { font-weight: 600; letter-spacing: -0.01em; font-size: 15px; }
+.badge {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  font-size: 12px;
+  line-height: 1;
+  color: var(--subtle);
+  background: transparent;
+}
+.badge.draft, .badge.archived { color: var(--subtle); border-color: var(--line-strong); }
+.badge.review, .badge.warn { color: var(--warn); border-color: var(--warn); }
+.badge.approved { color: var(--good); border-color: var(--good); }
+.badge.blocker { color: var(--bad); border-color: var(--bad); }
+.muted { color: var(--muted); }
+.subtle { color: var(--subtle); }
+.mono, .stat b, td.mono, th.mono, .job-status {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.field-error { color: var(--bad); font-size: 13px; min-height: 0; margin: 4px 0 0; }
+.field-error:empty { display: none; }
+.why { margin-top: 8px; font-size: 13px; }
+.why:empty { display: none; }
+.why.bad { color: var(--bad); }
+.why.warn { color: var(--warn); }
+.hide { display: none !important; }
+header.top {
+  height: 56px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 24px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+}
+.wordmark { font-weight: 600; letter-spacing: -0.02em; font-size: 16px; flex: none; }
+.crumbs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+  color: var(--muted);
+}
+button.crumb {
+  height: auto;
+  max-width: 24ch;
+  padding: 2px 4px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  border-radius: 6px;
+  font-weight: 400;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+button.crumb:hover { color: var(--text); background: var(--raised); }
+.crumbs [aria-current="page"] {
+  max-width: 24ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+.sep { color: var(--subtle); flex: none; }
+.bar-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.who { max-width: 28ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.menu { position: relative; }
+.menu-pop {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  min-width: 140px;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  z-index: 20;
+}
+.menu-pop button {
+  display: flex;
+  width: 100%;
+  height: 32px;
+  justify-content: space-between;
+  border: 0;
+  background: transparent;
+  border-radius: 6px;
+  font-weight: 400;
+}
+.menu-pop button:hover { background: var(--raised); }
+.menu-pop button[aria-checked="true"]::after { content: "✓"; }
+main {
+  width: min(1240px, calc(100% - 48px));
+  margin: 24px auto 48px;
+}
+body.gate main {
+  min-height: calc(100dvh - 104px);
+  display: grid;
+  place-items: center;
+  margin-top: 24px;
+  margin-bottom: 24px;
+}
+body.gate main > section { width: min(380px, 100%); }
+.auth-card { width: 100%; }
+.auth-card .wordmark { font-size: 28px; display: block; margin-bottom: 6px; }
+.lede { color: var(--muted); margin: 0 0 8px; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.count { color: var(--muted); font-weight: 500; margin-left: 8px; }
+.grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  align-items: start;
+}
+.empty {
+  grid-column: 1 / -1;
+  min-height: 240px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 12px;
+  color: var(--muted);
+}
+.grid > p, .posters > p, .assets > p, .stage > p,
+.grid > .empty-note, .posters > .empty-note, .assets > .empty-note {
+  grid-column: 1 / -1;
+}
+#back { display: none; }
+.needs { margin-bottom: 20px; display: flex; flex-direction: column; gap: 16px; }
+.needs h2 { margin: 0; }
+.needs-list { display: flex; flex-direction: column; gap: 4px; }
+.needs-list h3 { margin: 0 0 6px; font-size: 13px; color: var(--muted); font-weight: 500; }
+.needs-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  height: auto;
+  min-height: 36px;
+  padding: 8px 10px;
+  text-align: left;
+  font-weight: 400;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+}
+.needs-row:hover:not(:disabled) { background: var(--raised); }
+.needs-row span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.preview-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; width: 100%; }
+.frame {
+  width: min(390px, 100%);
+  background: var(--frame-bg, #000);
+  color: var(--frame-fg, #f5f5f5);
+  border-radius: var(--radius);
+  overflow: hidden;
+  border: 1px solid var(--line);
+}
+.frame[data-frame="light"] { --frame-bg: #ffffff; --frame-fg: #0a0a0a; }
+.frame[data-frame="dark"] { --frame-bg: #000000; --frame-fg: #f5f5f5; }
+.feed-head { display: flex; align-items: center; gap: 10px; padding: 12px; }
+.avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--frame-fg);
+  color: var(--frame-bg);
+  font-weight: 600;
+  font-size: 12px;
+  flex: none;
+}
+.feed-name { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.feed-photo { display: block; width: 100%; height: auto; background: var(--frame-bg); }
+.feed-actions {
+  display: flex;
+  gap: 4px;
+  padding: 8px 8px 0;
+}
+.feed-actions button {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--frame-fg);
+  border-radius: 6px;
+}
+.feed-actions button:hover:not(:disabled) { background: transparent; opacity: 0.7; }
+.feed-actions svg { display: block; width: 22px; height: 22px; margin: 0 auto; }
+.feed-copy { padding: 8px 12px 14px; }
+.feed-caption {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+.feed-caption.open { display: block; -webkit-line-clamp: unset; overflow: visible; }
+.feed-more {
+  height: auto;
+  padding: 6px 0 0;
+  border: 0;
+  background: transparent;
+  color: var(--frame-fg);
+  opacity: 0.65;
+  font-weight: 500;
+}
+.feed-more:hover:not(:disabled) { background: transparent; opacity: 1; }
+.story-shot { width: 100%; aspect-ratio: 9 / 16; background: var(--frame-bg); }
+.story-shot img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.story-empty { padding: 24px 16px; text-align: center; }
+.grid-frame {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 2px;
+  background: var(--frame-bg);
+  padding: 2px;
+  width: min(390px, 100%);
+}
+.grid-tile {
+  aspect-ratio: 3 / 4;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--frame-fg) 8%, var(--frame-bg));
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  height: auto;
+  width: 100%;
+}
+.grid-tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.grid-tile.current { outline: 2px solid var(--focus); outline-offset: -2px; }
+.grid-tile .skeleton { width: 100%; height: 100%; border-radius: 0; }
+.client-layout, .post-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+.post-layout { grid-template-columns: minmax(0, 1.7fr) minmax(260px, 1fr); }
+.client-layout > *, .post-layout > * { min-width: 0; }
+.stack { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.page-title { margin-bottom: 16px; }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+.row > * { flex: 1 1 180px; min-width: 0; }
+.row button { flex: 0 0 auto; }
+.switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  cursor: pointer;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 400;
+}
+.switch input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  padding: 0;
+}
+.switch-ui {
+  width: 36px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--line-strong);
+  position: relative;
+  flex: none;
+}
+.switch-ui::after {
+  content: "";
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--bg);
+  position: absolute;
+  top: 2px;
+  left: 2px;
+}
+.switch input:checked + .switch-ui { background: var(--text); }
+.switch input:checked + .switch-ui::after { left: 18px; }
+.switch input:focus-visible { outline: none; }
+.switch input:focus-visible + .switch-ui {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.segment {
+  display: inline-flex;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.segment button {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  height: 32px;
+  color: var(--text);
+}
+.segment button + button { border-left: 1px solid var(--line-strong); }
+.segment button[aria-checked="true"] { background: var(--text); color: var(--bg); }
+.segment.fill { display: flex; width: 100%; margin: 12px 0; }
+.segment.fill button { flex: 1; }
+.drop {
+  position: relative;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius);
+  padding: 28px 16px;
+  text-align: center;
+  color: var(--muted);
+  background: var(--bg);
+}
+.drop.dragover { border-color: var(--focus); background: var(--raised); }
+.drop input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  padding: 0;
+  border: 0;
+}
+.drop:focus-within { outline: 2px solid var(--focus); outline-offset: 2px; }
+.drop input:focus { outline: none; }
+.uploads { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.uploads:empty { display: none; }
+.uploads li { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.uploads span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+progress {
+  width: 100%;
+  height: 6px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--line);
+  color: var(--text);
+}
+progress::-webkit-progress-bar { background: var(--line); border-radius: 999px; }
+progress::-webkit-progress-value { background: var(--text); border-radius: 999px; }
+progress::-moz-progress-bar { background: var(--text); border-radius: 999px; }
+.assets {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(108px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+.assets figure {
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--raised);
+  min-width: 0;
+}
+.assets img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; background: var(--line); }
+.assets figcaption {
+  padding: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+.skeleton {
+  border-radius: var(--radius);
+  background-image: linear-gradient(90deg, var(--raised) 0%, var(--line) 50%, var(--raised) 100%);
+  background-size: 200% 100%;
+  background-position: 100% 0;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+.card-skel { height: 88px; }
+.asset-skel { aspect-ratio: 1; height: auto; }
+.poster-skel { aspect-ratio: 4 / 5; height: auto; width: 100%; }
+.job-card { display: flex; flex-direction: column; gap: 10px; }
+.job-status { margin: 0; color: var(--muted); font-size: 13px; }
+@keyframes shimmer {
+  from { background-position: 100% 0; }
+  to { background-position: -100% 0; }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+img.entering { animation: fade-in var(--speed) ease-out; }
+.hint { color: var(--subtle); font-size: 12px; margin-top: 8px; }
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.stat {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 10px 12px;
+  min-width: 0;
+}
+.stat b { display: block; font-size: 18px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; }
+.stat span { color: var(--muted); font-size: 12px; }
+.stat b.bad { color: var(--bad); }
+.stat b.warn { color: var(--warn); }
+.stage-wrap { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; min-width: 0; }
+.stage {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 0.72fr);
+  gap: 10px;
+  align-items: start;
+}
+.stage figure { margin: 0; min-width: 0; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--surface); }
+.stage .hero { grid-row: 1 / span 6; }
+.stage .solo { grid-column: 1 / -1; }
+.render-hit {
+  display: block;
+  width: 100%;
+  height: auto;
+  padding: 12px;
+  border: 0;
+  border-radius: 0;
+  cursor: zoom-in;
+  background: #808080;
+}
+.stage[data-canvas="black"] .render-hit { background: #000; }
+.stage[data-canvas="grey"] .render-hit { background: #808080; }
+.stage[data-canvas="white"] .render-hit { background: #fff; }
+.render-hit img { display: block; width: 100%; height: auto; }
+.stage figcaption { padding: 6px 8px; font-size: 12px; color: var(--muted); }
+.side {
+  position: sticky;
+  top: 72px;
+  max-height: calc(100dvh - 88px);
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+.flag-row { display: flex; gap: 8px; align-items: flex-start; margin: 0 0 8px; }
+.flag-row span:last-child { min-width: 0; overflow-wrap: anywhere; }
+.quick-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.quick-grid button { height: auto; min-height: 36px; white-space: normal; text-align: left; }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 8px 8px 8px 0; border-bottom: 1px solid var(--line); vertical-align: top; overflow-wrap: anywhere; }
+th { color: var(--muted); font-weight: 500; font-size: 12px; }
+dialog {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  padding: 16px;
+  box-shadow: 0 16px 48px rgb(0 0 0 / 0.28);
+}
+dialog::backdrop {
+  background: rgb(0 0 0 / 0.45);
+  backdrop-filter: blur(8px);
+}
+#clientdialog { width: min(440px, calc(100vw - 32px)); }
+#lightbox {
+  width: min(960px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+}
+#lightbox[open] {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+#lightbox .mat { border-radius: var(--radius-sm); padding: 12px; min-height: 0; }
+#lightbox .mat[data-canvas="black"] { background: #000; }
+#lightbox .mat[data-canvas="grey"] { background: #808080; }
+#lightbox .mat[data-canvas="white"] { background: #fff; }
+#lightbox img { display: block; width: 100%; height: auto; max-height: calc(100dvh - 120px); object-fit: contain; }
+.toasts {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 30;
+  width: min(360px, calc(100vw - 32px));
+  pointer-events: none;
+}
+.toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 10px 10px 12px;
+  background: var(--raised);
+  color: var(--text);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.24);
+}
+.toast p { flex: 1; overflow-wrap: anywhere; padding-top: 4px; }
+.toast button { width: 28px; height: 28px; padding: 0; flex: none; }
+button, input, select, textarea, .card, .badge, .drop, .switch-ui, .toast {
+  transition: color var(--speed) ease-out, background-color var(--speed) ease-out,
+    border-color var(--speed) ease-out, opacity var(--speed) ease-out;
+}
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+@media (max-width: 800px) {
+  .client-layout, .post-layout { grid-template-columns: minmax(0, 1fr); }
+  .side { position: static; max-height: none; overflow: visible; }
+  .stage { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .stage .hero { grid-column: 1 / -1; grid-row: auto; }
+}
+@media (max-width: 720px) {
+  main { width: min(1240px, calc(100% - 32px)); margin: 16px auto 32px; }
+  .stats { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 640px) {
+  header.top {
+    height: 56px;
+    min-height: 56px;
+    flex-wrap: nowrap;
+    padding: 0 16px;
+    gap: 8px;
   }
-  *{box-sizing:border-box}
-  body{margin:0;background:var(--paper);color:var(--ink);
-    font:15px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
-  header{display:flex;gap:16px;align-items:baseline;padding:14px 16px;border-bottom:1px solid var(--line);
-    position:sticky;top:0;background:var(--paper);z-index:5;flex-wrap:wrap}
-  header b{letter-spacing:.14em;text-transform:uppercase;font-size:13px}
-  main{max-width:1180px;margin:0 auto;padding:16px}
-  button,input,select,textarea{font:inherit;color:inherit;background:transparent;
-    border:1px solid var(--line);border-radius:var(--radius);padding:8px 10px}
-  button{cursor:pointer;border-color:var(--ink)}
-  button:hover{background:var(--ink);color:var(--paper)}
-  button.ghost{border-color:var(--line)}
-  button[disabled]{opacity:.45;cursor:progress}
-  input,select,textarea{width:100%}
-  label{display:block;margin:10px 0 4px;font-size:12px;letter-spacing:.08em;
-    text-transform:uppercase;color:var(--muted)}
-  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-  .grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fill,minmax(230px,1fr))}
-  .card{border:1px solid var(--line);border-radius:var(--radius);padding:12px}
-  .card h3{margin:0 0 4px;font-size:15px}
-  .muted{color:var(--muted);font-size:13px}
-  .posters{display:grid;gap:14px;align-items:start;
-    grid-template-columns:repeat(auto-fill,minmax(200px,1fr))}
-  .posters figure{margin:0;border:1px solid var(--line);border-radius:var(--radius);
-    overflow:hidden;background:var(--paper)}
-  .posters img{display:block;width:100%;height:auto;background:var(--line);min-height:40px}
-  .posters figure.wide{grid-column:span 2}
-  .posters figcaption{padding:6px 8px;font-size:12px;color:var(--muted)}
-  .flag{border-left:3px solid var(--warn);padding:6px 10px;margin:6px 0;font-size:13px}
-  .flag.blocker{border-left-color:var(--bad)}
-  .stat{border:1px solid var(--line);border-radius:var(--radius);padding:8px 12px;min-width:110px}
-  .stat b{display:block;font-size:20px}
-  .stat span{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
-  a{color:var(--accent)}
-  .hide{display:none}
-  .err{color:var(--bad);font-size:13px;white-space:pre-wrap}
-  table{width:100%;border-collapse:collapse;font-size:13px}
-  td,th{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
-  @media (max-width:640px){ main{padding:12px} }
+  .who { display: none !important; }
+  .crumbs { gap: 0; }
+  .crumbs .sep, .crumbs .crumb { display: none; }
+  .crumbs [aria-current="page"] { max-width: 14ch; }
+  #back:not(.hide) { display: inline-flex; }
+  .wordmark { display: none; }
+  .bar-right { flex-wrap: nowrap; width: auto; margin-left: auto; }
+  .needs-row { grid-template-columns: minmax(0, 1fr) auto; }
+}
 </style>
 </head>
 <body>
-<header>
-  <b>Stratum</b>
-  <span class="muted" id="who"></span>
-  <span style="flex:1"></span>
-  <button class="ghost hide" id="back">All clients</button>
-  <button class="ghost hide" id="signout">Sign out</button>
+<header class="top">
+  <span class="wordmark">Stratum</span>
+  <button type="button" class="ghost hide" id="back" aria-label="Back">Back</button>
+  <nav id="crumbs" class="crumbs" aria-label="Breadcrumb"></nav>
+  <div class="bar-right">
+    <span id="who" class="muted who hide"></span>
+    <div class="menu">
+      <button type="button" class="secondary" id="themebtn" aria-haspopup="menu" aria-expanded="false" aria-controls="thememenu">Theme</button>
+      <div id="thememenu" class="menu-pop" role="menu" hidden>
+        <button type="button" role="menuitemradio" data-theme-value="system" aria-checked="false">System</button>
+        <button type="button" role="menuitemradio" data-theme-value="light" aria-checked="false">Light</button>
+        <button type="button" role="menuitemradio" data-theme-value="dark" aria-checked="false">Dark</button>
+      </div>
+    </div>
+    <button type="button" class="ghost hide" id="signout">Sign out</button>
+  </div>
 </header>
 <main>
   <section id="auth">
-    <h2>Sign in</h2>
-    <label>Email</label><input id="email" type="email" autocomplete="email">
-    <label>Password</label><input id="password" type="password" autocomplete="current-password">
-    <div class="row" style="margin-top:12px">
-      <button id="signin">Sign in</button>
-      <button class="ghost" id="signup">Create an account</button>
-    </div>
-    <div class="err" id="autherr"></div>
+    <form id="authform" class="card auth-card" novalidate>
+      <span class="wordmark">Stratum</span>
+      <p class="lede">Social posts for agencies, on brand and approved.</p>
+      <label for="email">Email</label>
+      <input id="email" name="email" type="email" autocomplete="username" required>
+      <p class="field-error" id="emailerr" role="alert"></p>
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required>
+      <p class="field-error" id="passworderr" role="alert"></p>
+      <div class="actions">
+        <button type="submit" class="primary" id="signin">Sign in</button>
+        <button type="button" class="secondary" id="signup">Create an account</button>
+      </div>
+      <p class="field-error" id="autherr" role="alert"></p>
+    </form>
   </section>
 
   <section id="join" class="hide">
-    <h2>Name your agency</h2>
-    <p class="muted">If someone invited you, this joins their agency instead.</p>
-    <label>Agency name</label><input id="agency" placeholder="Nimble Informatics">
-    <div class="row" style="margin-top:12px"><button id="dojoin">Continue</button></div>
-    <div class="err" id="joinerr"></div>
+    <form id="joinform" class="card auth-card" novalidate>
+      <span class="wordmark">Stratum</span>
+      <h1>Name your agency</h1>
+      <p class="lede">If someone invited you, this joins their agency instead.</p>
+      <label for="agency">Agency name</label>
+      <input id="agency" name="agency" autocomplete="organization" placeholder="Nimble Informatics" required>
+      <p class="field-error" id="agencyerr" role="alert"></p>
+      <div class="actions">
+        <button type="submit" class="primary" id="dojoin">Continue</button>
+      </div>
+    </form>
   </section>
 
   <section id="clients" class="hide">
-    <div class="row"><h2 style="flex:1">Clients</h2>
-      <button class="ghost" id="newclient">Add a client</button></div>
+    <div class="section-head">
+      <h1>Clients <span class="count mono" id="clientcount"></span></h1>
+      <button type="button" class="primary" id="newclient">New client</button>
+    </div>
+    <div class="card needs" id="needsyou"></div>
     <div class="grid" id="clientlist"></div>
   </section>
 
   <section id="client" class="hide">
-    <h2 id="clientname"></h2>
-    <div class="row">
-      <label style="margin:0">Photos and logo
-        <input type="file" id="upload" accept="image/*" multiple></label>
-      <select id="uploadkind" style="width:auto"><option value="photo">photo</option>
-        <option value="logo">logo</option></select>
-      <span class="muted" id="uploadnote"></span>
-    </div>
-    <div class="posters" id="assets" style="margin:12px 0"></div>
-
-    <div class="card">
-      <h3>New post</h3>
-      <label>What is the post about?</label>
-      <textarea id="brief" rows="3" placeholder="20% off boiler servicing, book before 31 October. Gas Safe 000000. Call 0161 496 0000."></textarea>
-      <div class="row">
-        <div style="flex:1;min-width:180px"><label>Design</label>
-          <select id="design"></select></div>
-        <div style="flex:1;min-width:180px"><label>Short name</label>
-          <input id="slug" placeholder="boiler-offer"></div>
+    <h1 class="page-title" id="clienttitle"></h1>
+    <div class="client-layout">
+      <div class="stack">
+        <form id="makeform" class="card" novalidate>
+          <h2>New post</h2>
+          <label for="brief">What is the post about?</label>
+          <textarea id="brief" rows="3" placeholder="20% off boiler servicing, book before 31 October. Gas Safe 000000. Call 0161 496 0000."></textarea>
+          <p class="field-error" id="brieferr" role="alert"></p>
+          <div class="row">
+            <div>
+              <label for="design">Design</label>
+              <select id="design"></select>
+            </div>
+            <div>
+              <label for="slug">Short name</label>
+              <input id="slug" placeholder="boiler-offer" autocomplete="off">
+              <p class="field-error" id="slugerr" role="alert"></p>
+            </div>
+          </div>
+          <label for="photonote">What does the photo show? (for alt text)</label>
+          <input id="photonote" placeholder="an engineer beside a wall-mounted boiler">
+          <label class="switch">
+            <input type="checkbox" id="queued">
+            <span class="switch-ui" aria-hidden="true"></span>
+            Run in the background
+          </label>
+          <div class="actions">
+            <button type="submit" class="primary" id="make">Make post</button>
+          </div>
+          <p class="hint">⌘/Ctrl+Enter from the brief</p>
+          <p class="field-error" id="makeerr" role="alert"></p>
+        </form>
+        <div>
+          <h2>Posts</h2>
+          <div class="grid" id="postlist"></div>
+        </div>
       </div>
-      <label>What does the photo show? (for alt text)</label>
-      <input id="photonote" placeholder="an engineer beside a wall-mounted boiler">
-      <div class="row" style="margin-top:12px"><button id="make">Make the post</button>
-        <label class="muted"><input type="checkbox" id="queued"> run in the background</label>
-        <span class="muted" id="makenote"></span></div>
-      <div class="err" id="makeerr"></div>
+      <aside class="stack">
+        <div class="card">
+          <h2>Photos and logo</h2>
+          <div class="segment fill" id="kindseg" role="radiogroup" aria-label="What you are uploading">
+            <button type="button" role="radio" id="kindphoto" aria-checked="true" data-kind="photo">Photo</button>
+            <button type="button" role="radio" id="kindlogo" aria-checked="false" data-kind="logo">Logo</button>
+          </div>
+          <div class="drop" id="drop">
+            <input id="upload" type="file" accept="image/*" multiple aria-label="Upload a photo or logo">
+            <p>Drop a photo or logo here, or click to choose.</p>
+          </div>
+          <ul class="uploads" id="uploads"></ul>
+          <div class="assets" id="assets"></div>
+        </div>
+      </aside>
     </div>
-
-    <h3 style="margin-top:22px">Posts</h3>
-    <div class="grid" id="postlist"></div>
   </section>
 
   <section id="post" class="hide">
-    <div class="row"><h2 style="flex:1" id="postslug"></h2>
-      <button class="ghost" id="download">Download all</button></div>
-    <div class="row" style="margin-bottom:12px">
+    <div class="section-head">
+      <h1 id="posttitle"></h1>
+      <button type="button" class="secondary" id="download">Download all</button>
+    </div>
+    <div class="stats">
       <div class="stat"><b id="statver">–</b><span>version</span></div>
       <div class="stat"><b id="stattime">–</b><span>last change</span></div>
       <div class="stat"><b id="statcost">–</b><span>cost so far</span></div>
       <div class="stat"><b id="statflags">–</b><span>to check</span></div>
     </div>
-    <div class="posters" id="renders"></div>
-    <div id="flaglist" style="margin-top:14px"></div>
-
-    <div class="card" style="margin-top:18px">
-      <h3>Instant changes</h3>
-      <p class="muted">No model, no cost — just a re-render.</p>
-      <div class="row" id="quick"></div>
-      <div class="err" id="quickerr"></div>
-    </div>
-
-    <div class="card" style="margin-top:18px">
-      <h3>Change something</h3>
-      <p class="muted">Plain English. "Make the logo bigger", "shorter headline",
-        "use the other photo", "darker background".</p>
-      <div class="row">
-        <input id="tweak" placeholder="make the logo bigger" style="flex:1;min-width:220px">
-        <button id="dotweak">Apply</button>
+    <div class="post-layout">
+      <div class="stage-wrap">
+        <div class="preview-bar">
+          <div class="segment" id="viewseg" role="radiogroup" aria-label="How to look at the post">
+            <button type="button" role="radio" data-view="canvas" aria-checked="true">Canvas</button>
+            <button type="button" role="radio" data-view="feed" aria-checked="false">Feed</button>
+            <button type="button" role="radio" data-view="story" aria-checked="false">Story</button>
+            <button type="button" role="radio" data-view="grid" aria-checked="false">Grid</button>
+          </div>
+          <div class="segment hide" id="frameseg" role="radiogroup" aria-label="Frame light or dark">
+            <button type="button" role="radio" data-frame="light" aria-checked="false">Light</button>
+            <button type="button" role="radio" data-frame="dark" aria-checked="true">Dark</button>
+          </div>
+        </div>
+        <div class="segment" id="canvasseg" role="radiogroup" aria-label="Canvas behind the poster">
+          <button type="button" role="radio" data-canvas="black" aria-checked="false">Black</button>
+          <button type="button" role="radio" data-canvas="grey" aria-checked="true">Grey</button>
+          <button type="button" role="radio" data-canvas="white" aria-checked="false">White</button>
+        </div>
+        <div class="stage" id="stage" data-canvas="grey"></div>
+        <div class="frame hide" id="feedview" data-frame="dark"></div>
+        <div class="frame hide" id="storyview" data-frame="dark"></div>
+        <div class="frame grid-frame hide" id="gridview" data-frame="dark"></div>
       </div>
-      <div class="err" id="tweakerr"></div>
+      <aside class="side">
+        <section>
+          <h2>To check</h2>
+          <div id="flaglist"></div>
+        </section>
+        <section class="card">
+          <h2>Instant changes</h2>
+          <p class="muted">No model, no cost — just a re-render.</p>
+          <div class="quick-grid" id="quick"></div>
+          <p class="field-error" id="quickerr" role="alert"></p>
+        </section>
+        <section class="card">
+          <h2>Change something</h2>
+          <p class="muted">Plain English. "Make the logo bigger", "shorter headline", "use the other photo", "darker background".</p>
+          <form id="tweakform" novalidate>
+            <div class="row">
+              <input id="tweak" aria-label="What should change" placeholder="make the logo bigger">
+              <button type="submit" class="primary" id="dotweak">Apply</button>
+            </div>
+            <p class="hint">⌘/Ctrl+Enter applies</p>
+            <p class="why" id="tweakwhy" role="status"></p>
+          </form>
+        </section>
+        <section>
+          <h2>History</h2>
+          <p class="muted hide" id="historyempty">No changes yet.</p>
+          <table class="hide" id="history">
+            <thead><tr><th>Change</th><th>Result</th><th class="mono">Time</th></tr></thead>
+            <tbody id="historybody"></tbody>
+          </table>
+        </section>
+      </aside>
     </div>
-
-    <h3 style="margin-top:22px">History</h3>
-    <table id="history"></table>
   </section>
 </main>
+
+<dialog id="clientdialog" aria-labelledby="clientdialogtitle">
+  <form id="clientform" novalidate>
+    <h2 id="clientdialogtitle">New client</h2>
+    <label for="cname">Name</label>
+    <input id="cname" name="name" autocomplete="off" required>
+    <p class="field-error" id="cnameerr" role="alert"></p>
+    <label for="ctrade">Trade</label>
+    <input id="ctrade" name="trade" placeholder="plumbing, roofing…" autocomplete="off">
+    <div class="actions">
+      <button type="button" class="ghost" id="clientcancel">Cancel</button>
+      <button type="submit" class="primary" id="clientcreate">Create client</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="lightbox" aria-label="Poster">
+  <button type="button" class="ghost" id="lightclose">Close</button>
+  <div class="mat" id="lightmat" data-canvas="grey"><img id="lightimg" alt=""></div>
+</dialog>
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
 <script>
 const $ = (id) => document.getElementById(id);
-const show = (id) => ["auth","join","clients","client","post"].forEach(
-  s => $(s).classList.toggle("hide", s !== id));
+
+function show(id) {
+  ["auth", "join", "clients", "client", "post"].forEach((section) => {
+    $(section).classList.toggle("hide", section !== id);
+  });
+  document.body.classList.toggle("gate", id === "auth" || id === "join");
+  $("signout").classList.toggle("hide", id === "auth");
+  $("who").classList.toggle("hide", id === "auth" || id === "join");
+  $("crumbs").classList.toggle("hide", id === "auth" || id === "join");
+  if (id === "auth" || id === "join") $("back").classList.add("hide");
+}
+
 let CONF = null, SESSION = null, CLIENT = null, POST = null;
+let POSTDATA = null;
+let upAction = null;
+let viewToken = 0;
+let making = false;
+let changing = false;
+let uploadKind = "photo";
+let canvas = "grey";
+let previewKind = "canvas";
+let frameMode = "dark";
+let dialogReturn = null;
+const inflight = new Map();
+const previewURLs = [];
+let previewGen = 0;
+const STATUSES = new Set(["draft", "review", "approved", "archived"]);
 
 const save = () => localStorage.setItem("stratum.session", JSON.stringify(SESSION || null));
-const load = () => { try { return JSON.parse(localStorage.getItem("stratum.session") || "null"); }
-                     catch { return null; } };
+const load = () => {
+  try { return JSON.parse(localStorage.getItem("stratum.session") || "null"); }
+  catch { return null; }
+};
 
-async function auth(path, body){
+async function auth(path, body) {
   const r = await fetch(`${CONF.url}/auth/v1/${path}`, {
-    method:"POST", headers:{ "Content-Type":"application/json", apikey: CONF.key },
-    body: JSON.stringify(body) });
+    method: "POST",
+    headers: { "Content-Type": "application/json", apikey: CONF.key },
+    body: JSON.stringify(body),
+  });
   const data = await r.json();
-  if(!r.ok) throw new Error(data.msg || data.error_description || data.message || "sign in failed");
+  if (!r.ok) throw new Error(data.msg || data.error_description || data.message || "sign in failed");
   return data;
 }
 
-async function api(path, options = {}){
-  const headers = Object.assign({ Authorization:`Bearer ${SESSION.access_token}` },
-                                options.headers || {});
-  if(options.json){ headers["Content-Type"] = "application/json";
-                    options.body = JSON.stringify(options.json); delete options.json; }
-  const r = await fetch(`/api${path}`, Object.assign({}, options, { headers }));
-  if(r.status === 401){ SESSION = null; save(); show("auth"); throw new Error("please sign in again"); }
-  if(!r.ok) throw new Error((await r.text()) || r.statusText);
+// Everything that came from a user, a client or a model is text, never markup.
+const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (ch) => ({
+  "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+}[ch]));
+
+// Refresh a minute before expiry, and once more if the server still says 401.
+let refreshing = null;
+async function freshSession(force = false) {
+  if (!SESSION) return null;
+  const soon = (SESSION.expires_at || 0) * 1000 - Date.now() < 60_000;
+  if (!force && !soon) return SESSION;
+  refreshing ??= (async () => {
+    try {
+      SESSION = await auth("token?grant_type=refresh_token",
+                           { refresh_token: SESSION.refresh_token });
+    } catch { SESSION = null; }
+    save();
+    refreshing = null;
+    return SESSION;
+  })();
+  return refreshing;
+}
+
+async function authHeader() {
+  const session = await freshSession();
+  if (!session) { show("auth"); throw new Error("please sign in again"); }
+  return { Authorization: `Bearer ${session.access_token}` };
+}
+
+async function api(path, options = {}, retried = false) {
+  const opts = { ...options, headers: { ...(options.headers || {}), ...(await authHeader()) } };
+  if (opts.json !== undefined) {
+    opts.headers["Content-Type"] = "application/json";
+    opts.body = JSON.stringify(opts.json);
+    delete opts.json;
+  }
+  const r = await fetch(`/api${path}`, opts);
+  if (r.status === 401 && !retried && await freshSession(true)) return api(path, options, true);
+  if (r.status === 401) { SESSION = null; save(); show("auth"); throw new Error("please sign in again"); }
+  if (!r.ok) throw new Error(await errorText(r));
   const type = r.headers.get("content-type") || "";
   return type.includes("json") ? r.json() : r.blob();
 }
 
-function busy(button, on, label){
-  button.disabled = on;
-  if(on){ button.dataset.label = button.textContent; button.textContent = label || "working…"; }
-  else if(button.dataset.label){ button.textContent = button.dataset.label; }
+// FastAPI errors arrive as {"detail": "..."}; show the sentence, not the JSON.
+async function errorText(r) {
+  const text = await r.text();
+  try { const body = JSON.parse(text); return body.detail || body.message || text; }
+  catch { return text || r.statusText; }
 }
 
-async function start(){
-  CONF = await (await fetch("/api/config")).json();
-  SESSION = load();
-  if(!SESSION){ show("auth"); return; }
-  try{
-    const me = await api("/me");
-    if(!me || !me.agency_id){ show("join"); return; }
-    $("who").textContent = `${me.agency_name} · ${me.role}`;
-    $("signout").classList.remove("hide");
-    await clients();
-  }catch(e){ show("auth"); $("autherr").textContent = e.message; }
+function sentence(err) {
+  const message = err && err.message ? err.message : String(err ?? "");
+  if (message.includes("[object Object]")) return "Something went wrong. Check the fields and try again.";
+  return message;
 }
 
-$("signin").onclick = async () => {
-  try{ SESSION = await auth("token?grant_type=password",
-        { email:$("email").value.trim(), password:$("password").value });
-       save(); await start(); }
-  catch(e){ $("autherr").textContent = e.message; }
-};
-$("signup").onclick = async () => {
-  try{
-    const out = await auth("signup", { email:$("email").value.trim(), password:$("password").value });
-    SESSION = out.access_token ? out : await auth("token?grant_type=password",
-      { email:$("email").value.trim(), password:$("password").value });
-    save(); await start();
-  }catch(e){ $("autherr").textContent = e.message; }
-};
-$("dojoin").onclick = async () => {
-  try{ await api("/onboard", { method:"POST", json:{ agency_name:$("agency").value.trim() } });
-       await start(); }
-  catch(e){ $("joinerr").textContent = e.message; }
-};
-$("signout").onclick = () => { SESSION = null; save(); location.reload(); };
-$("back").onclick = () => clients();
+function taken(ms) {
+  const seconds = Number(ms) / 1000;
+  return Number.isFinite(seconds) ? `${seconds.toFixed(1)}s` : "–";
+}
 
-async function clients(){
-  const rows = await api("/clients");
-  $("clientlist").innerHTML = rows.length ? "" :
-    `<p class="muted">No clients yet. Add one to begin.</p>`;
-  rows.forEach(c => {
-    const card = document.createElement("div");
-    card.className = "card";
-    card.innerHTML = `<h3>${c.name}</h3><div class="muted">${c.trade || "—"}</div>`;
-    card.onclick = () => openClient(c);
-    $("clientlist").append(card);
+function setField(id, message) {
+  const input = $(id);
+  const err = $(id + "err");
+  if (err) err.textContent = message || "";
+  if (!input) return;
+  if (message) input.setAttribute("aria-invalid", "true");
+  else input.removeAttribute("aria-invalid");
+}
+
+function toast(message) {
+  const item = document.createElement("div");
+  item.className = "toast";
+  const text = document.createElement("p");
+  text.textContent = message;
+  const close = document.createElement("button");
+  close.type = "button";
+  close.className = "ghost";
+  close.setAttribute("aria-label", "Dismiss");
+  close.textContent = "×";
+  const remove = () => item.remove();
+  close.addEventListener("click", remove);
+  item.append(text, close);
+  $("toasts").append(item);
+  setTimeout(remove, 4000);
+}
+
+function busy(button, on) {
+  if (!button) return;
+  if (on) {
+    button.style.width = `${button.offsetWidth}px`;
+    button.classList.add("busy");
+    button.disabled = true;
+    button.setAttribute("aria-busy", "true");
+  } else {
+    button.classList.remove("busy");
+    button.disabled = false;
+    button.removeAttribute("aria-busy");
+    button.style.width = "";
+  }
+}
+
+function autosize(area) {
+  area.style.height = "auto";
+  const style = getComputedStyle(area);
+  const line = parseFloat(style.lineHeight) || 21;
+  const pad = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+  const border = parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth);
+  const max = line * 12 + pad + border;
+  const next = Math.min(area.scrollHeight, max);
+  area.style.height = `${next}px`;
+  area.style.overflowY = area.scrollHeight > max ? "auto" : "hidden";
+}
+
+function openDialog(dialog, opener) {
+  dialogReturn = opener || document.activeElement;
+  dialog.showModal();
+  const field = dialog.querySelector("input, select, textarea, button");
+  if (field) field.focus();
+}
+
+function skeletons(count, className) {
+  const frag = document.createDocumentFragment();
+  for (let i = 0; i < count; i += 1) {
+    const block = document.createElement("div");
+    block.className = `skeleton ${className}`;
+    frag.append(block);
+  }
+  return frag;
+}
+
+function emptyState(message, label, onClick) {
+  const wrap = document.createElement("div");
+  wrap.className = "empty";
+  const text = document.createElement("p");
+  text.textContent = message;
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "primary";
+  button.textContent = label;
+  button.addEventListener("click", onClick);
+  wrap.append(text, button);
+  return wrap;
+}
+
+function setCrumbs(parts) {
+  const nav = $("crumbs");
+  nav.replaceChildren();
+  parts.forEach((part, index) => {
+    if (index) {
+      const sep = document.createElement("span");
+      sep.className = "sep";
+      sep.setAttribute("aria-hidden", "true");
+      sep.textContent = "/";
+      nav.append(sep);
+    }
+    if (part.action) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "crumb";
+      button.textContent = part.label;
+      button.addEventListener("click", () => { part.action(); });
+      nav.append(button);
+    } else {
+      const current = document.createElement("span");
+      current.textContent = part.label;
+      current.setAttribute("aria-current", "page");
+      nav.append(current);
+    }
   });
-  $("back").classList.add("hide");
-  show("clients");
+  const parent = [...parts].reverse().find((part) => part.action);
+  upAction = parent ? parent.action : null;
+  $("back").classList.toggle("hide", !upAction);
 }
 
-$("newclient").onclick = async () => {
-  const name = prompt("Client name"); if(!name) return;
-  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,60);
+function slugify(value, max) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, max);
+}
+
+function designLabel(id) {
+  const text = String(id ?? "").replaceAll("_", " ").trim();
+  return text ? text.charAt(0).toUpperCase() + text.slice(1) : "";
+}
+
+function themeLabel(theme) {
+  if (theme === "light") return "Light";
+  if (theme === "dark") return "Dark";
+  return "System";
+}
+
+function syncThemeControl() {
+  const theme = document.documentElement.dataset.theme || "system";
+  $("themebtn").textContent = themeLabel(theme);
+  for (const item of $("thememenu").querySelectorAll("[data-theme-value]")) {
+    item.setAttribute("aria-checked", item.dataset.themeValue === theme ? "true" : "false");
+  }
+}
+
+function applyTheme(theme) {
+  const next = theme === "light" || theme === "dark" ? theme : "system";
+  document.documentElement.dataset.theme = next;
+  localStorage.setItem("stratum.theme", next);
+  syncThemeControl();
+}
+
+function closeThemeMenu() {
+  $("thememenu").hidden = true;
+  $("themebtn").setAttribute("aria-expanded", "false");
+}
+
+function openThemeMenu() {
+  $("thememenu").hidden = false;
+  $("themebtn").setAttribute("aria-expanded", "true");
+  const current = $("thememenu").querySelector("[aria-checked='true']") || $("thememenu").querySelector("button");
+  if (current) current.focus();
+}
+
+function safeSrc(url) {
+  const value = String(url ?? "");
+  if (value.startsWith("https://") || value.startsWith("http://") || value.startsWith("/")) return value;
+  return "";
+}
+
+function revokePreviews() {
+  while (previewURLs.length) URL.revokeObjectURL(previewURLs.pop());
+}
+
+function rememberScroll() {
+  return window.scrollY;
+}
+
+function restoreScroll(y) {
+  window.scrollTo(0, y);
+}
+
+// --- sign in / create account / name your agency ---------------------------------
+
+function placeAuthError(message) {
+  const text = sentence({ message });
+  const lower = text.toLowerCase();
+  setField("email", "");
+  setField("password", "");
+  $("autherr").textContent = "";
+  if (lower.includes("email") && !lower.includes("password")) setField("email", text);
+  else if (lower.includes("password") || lower.includes("weak")) setField("password", text);
+  else $("autherr").textContent = text;
+}
+
+function readCredentials() {
+  setField("email", "");
+  setField("password", "");
+  $("autherr").textContent = "";
+  const email = $("email").value.trim();
+  const password = $("password").value;
+  if (!email) { setField("email", "Enter an email address."); return null; }
+  if (!$("email").checkValidity()) { setField("email", "That email address does not look right."); return null; }
+  if (!password) { setField("password", "Enter a password."); return null; }
+  return { email, password };
+}
+
+$("authform").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const credentials = readCredentials();
+  if (!credentials) return;
+  busy($("signin"), true);
+  try {
+    SESSION = await auth("token?grant_type=password", credentials);
+    save();
+    await start();
+  } catch (err) {
+    placeAuthError(sentence(err));
+  } finally {
+    busy($("signin"), false);
+  }
+});
+
+$("signup").addEventListener("click", async () => {
+  const credentials = readCredentials();
+  if (!credentials) return;
+  busy($("signup"), true);
+  try {
+    const out = await auth("signup", credentials);
+    SESSION = out.access_token ? out : await auth("token?grant_type=password", credentials);
+    save();
+    await start();
+  } catch (err) {
+    placeAuthError(sentence(err));
+  } finally {
+    busy($("signup"), false);
+  }
+});
+
+$("email").addEventListener("input", () => setField("email", ""));
+$("password").addEventListener("input", () => setField("password", ""));
+
+$("joinform").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const name = $("agency").value.trim();
+  if (!name) { setField("agency", "Name your agency to continue."); return; }
+  setField("agency", "");
+  busy($("dojoin"), true);
+  try {
+    await api("/onboard", { method: "POST", json: { agency_name: name } });
+    await start();
+  } catch (err) {
+    setField("agency", sentence(err));
+  } finally {
+    busy($("dojoin"), false);
+  }
+});
+
+$("agency").addEventListener("input", () => setField("agency", ""));
+
+$("signout").addEventListener("click", () => {
+  SESSION = null;
+  save();
+  location.reload();
+});
+
+// --- clients ----------------------------------------------------------------------
+
+function paintClients(rows) {
+  const list = $("clientlist");
+  list.replaceChildren();
+  $("clientcount").textContent = String(rows.length);
+  if (!rows.length) {
+    list.append(emptyState(
+      "Add your first client to start making posts.",
+      "New client",
+      () => openClientDialog($("newclient")),
+    ));
+    return;
+  }
+  for (const client of rows) {
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = "card";
+    const title = document.createElement("span");
+    title.className = "card-title";
+    title.textContent = client.name || "";
+    const trade = document.createElement("span");
+    trade.className = "muted";
+    trade.textContent = client.trade || "—";
+    card.append(title, trade);
+    card.addEventListener("click", () => { openClient(client); });
+    list.append(card);
+  }
+}
+
+function paintNeedsYou(posts, clientRows) {
+  const box = $("needsyou");
+  box.replaceChildren();
+  const heading = document.createElement("h2");
+  heading.textContent = "Needs you";
+  box.append(heading);
+  const names = new Map((clientRows || []).map((row) => [row.id, row.name || ""]));
+  const groups = [
+    {
+      title: "With the client",
+      items: (posts || [])
+        .filter((post) => post.status === "review")
+        .sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at)),
+    },
+    {
+      title: "Drafts to finish",
+      items: (posts || [])
+        .filter((post) => post.status === "draft")
+        .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at)),
+    },
+    {
+      title: "Approved",
+      items: (posts || [])
+        .filter((post) => post.status === "approved")
+        .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at)),
+    },
+  ].filter((group) => group.items.length);
+  if (!groups.length) {
+    const line = document.createElement("p");
+    line.className = "muted";
+    line.textContent = "Nothing needs you right now.";
+    box.append(line);
+    return;
+  }
+  for (const group of groups) box.append(needsGroup(group, names));
+}
+
+function needsGroup(group, names) {
+  const wrap = document.createElement("div");
+  wrap.className = "needs-list";
+  const title = document.createElement("h3");
+  title.textContent = group.title;
+  wrap.append(title);
+  const list = document.createElement("div");
+  wrap.append(list);
+  let expanded = false;
+  const draw = () => {
+    list.replaceChildren();
+    const rows = expanded ? group.items : group.items.slice(0, 6);
+    for (const post of rows) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "needs-row";
+      const client = document.createElement("span");
+      client.textContent = names.get(post.client_id) || "Client";
+      const slug = document.createElement("span");
+      slug.className = "muted";
+      slug.textContent = post.slug || "";
+      const age = document.createElement("span");
+      age.className = "mono subtle";
+      age.textContent = ageLabel(post.created_at);
+      button.append(client, slug, statusBadge(post.status), age);
+      button.addEventListener("click", () => { openPost(post.id); });
+      list.append(button);
+    }
+  };
+  draw();
+  if (group.items.length > 6) {
+    const more = document.createElement("button");
+    more.type = "button";
+    more.className = "ghost";
+    more.textContent = "Show all";
+    more.addEventListener("click", () => {
+      expanded = !expanded;
+      more.textContent = expanded ? "Show less" : "Show all";
+      draw();
+    });
+    wrap.append(more);
+  }
+  return wrap;
+}
+
+function ageLabel(value) {
+  const then = Date.parse(value);
+  if (!Number.isFinite(then)) return "";
+  const seconds = Math.max(0, Math.floor((Date.now() - then) / 1000));
+  if (seconds < 3600) return `${Math.max(1, Math.floor(seconds / 60))}m`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
+  return `${Math.floor(seconds / 86400)}d`;
+}
+
+async function clients() {
+  const token = ++viewToken;
+  show("clients");
+  setCrumbs([{ label: "Clients" }]);
+  $("clientlist").replaceChildren(skeletons(6, "card-skel"));
+  $("needsyou").replaceChildren(skeletons(1, "card-skel"));
+  try {
+    const [rows, posts] = await Promise.all([api("/clients"), api("/posts")]);
+    if (token !== viewToken) return;
+    paintNeedsYou(posts, rows);
+    paintClients(rows);
+  } catch (err) {
+    if (token !== viewToken) return;
+    $("clientlist").replaceChildren();
+    $("needsyou").replaceChildren();
+    if (!SESSION) {
+      show("auth");
+      $("autherr").textContent = sentence(err);
+      return;
+    }
+    toast(sentence(err));
+  }
+}
+
+function openClientDialog(opener) {
+  setField("cname", "");
+  $("cname").value = "";
+  $("ctrade").value = "";
+  openDialog($("clientdialog"), opener);
+}
+
+$("newclient").addEventListener("click", () => openClientDialog($("newclient")));
+$("clientcancel").addEventListener("click", () => $("clientdialog").close());
+$("cname").addEventListener("input", () => setField("cname", ""));
+
+$("clientform").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const name = $("cname").value.trim();
+  const trade = $("ctrade").value.trim();
+  if (!name) { setField("cname", "Enter the client's name."); return; }
+  const slug = slugify(name, 60);
+  if (!slug) { setField("cname", "Use a name with at least one letter or number."); return; }
   const brand = { client_id: slug, version: 1,
     palette:{ primary:"#12264a", secondary:"#ff6a00", surface:"#f2f4f7", text:"#12264a",
               text_on_primary:"#ffffff", text_on_dark:"#ffffff", muted:"#5b6b82" },
@@ -254,151 +1435,1021 @@ $("newclient").onclick = async () => {
             body:{family:"Barlow",file:"assets/fonts/Barlow-Regular.ttf",line_height:1.25},
             body_bold:{family:"Barlow",file:"assets/fonts/Barlow-Bold.ttf",weight:700,line_height:1.25} } };
   const rules = { client_id: slug, version: 1 };
-  try{
-    const c = await api("/clients", { method:"POST",
-      json:{ slug, name, trade:prompt("Trade (plumbing, roofing…)") || "", brand, rules } });
-    await openClient(c);
-  }catch(e){ alert(e.message); }
-};
-
-async function openClient(c){
-  CLIENT = c;
-  $("clientname").textContent = c.name;
-  $("back").classList.remove("hide");
-  const designs = await api("/designs");
-  $("design").innerHTML = designs.map(d => `<option>${d}</option>`).join("");
-  await Promise.all([assets(), posts()]);
-  show("client");
-}
-
-async function assets(){
-  const rows = await api(`/clients/${CLIENT.id}/assets`);
-  $("assets").innerHTML = rows.map(a => `<figure><img src="${a.url}" alt="">
-    <figcaption>${a.kind}${(a.flags||[]).length ? " · " + a.flags.join(", ") : ""}</figcaption>
-    </figure>`).join("") || `<p class="muted">No photos yet — the background will be generated.</p>`;
-}
-
-$("upload").onchange = async (event) => {
-  const files = [...event.target.files]; if(!files.length) return;
-  $("uploadnote").textContent = `uploading ${files.length}…`;
-  for(const file of files){
-    const form = new FormData(); form.append("file", file); form.append("kind", $("uploadkind").value);
-    try{ await api(`/clients/${CLIENT.id}/assets`, { method:"POST", body: form }); }
-    catch(e){ $("uploadnote").textContent = e.message; return; }
+  busy($("clientcreate"), true);
+  try {
+    const created = await api("/clients", {
+      method: "POST",
+      json: { slug, name, trade, brand, rules },
+    });
+    $("clientdialog").close();
+    await openClient(created);
+  } catch (err) {
+    toast(sentence(err));
+  } finally {
+    busy($("clientcreate"), false);
   }
-  $("uploadnote").textContent = "done"; event.target.value = ""; await assets();
-};
+});
 
-async function posts(){
-  const rows = await api(`/posts?client_id=${CLIENT.id}`);
-  $("postlist").innerHTML = rows.map(p =>
-    `<div class="card" data-id="${p.id}"><h3>${p.slug}</h3>
-     <div class="muted">${p.template_id} · ${p.status}</div></div>`).join("")
-    || `<p class="muted">No posts yet.</p>`;
-  [...$("postlist").children].forEach(el => {
-    if(el.dataset.id) el.onclick = () => openPost(el.dataset.id);
-  });
+$("clientdialog").addEventListener("close", () => {
+  if (dialogReturn && typeof dialogReturn.focus === "function") dialogReturn.focus();
+});
+
+// --- client -----------------------------------------------------------------------
+
+function statusBadge(status) {
+  const badge = document.createElement("span");
+  const known = STATUSES.has(status) ? status : "";
+  badge.className = `badge ${known}`.trim();
+  badge.textContent = status || "";
+  return badge;
 }
 
-$("make").onclick = async () => {
-  const brief = $("brief").value.trim();
-  const slug = ($("slug").value.trim() ||
-    brief.toLowerCase().split(/\s+/).slice(0,4).join("-")).replace(/[^a-z0-9-]/g,"").slice(0,70);
-  if(!brief || !slug){ $("makeerr").textContent = "a brief and a short name, please"; return; }
-  $("makeerr").textContent = ""; busy($("make"), true, "making…");
-  const started = performance.now();
-  const queued = $("queued").checked;
-  try{
-    const out = await api(`/posts${queued ? "?queue=true" : ""}`, { method:"POST", json:{
-      client_id: CLIENT.id, brief, slug, template_id: $("design").value,
-      photo_note: $("photonote").value.trim(), aspects:["4:5","1:1","9:16","16:9"] }});
-    const postId = queued ? await waitForJob(out.job_id, started) : out.post.id;
-    $("makenote").textContent = `${((performance.now()-started)/1000).toFixed(1)}s`;
-    $("brief").value = ""; $("slug").value = ""; $("photonote").value = "";
-    await openPost(postId);
-  }catch(e){ $("makeerr").textContent = e.message; }
-  finally{ busy($("make"), false); }
-};
+function jobCard(jobId, text) {
+  const card = document.createElement("div");
+  card.className = "card job-card";
+  card.dataset.job = jobId;
+  const block = document.createElement("div");
+  block.className = "skeleton poster-skel";
+  const status = document.createElement("p");
+  status.className = "job-status";
+  status.textContent = text;
+  card.append(block, status);
+  return card;
+}
 
-// Queue mode: the request returned at once with a job id; ask every 2s how it is going.
-async function waitForJob(jobId, started){
-  for(;;){
+function paintPosts(rows) {
+  const list = $("postlist");
+  list.replaceChildren();
+  if (CLIENT) {
+    for (const [jobId, job] of inflight) {
+      if (job.clientId === CLIENT.id) list.append(jobCard(jobId, job.statusText));
+    }
+  }
+  if (!rows.length && !list.childElementCount) {
+    list.append(emptyState(
+      "Make your first post from a short brief.",
+      "Make post",
+      () => $("brief").focus(),
+    ));
+    return;
+  }
+  for (const post of rows) {
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = "card";
+    const title = document.createElement("span");
+    title.className = "card-title";
+    title.textContent = post.slug || "";
+    const design = document.createElement("span");
+    design.className = "muted";
+    design.textContent = designLabel(post.template_id);
+    card.append(title, design, statusBadge(post.status));
+    card.addEventListener("click", () => { openPost(post.id); });
+    list.append(card);
+  }
+}
+
+function setJobText(jobId, text) {
+  const job = inflight.get(jobId);
+  if (job) job.statusText = text;
+  const node = document.querySelector(`[data-job="${CSS.escape(jobId)}"] .job-status`);
+  if (node) node.textContent = text;
+}
+
+function jobStatusText(job, seconds) {
+  if (job.attempts > 1 || job.last_error) return `attempt ${job.attempts} of ${job.max_attempts}`;
+  const name = job.status === "running" ? "drafting" : job.status;
+  return `${name} · ${seconds}s`;
+}
+
+async function waitForJob(jobId, started) {
+  for (;;) {
     const job = await api(`/jobs/${jobId}`);
-    const took = ((performance.now()-started)/1000).toFixed(0);
-    if(job.status === "done") return job.result.post_id;
-    if(job.status === "failed") throw new Error(job.last_error || "the draft failed");
-    const retry = job.attempts > 1 || job.last_error ? ` · attempt ${job.attempts} of ${job.max_attempts}` : "";
-    $("makenote").textContent = `${job.status}${retry} · ${took}s`;
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    const seconds = Math.round((performance.now() - started) / 1000);
+    if (job.status === "done") {
+      const postId = job.result && job.result.post_id;
+      if (!postId) throw new Error("the draft finished without a post");
+      return postId;
+    }
+    if (job.status === "failed") throw new Error(job.last_error || "the draft failed");
+    setJobText(jobId, jobStatusText(job, seconds));
+    await new Promise((resolve) => setTimeout(resolve, 2000));
   }
 }
 
-async function openPost(id){
-  POST = id;
-  const data = await api(`/posts/${id}`);
-  $("postslug").textContent = `${data.client.name} · ${data.post.slug}`;
-  $("statver").textContent = data.latest ? `v${data.latest.version}` : "–";
-  $("statcost").textContent = `$${Number(data.post.cost_usd || 0).toFixed(4)}`;
-  $("statflags").textContent = data.flags.length;
-  $("renders").innerHTML = data.renders.map(r =>
-    `<figure class="${r.width > r.height ? "wide" : ""}"><img data-src="${r.url}" alt="${r.aspect}">
-     <figcaption>${r.aspect} · ${r.width}×${r.height}</figcaption></figure>`).join("");
-  await Promise.all([...$("renders").querySelectorAll("img[data-src]")].map(async img => {
-    const res = await fetch(img.dataset.src,
-      { headers:{ Authorization:`Bearer ${SESSION.access_token}` } });
-    if(res.ok) img.src = URL.createObjectURL(await res.blob());
-  }));
-  $("flaglist").innerHTML = data.flags.map(f =>
-    `<div class="flag ${f.severity}">${f.message}</div>`).join("");
-  $("history").innerHTML = "<tr><th>change</th><th>result</th><th>took</th></tr>" +
-    data.edits.map(e => `<tr><td>${e.message}</td><td>${e.outcome}</td>
-      <td>${(e.latency_ms/1000).toFixed(1)}s</td></tr>`).join("");
-  await quickButtons();
-  show("post");
+async function trackJob(jobId, clientId, started) {
+  const token = viewToken;
+  try {
+    const postId = await waitForJob(jobId, started);
+    const seconds = (performance.now() - started) / 1000;
+    inflight.delete(jobId);
+    if (token === viewToken && CLIENT && CLIENT.id === clientId && !$("client").classList.contains("hide")) {
+      await openPost(postId, { lastChange: seconds });
+    } else {
+      toast(`Draft ready · ${seconds.toFixed(1)}s`);
+    }
+  } catch (err) {
+    inflight.delete(jobId);
+    if (!$("client").classList.contains("hide") && CLIENT && CLIENT.id === clientId) {
+      $("makeerr").textContent = sentence(err);
+      try { await posts(); }
+      catch (refreshErr) { if (SESSION) toast(sentence(refreshErr)); }
+    } else if (SESSION) {
+      toast(sentence(err));
+    }
+  }
 }
 
-async function quickButtons(){
-  const actions = await api("/quick");
-  $("quick").innerHTML = "";
-  Object.entries(actions).forEach(([key, label]) => {
-    const b = document.createElement("button");
-    b.className = "ghost"; b.textContent = label;
-    b.onclick = async () => {
-      $("quickerr").textContent = ""; busy(b, true);
-      const started = performance.now();
-      try{
-        const form = new FormData(); form.append("action", key);
-        await api(`/posts/${POST}/quick`, { method:"POST", body: form });
-        $("stattime").textContent = `${((performance.now()-started)/1000).toFixed(1)}s`;
-        await openPost(POST);
-      }catch(e){ $("quickerr").textContent = e.message; }
-      finally{ busy(b, false); }
+async function posts() {
+  const rows = await api(`/posts?client_id=${encodeURIComponent(CLIENT.id)}`);
+  paintPosts(rows);
+}
+
+async function assets() {
+  const rows = await api(`/clients/${CLIENT.id}/assets`);
+  const list = $("assets");
+  list.replaceChildren();
+  if (!rows.length) {
+    const note = document.createElement("p");
+    note.className = "muted empty-note";
+    note.textContent = "No photos yet. The background will be generated.";
+    list.append(note);
+    return;
+  }
+  for (const asset of rows) {
+    const figure = document.createElement("figure");
+    const img = document.createElement("img");
+    img.alt = asset.kind || "asset";
+    img.src = safeSrc(asset.url);
+    const caption = document.createElement("figcaption");
+    const kind = document.createElement("span");
+    kind.className = "muted";
+    kind.textContent = asset.kind || "";
+    caption.append(kind);
+    for (const flag of asset.flags || []) {
+      const badge = document.createElement("span");
+      badge.className = "badge warn";
+      badge.textContent = String(flag).replaceAll("_", " ");
+      caption.append(badge);
+    }
+    figure.append(img, caption);
+    list.append(figure);
+  }
+}
+
+function fillDesigns(designs) {
+  $("design").innerHTML = designs.map((id) =>
+    `<option value="${esc(id)}">${esc(designLabel(id))}</option>`).join("");
+}
+
+async function openClient(client) {
+  const token = ++viewToken;
+  CLIENT = client;
+  show("client");
+  $("clienttitle").textContent = client.name || "";
+  setCrumbs([
+    { label: "Clients", action: () => { clients(); } },
+    { label: client.name || "Client" },
+  ]);
+  $("postlist").replaceChildren(skeletons(3, "card-skel"));
+  $("assets").replaceChildren(skeletons(4, "asset-skel"));
+  $("makeerr").textContent = "";
+  try {
+    const designs = await api("/designs");
+    if (token !== viewToken) return;
+    fillDesigns(designs);
+    await Promise.all([assets(), posts()]);
+    if (token !== viewToken) return;
+    autosize($("brief"));
+  } catch (err) {
+    if (token !== viewToken) return;
+    if ($("postlist").querySelector(".skeleton")) $("postlist").replaceChildren();
+    if ($("assets").querySelector(".skeleton")) $("assets").replaceChildren();
+    if (SESSION) toast(sentence(err));
+  }
+}
+
+function postSlug(brief) {
+  const typed = $("slug").value.trim();
+  const source = typed || brief.toLowerCase().split(/\s+/).slice(0, 4).join("-");
+  return slugify(source, 70);
+}
+
+async function makePost() {
+  if (making) return;
+  setField("brief", "");
+  setField("slug", "");
+  $("makeerr").textContent = "";
+  const brief = $("brief").value.trim();
+  if (!brief) { setField("brief", "Write a brief first."); return; }
+  const slug = postSlug(brief);
+  if (!slug) { setField("slug", "Add a short name using letters or numbers."); return; }
+  if (!$("design").value) { $("makeerr").textContent = "Choose a design."; return; }
+  const queued = $("queued").checked;
+  const started = performance.now();
+  const clientId = CLIENT.id;
+  making = true;
+  busy($("make"), true);
+  const placeholderId = `local-${started}`;
+  inflight.set(placeholderId, {
+    clientId,
+    statusText: queued ? "queued · 0s" : "making…",
+  });
+  paintPostsKeep();
+  try {
+    const out = await api(`/posts${queued ? "?queue=true" : ""}`, {
+      method: "POST",
+      json: {
+        client_id: clientId,
+        brief,
+        slug,
+        template_id: $("design").value,
+        photo_note: $("photonote").value.trim(),
+        aspects: ["4:5", "1:1", "9:16", "16:9"],
+      },
+    });
+    $("brief").value = "";
+    $("slug").value = "";
+    $("photonote").value = "";
+    autosize($("brief"));
+    if (queued) {
+      if (!out.job_id) throw new Error("the queue did not return a job");
+      inflight.delete(placeholderId);
+      const jobId = String(out.job_id);
+      inflight.set(jobId, { clientId, statusText: "queued · 0s" });
+      busy($("make"), false);
+      making = false;
+      if (CLIENT && CLIENT.id === clientId && !$("client").classList.contains("hide")) {
+        try { await posts(); }
+        catch (refreshErr) { if (SESSION) toast(sentence(refreshErr)); }
+      }
+      await trackJob(jobId, clientId, started);
+      return;
+    }
+    inflight.delete(placeholderId);
+    const postId = out.post && out.post.id;
+    if (!postId) throw new Error("the draft finished without a post");
+    await openPost(postId, { lastChange: (performance.now() - started) / 1000 });
+  } catch (err) {
+    inflight.delete(placeholderId);
+    $("makeerr").textContent = sentence(err);
+    if (CLIENT && CLIENT.id === clientId && SESSION) {
+      try { await posts(); }
+      catch (refreshErr) { toast(sentence(refreshErr)); }
+    }
+  } finally {
+    if (making) {
+      busy($("make"), false);
+      making = false;
+    }
+  }
+}
+
+function paintPostsKeep() {
+  const cards = [];
+  if (CLIENT) {
+    for (const [jobId, job] of inflight) {
+      if (job.clientId === CLIENT.id) cards.push(jobCard(jobId, job.statusText));
+    }
+  }
+  const list = $("postlist");
+  const existing = [...list.querySelectorAll("button.card")];
+  list.replaceChildren(...cards, ...existing);
+  if (!list.childElementCount) {
+    list.append(emptyState(
+      "Make your first post from a short brief.",
+      "Make post",
+      () => $("brief").focus(),
+    ));
+  }
+}
+
+$("makeform").addEventListener("submit", (event) => {
+  event.preventDefault();
+  makePost();
+});
+$("brief").addEventListener("input", () => { setField("brief", ""); autosize($("brief")); });
+$("slug").addEventListener("input", () => setField("slug", ""));
+$("brief").addEventListener("keydown", (event) => {
+  if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+    event.preventDefault();
+    $("makeform").requestSubmit();
+  }
+});
+
+function setKind(kind) {
+  uploadKind = kind === "logo" ? "logo" : "photo";
+  $("kindphoto").setAttribute("aria-checked", uploadKind === "photo" ? "true" : "false");
+  $("kindlogo").setAttribute("aria-checked", uploadKind === "logo" ? "true" : "false");
+}
+
+for (const button of $("kindseg").querySelectorAll("button")) {
+  button.addEventListener("click", () => setKind(button.dataset.kind));
+}
+
+function uploadRow(file) {
+  const item = document.createElement("li");
+  const name = document.createElement("span");
+  name.textContent = file.name;
+  const bar = document.createElement("progress");
+  bar.max = 1;
+  bar.value = 0;
+  const note = document.createElement("span");
+  note.className = "muted mono";
+  note.textContent = "Uploading";
+  item.append(name, bar, note);
+  $("uploads").append(item);
+  return { bar, note, item };
+}
+
+async function sendFile(file, kind, onProgress, retried) {
+  const headers = await authHeader();
+  const xhr = await new Promise((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open("POST", `/api/clients/${CLIENT.id}/assets`);
+    request.upload.onprogress = (event) => {
+      if (event.lengthComputable) onProgress(event.loaded / event.total);
     };
-    $("quick").append(b);
+    request.onload = () => resolve(request);
+    request.onerror = () => reject(new Error("upload failed"));
+    request.setRequestHeader("Authorization", headers.Authorization);
+    const form = new FormData();
+    form.append("file", file);
+    form.append("kind", kind);
+    request.send(form);
+  });
+  if (xhr.status === 401 && !retried && await freshSession(true)) {
+    return sendFile(file, kind, onProgress, true);
+  }
+  if (xhr.status === 401) {
+    SESSION = null;
+    save();
+    show("auth");
+    throw new Error("please sign in again");
+  }
+  if (xhr.status < 200 || xhr.status >= 300) {
+    let message = xhr.responseText || xhr.statusText || "upload failed";
+    try {
+      const body = JSON.parse(xhr.responseText);
+      message = body.detail || body.message || message;
+    } catch { /* the body was already plain text */ }
+    throw new Error(typeof message === "string" ? message : "upload failed");
+  }
+  return xhr;
+}
+
+async function uploadFiles(files) {
+  const kind = uploadKind;
+  let done = 0;
+  for (const file of files) {
+    const row = uploadRow(file);
+    try {
+      await sendFile(file, kind, (fraction) => {
+        row.bar.value = fraction;
+        row.note.textContent = `${Math.round(fraction * 100)}%`;
+      });
+      row.bar.value = 1;
+      row.note.textContent = "Done";
+      done += 1;
+    } catch (err) {
+      row.note.textContent = sentence(err);
+      row.note.className = "field-error";
+      toast(sentence(err));
+      break;
+    }
+  }
+  if (done) {
+    try { await assets(); } catch (err) { toast(sentence(err)); }
+  }
+}
+
+$("upload").addEventListener("change", async (event) => {
+  const files = [...event.target.files];
+  event.target.value = "";
+  if (!files.length || !CLIENT) return;
+  await uploadFiles(files);
+});
+
+const drop = $("drop");
+let dragDepth = 0;
+drop.addEventListener("dragenter", (event) => {
+  event.preventDefault();
+  dragDepth += 1;
+  drop.classList.add("dragover");
+});
+drop.addEventListener("dragover", (event) => event.preventDefault());
+drop.addEventListener("dragleave", () => {
+  dragDepth -= 1;
+  if (dragDepth <= 0) {
+    dragDepth = 0;
+    drop.classList.remove("dragover");
+  }
+});
+drop.addEventListener("drop", async (event) => {
+  event.preventDefault();
+  dragDepth = 0;
+  drop.classList.remove("dragover");
+  const files = [...(event.dataTransfer && event.dataTransfer.files || [])];
+  if (!files.length || !CLIENT) return;
+  await uploadFiles(files);
+});
+
+// --- post -------------------------------------------------------------------------
+
+function paintStats(data, lastChange) {
+  $("statver").textContent = data.latest ? `v${data.latest.version}` : "–";
+  const latency = data.edits && data.edits[0] ? Number(data.edits[0].latency_ms) / 1000 : null;
+  if (lastChange != null) $("stattime").textContent = `${lastChange.toFixed(1)}s`;
+  else if (latency != null && !Number.isNaN(latency)) $("stattime").textContent = `${latency.toFixed(1)}s`;
+  else $("stattime").textContent = "–";
+  $("statcost").textContent = `$${Number(data.post.cost_usd || 0).toFixed(4)}`;
+  const flags = data.flags || [];
+  const blockers = flags.filter((flag) => flag.severity === "blocker").length;
+  $("statflags").textContent = String(flags.length);
+  $("statflags").classList.toggle("bad", blockers > 0);
+  $("statflags").classList.toggle("warn", blockers === 0 && flags.length > 0);
+}
+
+function paintFlags(flags) {
+  const list = $("flaglist");
+  if (!flags.length) {
+    list.replaceChildren();
+    const note = document.createElement("p");
+    note.className = "muted";
+    note.textContent = "Nothing to check.";
+    list.append(note);
+    return;
+  }
+  list.innerHTML = flags.map((flag) => {
+    const tone = flag.severity === "blocker" ? "blocker" : "warn";
+    return `<div class="flag-row"><span class="badge ${tone}">${esc(flag.severity)}</span><span>${esc(flag.message)}</span></div>`;
+  }).join("");
+}
+
+function paintHistory(edits) {
+  if (!edits.length) {
+    $("historybody").replaceChildren();
+    $("history").classList.add("hide");
+    $("historyempty").classList.remove("hide");
+    return;
+  }
+  $("historyempty").classList.add("hide");
+  $("history").classList.remove("hide");
+  $("historybody").innerHTML = edits.map((edit) =>
+    `<tr><td>${esc(edit.message)}</td><td>${esc(edit.outcome)}</td><td class="mono">${esc(taken(edit.latency_ms))}</td></tr>`
+  ).join("");
+}
+
+function renderFigure(render, hero, alone) {
+  const figure = document.createElement("figure");
+  if (hero) figure.classList.add("hero");
+  if (alone) figure.classList.add("solo");
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "render-hit";
+  button.setAttribute("aria-label", `Open the ${render.aspect} poster full size`);
+  const img = document.createElement("img");
+  img.alt = `${render.aspect}, ${render.width} by ${render.height}`;
+  img.dataset.src = safeSrc(render.url);
+  button.append(img);
+  const caption = document.createElement("figcaption");
+  caption.className = "mono";
+  caption.textContent = `${render.aspect} · ${render.width}×${render.height}`;
+  figure.append(button, caption);
+  button.addEventListener("click", () => openLightbox(img, button));
+  return figure;
+}
+
+async function loadPreviews(root, fade, gen) {
+  const images = [...root.querySelectorAll("img[data-src]")];
+  let warned = false;
+  await Promise.all(images.map(async (img) => {
+    const path = img.dataset.src;
+    if (!path) return;
+    try {
+      let res = await fetch(path, { headers: await authHeader() });
+      if (gen !== previewGen) return;
+      if (res.status === 401 && await freshSession(true)) {
+        res = await fetch(path, { headers: await authHeader() });
+      }
+      if (gen !== previewGen) return;
+      if (res.status === 401) {
+        SESSION = null;
+        save();
+        show("auth");
+        throw new Error("please sign in again");
+      }
+      if (!res.ok) throw new Error("could not load the poster");
+      const url = URL.createObjectURL(await res.blob());
+      if (gen !== previewGen) {
+        URL.revokeObjectURL(url);
+        return;
+      }
+      previewURLs.push(url);
+      if (fade) {
+        img.addEventListener("load", () => {
+          img.classList.add("entering");
+          if (stickScroll != null) restoreScroll(stickScroll);
+        }, { once: true });
+      }
+      img.src = url;
+    } catch (err) {
+      if (gen !== previewGen || !SESSION || warned) return;
+      warned = true;
+      toast(sentence(err));
+    }
+  }));
+}
+
+let stickScroll = null;
+
+function paintStage(renders, fade) {
+  const gen = ++previewGen;
+  const stage = $("stage");
+  revokePreviews();
+  stage.dataset.canvas = canvas;
+  stage.replaceChildren();
+  if (!renders.length) {
+    const note = document.createElement("p");
+    note.className = "muted empty-note";
+    note.textContent = "Nothing rendered yet.";
+    stage.append(note);
+    return;
+  }
+  const hero = renders.find((render) => render.aspect === "4:5") || renders[0];
+  const rest = renders.filter((render) => render !== hero);
+  stage.append(renderFigure(hero, true, rest.length === 0));
+  for (const render of rest) stage.append(renderFigure(render, false, false));
+  loadPreviews(stage, fade, gen);
+}
+
+function findRender(renders, aspect) {
+  return (renders || []).find((render) => render.aspect === aspect) || null;
+}
+
+function initials(name) {
+  const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
+  const letters = ((parts[0] && parts[0][0]) || "") + ((parts[1] && parts[1][0]) || "");
+  return (letters || "?").toUpperCase();
+}
+
+function outlineIcon(kind) {
+  const svg = {
+    heart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20s-7-4.6-7-9.1A3.9 3.9 0 0 1 12 7.2 3.9 3.9 0 0 1 19 10.9C19 15.4 12 20 12 20z"/></svg>',
+    comment: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 6h14v10H8l-3 3z"/></svg>',
+    send: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
+    mark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 5h10v14l-5-3-5 3z"/></svg>',
+  };
+  const button = document.createElement("button");
+  button.type = "button";
+  button.tabIndex = -1;
+  button.setAttribute("aria-hidden", "true");
+  button.innerHTML = svg[kind];
+  return button;
+}
+
+function captionText(post) {
+  const words = (post && post.words) || {};
+  const tags = Array.isArray(words.hashtags) ? words.hashtags.join(" ") : "";
+  return [words.caption || "", tags].filter(Boolean).join(" ");
+}
+
+function applyFrameMode() {
+  for (const id of ["feedview", "storyview", "gridview"]) {
+    $(id).dataset.frame = frameMode;
+  }
+  for (const button of $("frameseg").querySelectorAll("button")) {
+    button.setAttribute("aria-checked", button.dataset.frame === frameMode ? "true" : "false");
+  }
+}
+
+function setPreview(kind) {
+  previewKind = kind === "feed" || kind === "story" || kind === "grid" ? kind : "canvas";
+  $("stage").classList.toggle("hide", previewKind !== "canvas");
+  $("canvasseg").classList.toggle("hide", previewKind !== "canvas");
+  $("feedview").classList.toggle("hide", previewKind !== "feed");
+  $("storyview").classList.toggle("hide", previewKind !== "story");
+  $("gridview").classList.toggle("hide", previewKind !== "grid");
+  $("frameseg").classList.toggle("hide", previewKind === "canvas");
+  for (const button of $("viewseg").querySelectorAll("button")) {
+    button.setAttribute("aria-checked", button.dataset.view === previewKind ? "true" : "false");
+  }
+  syncPreview(false);
+}
+
+function paintFeed() {
+  const root = $("feedview");
+  root.replaceChildren();
+  applyFrameMode();
+  const client = (POSTDATA && POSTDATA.client) || {};
+  const post = (POSTDATA && POSTDATA.post) || {};
+  const render = findRender((POSTDATA && POSTDATA.renders) || [], "4:5");
+  const head = document.createElement("div");
+  head.className = "feed-head";
+  const avatar = document.createElement("span");
+  avatar.className = "avatar";
+  avatar.textContent = initials(client.name);
+  const name = document.createElement("span");
+  name.className = "feed-name";
+  name.textContent = client.name || "";
+  head.append(avatar, name);
+  root.append(head);
+  if (render) {
+    const img = document.createElement("img");
+    img.className = "feed-photo";
+    img.alt = "";
+    img.dataset.src = safeSrc(render.url);
+    root.append(img);
+    loadPreviews(root, false, ++previewGen);
+  }
+  const actions = document.createElement("div");
+  actions.className = "feed-actions";
+  actions.append(outlineIcon("heart"), outlineIcon("comment"), outlineIcon("send"), outlineIcon("mark"));
+  root.append(actions);
+  const copy = document.createElement("div");
+  copy.className = "feed-copy";
+  const caption = document.createElement("p");
+  caption.className = "feed-caption";
+  caption.textContent = captionText(post);
+  copy.append(caption);
+  const more = document.createElement("button");
+  more.type = "button";
+  more.className = "feed-more hide";
+  more.textContent = "more";
+  more.addEventListener("click", () => {
+    caption.classList.add("open");
+    more.classList.add("hide");
+  });
+  copy.append(more);
+  root.append(copy);
+  requestAnimationFrame(() => {
+    if (caption.scrollHeight > caption.clientHeight + 1) more.classList.remove("hide");
   });
 }
 
-$("dotweak").onclick = async () => {
-  const message = $("tweak").value.trim(); if(!message) return;
-  $("tweakerr").textContent = ""; busy($("dotweak"), true);
+function paintStory() {
+  const root = $("storyview");
+  root.replaceChildren();
+  applyFrameMode();
+  const render = findRender((POSTDATA && POSTDATA.renders) || [], "9:16");
+  if (!render) {
+    const note = document.createElement("p");
+    note.className = "story-empty";
+    note.textContent = "This post has no Story format yet.";
+    root.append(note);
+    return;
+  }
+  const shot = document.createElement("div");
+  shot.className = "story-shot";
+  const img = document.createElement("img");
+  img.alt = "";
+  img.dataset.src = safeSrc(render.url);
+  shot.append(img);
+  root.append(shot);
+  loadPreviews(root, false, ++previewGen);
+}
+
+async function paintGrid() {
+  const root = $("gridview");
+  root.replaceChildren();
+  applyFrameMode();
+  const clientId = POSTDATA && POSTDATA.client && POSTDATA.client.id;
+  const currentId = POSTDATA && POSTDATA.post && POSTDATA.post.id;
+  if (!clientId) return;
+  root.append(skeletons(9, "asset-skel"));
+  const token = viewToken;
+  try {
+    const posts = await api(`/posts?client_id=${encodeURIComponent(clientId)}`);
+    if (token !== viewToken || previewKind !== "grid") return;
+    const latest = (posts || []).slice(0, 9);
+    const details = await Promise.all(latest.map(async (post) => {
+      try { return await api(`/posts/${post.id}`); }
+      catch { return { renders: [] }; }
+    }));
+    if (token !== viewToken || previewKind !== "grid") return;
+    root.replaceChildren();
+    applyFrameMode();
+    for (let i = 0; i < latest.length; i += 1) {
+      const detail = details[i];
+      const tile = document.createElement("div");
+      tile.className = "grid-tile";
+      if (latest[i].id === currentId) tile.classList.add("current");
+      const renders = (detail && detail.renders) || [];
+      const render = findRender(renders, "4:5") || renders[0];
+      if (!render) {
+        const skel = document.createElement("div");
+        skel.className = "skeleton";
+        tile.append(skel);
+      } else {
+        const img = document.createElement("img");
+        img.alt = "";
+        img.dataset.src = safeSrc(render.url);
+        tile.append(img);
+      }
+      root.append(tile);
+    }
+    loadPreviews(root, false, ++previewGen);
+  } catch (err) {
+    if (token !== viewToken || !SESSION) return;
+    root.replaceChildren();
+    const note = document.createElement("p");
+    note.className = "story-empty";
+    note.textContent = sentence(err);
+    root.append(note);
+  }
+}
+
+function syncPreview(fade) {
+  applyFrameMode();
+  if (previewKind === "feed") paintFeed();
+  else if (previewKind === "story") paintStory();
+  else if (previewKind === "grid") paintGrid();
+  else paintStage((POSTDATA && POSTDATA.renders) || [], fade);
+}
+
+function paintPost(data, options) {
+  POSTDATA = data;
+  const opts = options || {};
+  $("posttitle").textContent = (data.post && data.post.slug) || "";
+  paintStats(data, opts.lastChange);
+  paintFlags(data.flags || []);
+  paintHistory(data.edits || []);
+  syncPreview(Boolean(opts.fade));
+  const client = data.client || {};
+  const post = data.post || {};
+  setCrumbs([
+    { label: "Clients", action: () => { clients(); } },
+    { label: client.name || "Client", action: () => { openClient(CLIENT && CLIENT.id === client.id ? CLIENT : client); } },
+    { label: post.slug || "Post" },
+  ]);
+}
+
+async function ensureQuick() {
+  if ($("quick").childElementCount) return;
+  const actions = await api("/quick");
+  for (const [key, label] of Object.entries(actions)) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "secondary";
+    button.textContent = label;
+    button.addEventListener("click", () => runQuick(key, button));
+    $("quick").append(button);
+  }
+}
+
+async function openPost(id, options) {
+  const token = ++viewToken;
+  POST = id;
+  stickScroll = null;
+  show("post");
+  window.scrollTo(0, 0);
+  $("quickerr").textContent = "";
+  $("tweakwhy").textContent = "";
+  $("tweakwhy").className = "why";
+  try {
+    const data = await api(`/posts/${id}`);
+    if (token !== viewToken) return;
+    if (!CLIENT || CLIENT.id !== data.client.id) CLIENT = data.client;
+    paintPost(data, options || {});
+    await ensureQuick();
+  } catch (err) {
+    if (token !== viewToken || !SESSION) return;
+    const note = document.createElement("p");
+    note.className = "field-error";
+    note.textContent = sentence(err);
+    $("stage").replaceChildren(note);
+    toast(sentence(err));
+  }
+}
+
+function openLightbox(img, opener) {
+  if (!img.src) return;
+  const dialog = $("lightbox");
+  $("lightimg").src = img.src;
+  $("lightimg").alt = img.alt;
+  $("lightmat").dataset.canvas = canvas;
+  dialogReturn = opener || document.activeElement;
+  dialog.showModal();
+  $("lightclose").focus();
+}
+
+$("lightclose").addEventListener("click", () => $("lightbox").close());
+$("lightbox").addEventListener("click", (event) => {
+  if (event.target === $("lightbox")) $("lightbox").close();
+});
+$("lightbox").addEventListener("close", () => {
+  if (dialogReturn && typeof dialogReturn.focus === "function") dialogReturn.focus();
+});
+
+for (const button of $("canvasseg").querySelectorAll("button")) {
+  button.addEventListener("click", () => {
+    canvas = button.dataset.canvas || "grey";
+    $("stage").dataset.canvas = canvas;
+    $("lightmat").dataset.canvas = canvas;
+    for (const item of $("canvasseg").querySelectorAll("button")) {
+      item.setAttribute("aria-checked", item === button ? "true" : "false");
+    }
+  });
+}
+
+async function refreshPost(options) {
+  const keep = Boolean(options && options.keepScroll);
+  const y = keep ? rememberScroll() : null;
+  stickScroll = y;
+  const data = await api(`/posts/${POST}`);
+  paintPost(data, options || {});
+  if (y != null) {
+    restoreScroll(y);
+    requestAnimationFrame(() => restoreScroll(y));
+  }
+}
+
+async function runQuick(key, button) {
+  if (changing || !POST) return;
+  changing = true;
+  $("quickerr").textContent = "";
+  busy(button, true);
   const started = performance.now();
-  try{
-    const out = await api(`/posts/${POST}/tweak`, { method:"POST", json:{ message } });
-    $("stattime").textContent = `${((performance.now()-started)/1000).toFixed(1)}s`;
-    if(out.outcome && out.outcome !== "applied"){ $("tweakerr").textContent = out.why || out.outcome; }
-    else { $("tweak").value = ""; }
-    await openPost(POST);
-  }catch(e){ $("tweakerr").textContent = e.message; }
-  finally{ busy($("dotweak"), false); }
-};
+  try {
+    const form = new FormData();
+    form.append("action", key);
+    await api(`/posts/${POST}/quick`, { method: "POST", body: form });
+    const seconds = (performance.now() - started) / 1000;
+    await refreshPost({ fade: true, keepScroll: true, lastChange: seconds });
+    if (POSTDATA && POSTDATA.latest) toast(`v${POSTDATA.latest.version} · ${seconds.toFixed(1)}s`);
+  } catch (err) {
+    $("quickerr").textContent = sentence(err);
+  } finally {
+    busy(button, false);
+    changing = false;
+  }
+}
 
-$("download").onclick = async () => {
-  const blob = await api(`/posts/${POST}/download`);
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a"); a.href = url; a.download = "post.zip"; a.click();
-  URL.revokeObjectURL(url);
-};
+async function applyTweak() {
+  if (changing || !POST) return;
+  const message = $("tweak").value.trim();
+  if (!message) return;
+  changing = true;
+  $("tweakwhy").textContent = "";
+  $("tweakwhy").className = "why";
+  busy($("dotweak"), true);
+  const started = performance.now();
+  try {
+    const out = await api(`/posts/${POST}/tweak`, { method: "POST", json: { message } });
+    const seconds = (performance.now() - started) / 1000;
+    const declined = out.outcome && out.outcome !== "applied";
+    if (declined) {
+      $("tweakwhy").textContent = out.why || out.outcome;
+      $("tweakwhy").className = "why bad";
+      await refreshPost({ fade: false, keepScroll: true, lastChange: seconds });
+    } else {
+      $("tweak").value = "";
+      if (out.why) {
+        $("tweakwhy").textContent = out.why;
+        $("tweakwhy").className = "why warn";
+      }
+      await refreshPost({ fade: true, keepScroll: true, lastChange: seconds });
+      if (POSTDATA && POSTDATA.latest) toast(`v${POSTDATA.latest.version} · ${seconds.toFixed(1)}s`);
+    }
+  } catch (err) {
+    $("tweakwhy").textContent = sentence(err);
+    $("tweakwhy").className = "why bad";
+  } finally {
+    busy($("dotweak"), false);
+    changing = false;
+  }
+}
 
+$("tweakform").addEventListener("submit", (event) => {
+  event.preventDefault();
+  applyTweak();
+});
+$("tweak").addEventListener("keydown", (event) => {
+  if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+    event.preventDefault();
+    $("tweakform").requestSubmit();
+  }
+});
+
+$("download").addEventListener("click", async () => {
+  if (!POST) return;
+  busy($("download"), true);
+  try {
+    const blob = await api(`/posts/${POST}/download`);
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const slug = POSTDATA && POSTDATA.post && POSTDATA.post.slug
+      ? String(POSTDATA.post.slug).replace(/[^a-z0-9-]/gi, "")
+      : "post";
+    link.href = url;
+    link.download = `${slug || "post"}.zip`;
+    link.click();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    toast(sentence(err));
+  } finally {
+    busy($("download"), false);
+  }
+});
+
+// --- shell ------------------------------------------------------------------------
+
+function wireRadios(container) {
+  container.addEventListener("keydown", (event) => {
+    if (!["ArrowRight", "ArrowLeft", "ArrowDown", "ArrowUp"].includes(event.key)) return;
+    const items = [...container.querySelectorAll("[role='radio']")];
+    const index = items.indexOf(document.activeElement);
+    if (index < 0) return;
+    event.preventDefault();
+    const delta = event.key === "ArrowRight" || event.key === "ArrowDown" ? 1 : -1;
+    const next = items[(index + delta + items.length) % items.length];
+    next.focus();
+    next.click();
+  });
+}
+wireRadios($("kindseg"));
+wireRadios($("canvasseg"));
+wireRadios($("viewseg"));
+wireRadios($("frameseg"));
+
+for (const button of $("viewseg").querySelectorAll("button")) {
+  button.addEventListener("click", () => setPreview(button.dataset.view));
+}
+for (const button of $("frameseg").querySelectorAll("button")) {
+  button.addEventListener("click", () => {
+    frameMode = button.dataset.frame === "light" ? "light" : "dark";
+    applyFrameMode();
+  });
+}
+
+$("back").addEventListener("click", () => {
+  if (upAction) upAction();
+});
+
+$("themebtn").addEventListener("click", (event) => {
+  event.stopPropagation();
+  if ($("thememenu").hidden) openThemeMenu();
+  else closeThemeMenu();
+});
+for (const item of $("thememenu").querySelectorAll("[data-theme-value]")) {
+  item.addEventListener("click", () => {
+    applyTheme(item.dataset.themeValue);
+    closeThemeMenu();
+    $("themebtn").focus();
+  });
+}
+$("thememenu").addEventListener("keydown", (event) => {
+  const items = [...$("thememenu").querySelectorAll("button")];
+  const index = items.indexOf(document.activeElement);
+  if (index < 0) return;
+  if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+    event.preventDefault();
+    const delta = event.key === "ArrowDown" ? 1 : -1;
+    items[(index + delta + items.length) % items.length].focus();
+  }
+});
+document.addEventListener("click", (event) => {
+  if ($("thememenu").hidden) return;
+  if (event.target === $("themebtn") || $("thememenu").contains(event.target)) return;
+  closeThemeMenu();
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") return;
+  if ([...document.querySelectorAll("dialog")].some((dialog) => dialog.open)) return;
+  if (!$("thememenu").hidden) {
+    closeThemeMenu();
+    $("themebtn").focus();
+    return;
+  }
+  if (upAction) upAction();
+}, true);
+
+async function start() {
+  try {
+    CONF = await (await fetch("/api/config")).json();
+  } catch {
+    show("auth");
+    $("autherr").textContent = "Could not reach Stratum. Try again in a moment.";
+    return;
+  }
+  syncThemeControl();
+  SESSION = load();
+  if (!SESSION) { show("auth"); setCrumbs([]); return; }
+  try {
+    await freshSession();
+    if (!SESSION) { show("auth"); return; }
+    const me = await api("/me");
+    if (!me || !me.agency_id) { show("join"); return; }
+    $("who").textContent = `${me.agency_name} · ${me.role}`;
+    await clients();
+  } catch (err) {
+    show("auth");
+    $("autherr").textContent = sentence(err);
+  }
+}
+
+syncThemeControl();
+autosize($("brief"));
 start();
 </script>
 </body>
