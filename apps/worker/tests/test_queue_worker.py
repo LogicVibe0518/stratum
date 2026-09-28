@@ -55,7 +55,7 @@ async def add_job(world: World, agency: str, *, payload: dict[str, Any] | None =
 def worker(world: World, handler: Handler, *, lease: int = 60, factory: Any = None) -> QueueWorker:
     return QueueWorker(
         ledger=world.ledger(),
-        factory=factory or world.factory,
+        factory=factory or world.scoped,
         deps=Deps(settings=world.settings(REPO), gateway=fake.gateway()),
         lease_seconds=lease,
         worker_id="w-1",
@@ -128,9 +128,9 @@ async def test_all_work_goes_through_the_client_for_the_jobs_agency(world: World
     asked: list[str] = []
     seen: list[str] = []
 
-    def factory(agency_id: str) -> Supa:
-        asked.append(agency_id)
-        return world.factory(agency_id)
+    def factory(job: Job) -> Supa:
+        asked.append(job.agency_id)
+        return world.scoped(job)
 
     async def record(job: Job, client: Supa, deps: Deps) -> dict[str, Any]:
         assert isinstance(client, FakeSupa)
@@ -225,7 +225,7 @@ async def test_draft_post_runs_the_real_service_through_the_queue(tmp_path: Path
     job_id = await add_job(world, agency, payload={"post_id": post_id})
     loop = QueueWorker(
         ledger=world.ledger(),
-        factory=world.factory,
+        factory=world.scoped,
         deps=Deps(settings=world.settings(REPO), gateway=fake.gateway()),
     )
     assert await loop.run_once()
@@ -245,8 +245,8 @@ async def test_a_factory_handing_back_another_agency_is_refused(tmp_path: Path) 
         "jobs", {"agency_id": "agency-x", "kind": "draft_post", "payload": {"post_id": post_id}}
     )
 
-    def wrong(_: str) -> Supa:
-        return world.factory(agency)  # a buggy factory: ignores the agency it was given
+    def wrong(_: Job) -> Supa:
+        return world.factory(agency)  # a buggy factory: ignores the job it was given
 
     loop = QueueWorker(
         ledger=world.ledger(),
@@ -272,7 +272,7 @@ async def test_a_reclaimed_job_does_not_draft_the_post_twice(tmp_path: Path) -> 
     post_id = await _post(world, agency, client, "boiler-offer")
     job_id = await add_job(world, agency, payload={"post_id": post_id})
     deps = Deps(settings=world.settings(REPO), gateway=fake.gateway())
-    first = QueueWorker(ledger=world.ledger(), factory=world.factory, deps=deps)
+    first = QueueWorker(ledger=world.ledger(), factory=world.scoped, deps=deps)
     assert await first.run_once()
     assert row(world, job_id)["status"] == "done"
 
@@ -281,7 +281,7 @@ async def test_a_reclaimed_job_does_not_draft_the_post_twice(tmp_path: Path) -> 
         {"status": "queued", "attempts": 0, "leased_by": None, "leased_until": None},
         id=f"eq.{job_id}",
     )
-    second = QueueWorker(ledger=world.ledger(), factory=world.factory, deps=deps)
+    second = QueueWorker(ledger=world.ledger(), factory=world.scoped, deps=deps)
     assert await second.run_once()
 
     state = row(world, job_id)
@@ -290,3 +290,151 @@ async def test_a_reclaimed_job_does_not_draft_the_post_twice(tmp_path: Path) -> 
     assert state["result"]["post_id"] == post_id
     versions = await world.factory(agency).select("post_versions", post_id=f"eq.{post_id}")
     assert [v["version"] for v in versions] == [1]
+
+
+# --- when the queue itself says no ---------------------------------------------------
+
+
+class RefusingLedger:
+    """What PostgREST answers when the key is wrong or the grants are missing."""
+
+    def __init__(self, status: int = 403) -> None:
+        self.status = status
+        self.calls = 0
+
+    async def claim(self, worker: str, lease_seconds: int) -> Job | None:
+        self.calls += 1
+        raise SupabaseError(self.status, '{"message":"permission denied for schema stratum"}')
+
+    async def settle(self, job: Job, worker: str, values: dict[str, Any]) -> bool:
+        raise AssertionError("nothing was claimed")
+
+
+@pytest.mark.parametrize("status", [401, 403])
+async def test_a_refused_key_stops_every_loop_with_one_clear_message(
+    world: World, status: int
+) -> None:
+    from stratum_worker.queue.worker import QueueRefused, run_pool
+
+    ledger = RefusingLedger(status)
+    stop = asyncio.Event()
+    with pytest.raises(QueueRefused, match="SUPABASE_SERVICE_ROLE_KEY"):
+        await asyncio.wait_for(
+            run_pool(
+                ledger,  # type: ignore[arg-type]
+                world.scoped,
+                Deps(settings=world.settings(), gateway=fake.gateway()),
+                concurrency=3,
+                stop=stop,
+                idle_s=0.01,
+            ),
+            timeout=5,
+        )
+    # At most one question per loop, then everything stops: no retry storm.
+    assert 1 <= ledger.calls <= 3 and stop.is_set()
+
+
+async def test_an_unreachable_queue_is_asked_less_often_each_time(world: World) -> None:
+    import httpx
+
+    class Down:
+        calls = 0
+
+        async def claim(self, worker: str, lease_seconds: int) -> Job | None:
+            Down.calls += 1
+            raise httpx.ConnectError("no route to host")
+
+        async def settle(self, job: Job, worker: str, values: dict[str, Any]) -> bool:
+            raise AssertionError("nothing was claimed")
+
+    loop = QueueWorker(
+        ledger=Down(),  # type: ignore[arg-type]
+        factory=world.scoped,
+        deps=Deps(settings=world.settings(), gateway=fake.gateway()),
+        worker_id="w-1",
+        idle_s=1.0,
+    )
+    assert [loop.pause(n) for n in (0, 1, 2, 3, 4, 5, 6)] == [1, 2, 4, 8, 16, 30, 30]
+    stop = asyncio.Event()
+    task = asyncio.create_task(loop.run(stop))
+    await asyncio.sleep(0.2)  # the first retry is 2s away
+    stop.set()
+    await asyncio.wait_for(task, timeout=3)
+    assert Down.calls == 1
+
+
+# --- what a person watching the worker sees -------------------------------------------
+
+
+async def test_each_job_gets_a_started_and_a_done_line(
+    world: World, caplog: pytest.LogCaptureFixture
+) -> None:
+    async def quick(job: Job, client: Supa, deps: Deps) -> dict[str, Any]:
+        return {}
+
+    job_id = await add_job(world, "agency-a")
+    with caplog.at_level("INFO", logger="stratum.queue"):
+        assert await worker(world, quick).run_once()
+    lines = [r.getMessage() for r in caplog.records if r.name == "stratum.queue"]
+    assert lines[0] == f"draft_post {job_id[:8]}: started, attempt 1 of 3"
+    assert lines[1].startswith(f"draft_post {job_id[:8]}: done in ")
+
+
+async def test_an_idle_worker_says_nothing(world: World, caplog: pytest.LogCaptureFixture) -> None:
+    async def never(job: Job, client: Supa, deps: Deps) -> dict[str, Any]:
+        raise AssertionError("no job was queued")
+
+    with caplog.at_level("INFO"):
+        assert not await worker(world, never).run_once()
+    assert caplog.records == []
+
+
+def test_polling_requests_are_not_logged_one_by_one() -> None:
+    import logging
+
+    from stratum_worker.queue.worker import configure_logging
+
+    configure_logging()
+    assert logging.getLogger("httpx").getEffectiveLevel() == logging.WARNING
+
+
+async def test_a_dropped_connection_is_one_line_and_recovery_is_announced(
+    world: World, caplog: pytest.LogCaptureFixture
+) -> None:
+    import httpx
+
+    class Blip:
+        """Fails twice the way a sleeping laptop does, then answers normally."""
+
+        calls = 0
+
+        async def claim(self, worker: str, lease_seconds: int) -> Job | None:
+            Blip.calls += 1
+            if Blip.calls == 1:
+                raise httpx.ReadError("connection reset")
+            if Blip.calls == 2:
+                raise httpx.ReadTimeout("timed out")
+            return None
+
+        async def settle(self, job: Job, worker: str, values: dict[str, Any]) -> bool:
+            raise AssertionError("nothing was claimed")
+
+    loop = QueueWorker(
+        ledger=Blip(),  # type: ignore[arg-type]
+        factory=world.scoped,
+        deps=Deps(settings=world.settings(), gateway=fake.gateway()),
+        worker_id="w-1",
+        idle_s=0.001,
+    )
+    stop = asyncio.Event()
+    with caplog.at_level("INFO", logger="stratum.queue"):
+        task = asyncio.create_task(loop.run(stop))
+        while Blip.calls < 3:
+            await asyncio.sleep(0.01)
+        stop.set()
+        await asyncio.wait_for(task, timeout=3)
+    lines = [r.getMessage() for r in caplog.records]
+    assert lines[0].startswith("queue unreachable (ReadError), next try in")
+    assert lines[1].startswith("queue unreachable (ReadTimeout), next try in")
+    assert lines[2] == "queue reachable again after 2 failed tries"
+    assert all(r.exc_info is None for r in caplog.records)
