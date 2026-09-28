@@ -361,3 +361,38 @@ async def test_an_unreachable_queue_is_asked_less_often_each_time(world: World) 
     stop.set()
     await asyncio.wait_for(task, timeout=3)
     assert Down.calls == 1
+
+
+# --- what a person watching the worker sees -------------------------------------------
+
+
+async def test_each_job_gets_a_started_and_a_done_line(
+    world: World, caplog: pytest.LogCaptureFixture
+) -> None:
+    async def quick(job: Job, client: Supa, deps: Deps) -> dict[str, Any]:
+        return {}
+
+    job_id = await add_job(world, "agency-a")
+    with caplog.at_level("INFO", logger="stratum.queue"):
+        assert await worker(world, quick).run_once()
+    lines = [r.getMessage() for r in caplog.records if r.name == "stratum.queue"]
+    assert lines[0] == f"draft_post {job_id[:8]}: started, attempt 1 of 3"
+    assert lines[1].startswith(f"draft_post {job_id[:8]}: done in ")
+
+
+async def test_an_idle_worker_says_nothing(world: World, caplog: pytest.LogCaptureFixture) -> None:
+    async def never(job: Job, client: Supa, deps: Deps) -> dict[str, Any]:
+        raise AssertionError("no job was queued")
+
+    with caplog.at_level("INFO"):
+        assert not await worker(world, never).run_once()
+    assert caplog.records == []
+
+
+def test_polling_requests_are_not_logged_one_by_one() -> None:
+    import logging
+
+    from stratum_worker.queue.worker import configure_logging
+
+    configure_logging()
+    assert logging.getLogger("httpx").getEffectiveLevel() == logging.WARNING

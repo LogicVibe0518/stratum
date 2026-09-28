@@ -178,6 +178,10 @@ class QueueWorker:
         if job is None:
             return False
         fields = {"agency_id": job.agency_id, "job_id": job.id, "worker": self.worker_id}
+        name = f"{job.kind} {job.id[:8]}"
+        log.info(
+            "%s: started, attempt %d of %d", name, job.attempts, job.max_attempts, extra=fields
+        )
         started = time.monotonic()
         try:
             handler = self.handlers.get(job.kind)
@@ -193,7 +197,11 @@ class QueueWorker:
             values = failed_values(job, describe_error(exc), elapsed_s=elapsed, permanent=permanent)
             kept = await self.ledger.settle(job, self.worker_id, values)
             log.warning(
-                "job failed",
+                "%s: failed after %.1fs, %s: %s",
+                name,
+                elapsed,
+                "will retry" if values["status"] == "queued" else "giving up",
+                values["last_error"],
                 extra={**fields, "attempt": job.attempts, "next": values["status"], "kept": kept},
                 exc_info=exc,
             )
@@ -207,7 +215,9 @@ class QueueWorker:
             "worker": self.worker_id,
         }
         if not await self.ledger.settle(job, self.worker_id, done_values(result)):
-            log.warning("lease lost before completion; result discarded", extra=fields)
+            log.warning("%s: lease lost before completion; result discarded", name, extra=fields)
+        else:
+            log.info("%s: done in %.1fs", name, work, extra=fields)
         return True
 
     async def run(self, stop: asyncio.Event) -> None:
@@ -298,6 +308,16 @@ def _load_factory(target: str) -> ClientFactory:
     return made  # type: ignore[no-any-return]
 
 
+def configure_logging() -> None:
+    """One readable line per job; silence while idle."""
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S"
+    )
+    # httpx logs every request at INFO, which for a worker asking "any jobs?" every
+    # second is a wall of identical lines that hides the ones that matter.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="stratum-queue", description=__doc__)
     parser.add_argument(
@@ -310,7 +330,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--fake-db", help="run against a local SQLite stand-in, no network")
     parser.add_argument("--model-delay", type=float, default=0.5, help="fake mode only")
     args = parser.parse_args(argv)
-    logging.basicConfig(level=logging.INFO)
+    configure_logging()
 
     ledger: Ledger
     if args.fake_db:
@@ -345,6 +365,10 @@ def main(argv: list[str] | None = None) -> None:
         for sig in (signal.SIGTERM, signal.SIGINT):
             with contextlib.suppress(NotImplementedError, RuntimeError):
                 loop.add_signal_handler(sig, stop.set)
+        log.info(
+            "stratum-queue: %d workers waiting for jobs. Quiet means idle. Ctrl+C to stop.",
+            args.concurrency,
+        )
         await run_pool(
             ledger, factory, deps, concurrency=args.concurrency, stop=stop, lease_seconds=args.lease
         )
