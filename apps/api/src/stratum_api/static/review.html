@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- The review token is in this page's URL. Never send it to another site, never index it. -->
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex, nofollow">
+<title>Review your posts</title>
+<style>
+  /* System fonts only: a third-party font request from a page whose URL is a credential
+     is a request we do not need to make. */
+  :root {
+    --bg: #ffffff; --surface: #fafafa; --line: #e4e4e7; --text: #09090b; --muted: #52525b;
+    --good: #15803d; --warn: #b45309; --bad: #b91c1c; --focus: #2563eb; --radius: 14px;
+    --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #09090b; --surface: #111113; --line: #27272a; --text: #fafafa; --muted: #a1a1aa;
+      --good: #22c55e; --warn: #f59e0b; --bad: #ef4444; --focus: #60a5fa; color-scheme: dark;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.5 var(--font);
+         -webkit-text-size-adjust: 100%; }
+  main { max-width: 560px; margin: 0 auto; padding: 20px 16px 64px; }
+  h1 { font-size: 22px; line-height: 1.25; margin: 4px 0 4px; letter-spacing: -0.01em; }
+  .muted { color: var(--muted); font-size: 14px; }
+  .progress { height: 6px; background: var(--line); border-radius: 99px; margin: 16px 0 24px;
+              overflow: hidden; }
+  .progress > span { display: block; height: 100%; background: var(--good);
+                     transition: width 200ms ease-out; }
+  article { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface);
+            margin: 0 0 20px; overflow: hidden; }
+  .stage { position: relative; background: #808080; touch-action: manipulation; }
+  .stage img { display: block; width: 100%; height: auto; }
+  .stage.pinning { cursor: crosshair; }
+  .pin { position: absolute; width: 28px; height: 28px; margin: -14px 0 0 -14px;
+         border: 3px solid #fff; border-radius: 50%; background: var(--bad);
+         box-shadow: 0 0 0 2px rgba(0,0,0,.35); pointer-events: none; }
+  .tabs { display: flex; gap: 6px; padding: 10px 12px 0; flex-wrap: wrap; }
+  .tabs button { font: inherit; font-size: 13px; padding: 4px 10px; border-radius: 99px;
+                 border: 1px solid var(--line); background: transparent; color: var(--muted); }
+  .tabs button[aria-pressed="true"] { color: var(--text); border-color: var(--text); }
+  .body { padding: 12px 16px 16px; }
+  .caption { white-space: pre-wrap; margin: 4px 0 14px; font-size: 15px; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; }
+  button.primary, button.secondary { font: inherit; font-weight: 600; min-height: 48px;
+    padding: 0 18px; border-radius: 12px; flex: 1; cursor: pointer; }
+  button.primary { background: var(--text); color: var(--bg); border: 1px solid var(--text); }
+  button.secondary { background: transparent; color: var(--text); border: 1px solid var(--line); }
+  button:focus-visible, textarea:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  button[disabled] { opacity: .5; }
+  textarea { width: 100%; min-height: 96px; font: inherit; color: inherit; background: var(--bg);
+             border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin: 0 0 10px; }
+  .status { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: 15px; }
+  .status.approved { color: var(--good); }
+  .status.changes { color: var(--warn); }
+  .said { margin: 6px 0 0; font-size: 14px; color: var(--muted); white-space: pre-wrap; }
+  .link { background: none; border: 0; padding: 0; color: var(--focus); font: inherit;
+          font-size: 14px; text-decoration: underline; cursor: pointer; margin-top: 10px; }
+  .err { color: var(--bad); font-size: 14px; margin: 8px 0 0; min-height: 1em; }
+  .empty { text-align: center; padding: 64px 8px; }
+</style>
+</head>
+<body>
+<main id="app" aria-live="polite"><p class="muted">Loading your posts…</p></main>
+<script>
+"use strict";
+// Everything that came from the agency, the client or a model is text, never markup.
+const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (ch) => ({
+  "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+}[ch]));
+const TOKEN = decodeURIComponent(location.pathname.split("/r/")[1] || "").split("/")[0];
+const $app = document.getElementById("app");
+let REVIEW = null;
+const state = {};  // item id -> { aspect, mode: "view" | "changes", pin, busy, error }
+
+async function call(path, options = {}) {
+  const r = await fetch(`/api/review/${encodeURIComponent(TOKEN)}${path}`, {
+    ...options, headers: { "Content-Type": "application/json" }, referrerPolicy: "no-referrer",
+  });
+  const text = await r.text();
+  let body = null;
+  try { body = JSON.parse(text); } catch { body = null; }
+  if (!r.ok) throw new Error((body && body.detail) || "Something went wrong. Please try again.");
+  return body;
+}
+
+function when(iso) {
+  return new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "long" });
+}
+
+function render() {
+  const items = REVIEW.items;
+  const done = items.filter((i) => i.decision && i.decision.verdict === "approved").length;
+  const pct = items.length ? Math.round((done / items.length) * 100) : 0;
+  $app.innerHTML = `
+    <p class="muted">${esc(REVIEW.agency)} · for ${esc(REVIEW.client)}</p>
+    <h1>${esc(REVIEW.title || "Your posts for review")}</h1>
+    <p class="muted">${done} of ${items.length} approved · link works until ${esc(when(REVIEW.expires_at))}</p>
+    <div class="progress" aria-hidden="true"><span style="width:${pct}%"></span></div>
+    ${items.map(card).join("")}`;
+  items.forEach(wire);
+}
+
+function card(item) {
+  const s = state[item.id];
+  const aspects = Object.keys(item.previews || {});
+  const src = (item.previews || {})[s.aspect] || "";
+  const decided = item.decision;
+  const pin = s.pin ? `<span class="pin" style="left:${s.pin.x * 100}%;top:${s.pin.y * 100}%"></span>` : "";
+  const tabs = aspects.length > 1 ? `<div class="tabs" role="group" aria-label="Format">${aspects
+    .map((a) => `<button data-aspect="${esc(a)}" aria-pressed="${a === s.aspect}">${esc(a)}</button>`)
+    .join("")}</div>` : "";
+  let actions;
+  if (s.mode === "changes") {
+    actions = `
+      <label class="muted" for="c-${esc(item.id)}">What should change? Tap the picture to show where.</label>
+      <textarea id="c-${esc(item.id)}" maxlength="2000" placeholder="e.g. make the phone number bigger">${esc(s.draft || "")}</textarea>
+      <div class="row">
+        <button class="primary" data-act="send" ${s.busy ? "disabled" : ""}>Send to designer</button>
+        <button class="secondary" data-act="cancel">Cancel</button>
+      </div>`;
+  } else if (decided) {
+    const label = decided.verdict === "approved" ? "Approved" : "Changes requested";
+    actions = `<div class="status ${esc(decided.verdict)}">${label}</div>
+      ${decided.comment ? `<p class="said">“${esc(decided.comment)}”</p>` : ""}
+      <button class="link" data-act="reopen">Change my answer</button>`;
+  } else {
+    actions = `<div class="row">
+        <button class="primary" data-act="approve" ${s.busy ? "disabled" : ""}>Approve</button>
+        <button class="secondary" data-act="changes">Request changes</button>
+      </div>`;
+  }
+  return `<article id="i-${esc(item.id)}">
+      ${tabs}
+      <div class="stage ${s.mode === "changes" ? "pinning" : ""}" data-stage>
+        <img src="${esc(src)}" alt="Post ${item.position + 1}, ${esc(s.aspect)} format" loading="lazy">${pin}
+      </div>
+      <div class="body">
+        ${item.caption ? `<p class="caption">${esc(item.caption)}</p>` : ""}
+        ${actions}
+        <p class="err" role="alert">${esc(s.error || "")}</p>
+      </div>
+    </article>`;
+}
+
+function wire(item) {
+  const el = document.getElementById(`i-${item.id}`);
+  const s = state[item.id];
+  el.querySelectorAll("[data-aspect]").forEach((b) => {
+    b.onclick = () => { s.aspect = b.dataset.aspect; s.pin = null; render(); };
+  });
+  const stage = el.querySelector("[data-stage]");
+  stage.onclick = (event) => {
+    if (s.mode !== "changes") return;
+    const box = stage.getBoundingClientRect();
+    s.draft = el.querySelector("textarea")?.value ?? s.draft;
+    s.pin = {
+      x: Math.min(1, Math.max(0, (event.clientX - box.left) / box.width)),
+      y: Math.min(1, Math.max(0, (event.clientY - box.top) / box.height)),
+    };
+    render();
+  };
+  el.querySelectorAll("[data-act]").forEach((b) => { b.onclick = () => act(item, b.dataset.act); });
+}
+
+async function act(item, what) {
+  const s = state[item.id];
+  s.error = "";
+  if (what === "changes" || what === "reopen") { s.mode = "changes"; s.draft = ""; render(); return; }
+  if (what === "cancel") { s.mode = "view"; s.pin = null; render(); return; }
+  const comment = what === "send"
+    ? (document.querySelector(`#i-${CSS.escape(item.id)} textarea`)?.value || "").trim() : "";
+  if (what === "send" && !comment) { s.error = "Tell your designer what to change."; render(); return; }
+  s.busy = true; render();
+  try {
+    item.decision = await call("/decide", { method: "POST", body: JSON.stringify({
+      item_id: item.id, verdict: what === "approve" ? "approved" : "changes",
+      comment, pin: what === "send" && s.pin ? { ...s.pin, aspect: s.aspect } : null,
+    }) });
+    s.mode = "view"; s.pin = null;
+  } catch (e) { s.error = e.message; }
+  s.busy = false; render();
+}
+
+(async () => {
+  try {
+    REVIEW = await call("");
+    REVIEW.items.forEach((i) => {
+      state[i.id] = { aspect: Object.keys(i.previews || {})[0] || "4:5", mode: "view", pin: null };
+    });
+    if (!REVIEW.items.length) {
+      $app.innerHTML = `<div class="empty"><h1>Nothing to review</h1></div>`;
+      return;
+    }
+    render();
+  } catch (e) {
+    $app.innerHTML = `<div class="empty"><h1>This link isn't working</h1>
+      <p class="muted">${esc(e.message)}</p></div>`;
+  }
+})();
+</script>
+</body>
+</html>
