@@ -11,9 +11,10 @@ from __future__ import annotations
 
 import asyncio
 import io
+import re
 import time
 import zipfile
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +28,16 @@ from stratum_spec.templates import Variants
 from stratum_worker.app.settings import Settings
 from stratum_worker.app.supa import Supa
 from stratum_worker.assets import AssetStore
+from stratum_worker.brand import (
+    Check,
+    LogoError,
+    Suggestion,
+    check_palette,
+    missing_tokens,
+    read_logo,
+    starter_kit,
+    suggest,
+)
 from stratum_worker.draft.bindings import binding_for
 from stratum_worker.draft.capacity import measure
 from stratum_worker.draft.compose import ComposeError, build_spec
@@ -44,6 +55,7 @@ from stratum_worker.gateway.tasks import (
 )
 
 OPS = TypeAdapter(list[EditOp])
+HEX = re.compile(r"#[0-9a-f]{6}")
 # Wide enough that a poster still looks right on a laptop, small enough that four of
 # them cross the network in the time one full-size PNG used to.
 PREVIEW_WIDTH = 720
@@ -79,8 +91,9 @@ async def render_preview(
     bound = {getattr(one, "asset", None) for one in spec.layers if getattr(one, "asset", None)}
     asset_paths = {s: await local_path(ctx, s) for s in bound if isinstance(s, str)}
     one = retarget(spec, aspect, load_variants(template))
+    kit = await kit_for(ctx, client, spec.brand_kit_version)
     png = await asyncio.to_thread(
-        render_poster, one, brand_of(client), assets=asset_paths, root=ctx.settings.repo_root
+        render_poster, one, kit, assets=asset_paths, root=ctx.settings.repo_root
     )
     data = preview(png)
     cache_preview(ctx, version["id"], aspect, data)
@@ -123,7 +136,29 @@ class Context:
 
 
 def brand_of(row: dict[str, Any]) -> BrandKit:
+    """The client's brand kit as it is NOW - for new drafts only."""
     return BrandKit.model_validate(row["brand"])
+
+
+async def kit_for(ctx: Context, client: dict[str, Any], version: int) -> BrandKit:
+    """The brand kit a poster was made with, whatever the client's kit is today.
+
+    Every version of a kit is kept (the brand_kits table, written by the database),
+    and a poster names the version it used. Drawing an old poster with today's kit
+    would quietly recolour something the client already approved.
+    """
+    current = brand_of(client)
+    if current.version == version:
+        return current
+    rows = await ctx.supa.select(
+        "brand_kits", client_id=f"eq.{client['id']}", version=f"eq.{version}", select="kit"
+    )
+    if not rows:
+        raise DraftError(
+            f"Version {version} of {client['name']}'s brand kit is missing, so this poster "
+            f"can't be drawn in the colours it was made with."
+        )
+    return BrandKit.model_validate(rows[0]["kit"])
 
 
 def rules_of(row: dict[str, Any]) -> ClientRules:
@@ -268,15 +303,14 @@ async def store_image(ctx: Context, client_id: str | None, data: bytes, *, kind:
 
 async def render_versions(
     ctx: Context,
-    client: dict[str, Any],
     post: dict[str, Any],
     spec: PosterSpec,
     variants: dict[str, Any],
     asset_paths: dict[str, str],
+    kit: BrandKit,
 ) -> tuple[list[dict[str, Any]], list[Flag]]:
     from stratum_worker.render import render_poster
 
-    kit = brand_of(client)
     laid_out = {aspect: retarget(spec, aspect, variants) for aspect in post["aspects"]}
 
     def draw(aspect: str) -> dict[str, Any]:
@@ -429,8 +463,14 @@ async def draft(ctx: Context, post: dict[str, Any], client: dict[str, Any]) -> d
             )
         )
 
+    # The newest logo: uploading a new one is how a client's logo is replaced.
     logos = await ctx.supa.select(
-        "assets", client_id=f"eq.{client['id']}", kind="eq.logo", select="sha256", limit="1"
+        "assets",
+        client_id=f"eq.{client['id']}",
+        kind="eq.logo",
+        select="sha256",
+        order="created_at.desc",
+        limit="1",
     )
     if binding.logo:
         if not logos:
@@ -441,10 +481,11 @@ async def draft(ctx: Context, post: dict[str, Any], client: dict[str, Any]) -> d
 
     texts = {layer: getattr(words, field) for layer, field in binding.texts.items()}
     texts.update(binding.fixed or {})
-    spec = build_spec(template, brand_of(client), texts, assets)
+    kit = brand_of(client)
+    spec = build_spec(template, kit, texts, assets)
 
     asset_paths = {sha: await local_path(ctx, sha) for sha in set(assets.values())}
-    renders, layout_flags = await render_versions(ctx, client, post, spec, variants, asset_paths)
+    renders, layout_flags = await render_versions(ctx, post, spec, variants, asset_paths, kit)
     flags.extend(layout_flags)
     flags.extend(check_copy(words, rules_of(client), post["brief"]))
 
@@ -478,7 +519,9 @@ async def tweak(
         raise DraftError("this post has no draft yet")
     latest = versions[0]
     spec = PosterSpec.model_validate(latest["spec"])
-    kit = brand_of(client)
+    # An edit keeps the colours the poster was made with. Moving a post onto a newer
+    # brand kit is its own decision, not a side effect of "make the logo bigger".
+    kit = await kit_for(ctx, client, spec.brand_kit_version)
 
     # Each layer is described WITH the number of characters it holds. A model asked
     # to "shorten the headline" otherwise has no idea what short means here, and
@@ -539,7 +582,7 @@ async def tweak(
         getattr(layer, "asset", None) for layer in changed.layers if getattr(layer, "asset", None)
     }
     asset_paths = {sha: await local_path(ctx, sha) for sha in shas if isinstance(sha, str)}
-    renders, flags = await render_versions(ctx, client, post, changed, variants, asset_paths)
+    renders, flags = await render_versions(ctx, post, changed, variants, asset_paths, kit)
 
     # An edit can change the words on the poster, so the claims are checked again -
     # against everything a HUMAN has written about this post. A designer asking for
@@ -605,7 +648,8 @@ async def _prepare(
     variants = load_variants(ctx.settings.templates_dir / f"{post['template_id']}.json")
     bound = {getattr(one, "asset", None) for one in spec.layers if getattr(one, "asset", None)}
     assets = {s: await local_path(ctx, s) for s in bound if isinstance(s, str)}
-    return _Prepared(spec, variants, brand_of(client), assets)
+    kit = await kit_for(ctx, client, spec.brand_kit_version)
+    return _Prepared(spec, variants, kit, assets)
 
 
 def caption_text(post: dict[str, Any]) -> str:
@@ -680,12 +724,17 @@ async def bundle(
 
 
 __all__ = [
+    "BrandConflict",
     "ComposeError",
     "Context",
     "DraftError",
+    "brand_suggestion",
     "bundle",
     "draft",
     "export_deck",
+    "kit_for",
+    "save_brand",
+    "starter_kit",
     "store_image",
     "tweak",
 ]
@@ -761,8 +810,9 @@ async def quick(
     path = ctx.settings.templates_dir / f"{post['template_id']}.json"
     bound = {getattr(one, "asset", None) for one in changed.layers if getattr(one, "asset", None)}
     asset_paths = {s: await local_path(ctx, s) for s in bound if isinstance(s, str)}
+    kit = await kit_for(ctx, client, changed.brand_kit_version)
     renders, flags = await render_versions(
-        ctx, client, post, changed, load_variants(path), asset_paths
+        ctx, post, changed, load_variants(path), asset_paths, kit
     )
     saved, _ = await asyncio.gather(
         save_version(
@@ -787,3 +837,124 @@ async def quick(
     version["outcome"] = "applied"
     version["seconds"] = round(time.perf_counter() - started, 2)
     return version
+
+
+# --- brand kits -------------------------------------------------------------------
+#
+# Reading a logo and saving a palette are both quick (tens of milliseconds, one
+# write), so they run in the request rather than through the queue.
+
+
+class BrandConflict(Exception):
+    """Someone saved this client's brand kit after the caller last read it."""
+
+
+async def newest_logo(ctx: Context, client_id: str) -> str | None:
+    rows = await ctx.supa.select(
+        "assets",
+        client_id=f"eq.{client_id}",
+        kind="eq.logo",
+        select="sha256",
+        order="created_at.desc",
+        limit="1",
+    )
+    return str(rows[0]["sha256"]) if rows else None
+
+
+async def brand_suggestion(
+    ctx: Context, client: dict[str, Any], sha: str | None = None
+) -> Suggestion:
+    """A palette read from the client's logo - the newest one unless told which.
+
+    Nothing is saved. A designer sees the suggestion, changes what they disagree
+    with, and saves; a model never decides a client's colours.
+    """
+    if sha is None:
+        sha = await newest_logo(ctx, client["id"])
+        if sha is None:
+            raise DraftError(f"{client['name']} has no logo yet. Upload one first.")
+    else:
+        found = await ctx.supa.select(
+            "assets", client_id=f"eq.{client['id']}", sha256=f"eq.{sha}", kind="eq.logo"
+        )
+        if not found:
+            raise DraftError(f"That file is not one of {client['name']}'s logos.")
+    data = Path(await local_path(ctx, sha)).read_bytes()
+    try:
+        reading = await asyncio.to_thread(read_logo, data)
+    except LogoError as exc:
+        raise DraftError(str(exc)) from exc
+    return replace(suggest(reading, brand_of(client)), logo=sha)
+
+
+def _palette_problems(palette: dict[str, str]) -> list[str]:
+    problems = [f"{token} is missing" for token in missing_tokens(palette)]
+    for token, value in palette.items():
+        if not isinstance(value, str) or not HEX.fullmatch(value):
+            problems.append(f"{token} must be a colour like #12264a")
+    return problems
+
+
+async def save_brand(
+    ctx: Context,
+    client: dict[str, Any],
+    palette: dict[str, str],
+    *,
+    expected_version: int,
+    suggested: dict[str, str] | None = None,
+) -> tuple[BrandKit, tuple[Check, ...]]:
+    """Save new colours as the client's next brand-kit version.
+
+    `expected_version` is the version the designer was looking at. If someone saved
+    since, nothing is written and BrandConflict says so: the second designer would
+    otherwise silently undo the first one's colours.
+
+    The database numbers the new version and keeps the old one (see the
+    brand_kit_history migration). Earlier posters keep their colours; posts drafted
+    from now on use these.
+    """
+    palette = {token: value.lower() for token, value in palette.items()}
+    problems = _palette_problems(palette)
+    if problems:
+        raise DraftError("The palette can't be saved: " + "; ".join(problems) + ".")
+    current = brand_of(client)
+    if current.version != expected_version:
+        raise BrandConflict(_CONFLICT)
+    kit = current.model_copy(update={"palette": {**current.palette, **palette}})
+    rows = await ctx.supa.update(
+        "clients",
+        {"brand": kit.model_dump(mode="json")},
+        id=f"eq.{client['id']}",
+        **{"brand->>version": f"eq.{expected_version}"},
+    )
+    if not rows:
+        raise BrandConflict(_CONFLICT)
+    saved = BrandKit.model_validate(rows[0]["brand"])
+    if suggested is not None and ctx.user_id:
+        # Which suggested colours a designer keeps, and which they change, is how a
+        # better suggester gets trained later. Recorded now, because a decision not
+        # recorded when it happened can never be recovered.
+        changed = sorted(t for t in palette if suggested.get(t, "").lower() != palette[t])
+        await ctx.supa.insert(
+            "decision_log",
+            {
+                "agency_id": ctx.agency_id,
+                "client_id": client["id"],
+                "kind": "suggestion_accepted",
+                "actor": ctx.user_id,
+                "detail": {
+                    "what": "brand_palette",
+                    "version": saved.version,
+                    "suggested": suggested,
+                    "saved": palette,
+                    "changed": changed,
+                },
+            },
+        )
+    return saved, check_palette(saved.palette)
+
+
+_CONFLICT = (
+    "Someone else changed this brand kit since you opened it. Reload to see their "
+    "colours, then make your change again."
+)

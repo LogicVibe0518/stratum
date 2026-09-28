@@ -38,8 +38,9 @@ and the hard logic; Cursor does the rest; Claude reviews before anything merges.
 | C2 | Deploy: Docker image, API and worker on Railway | Cursor | M8 merged |
 | M13 | Client review link: tables, functions, routes, client page | Claude (done, #12) | M8 |
 | C5 | Send for review, review links, client feedback, page polish | Cursor | C1, M13 |
-| M14 | Export: PowerPoint for Canva plus the zip | Claude (done) | C1 |
+| M14 | Export: PowerPoint for Canva plus the zip | Claude (done, #14) | C1 |
 | C1b | Polish from the C1 review, and "Open in Canva" buttons | Cursor | M14 |
-| M9 + C3 | Brand kit from the logo, onboarding form | Claude, then Cursor | C1 |
+| M9 | Brand kit from the logo; brand kits keep their history | Claude (done) | C1 |
+| C3 | Brand panel and sheet, new-client form asks for the logo | Cursor | M9, C1b |
 | M10–M12 | Real photos, layout variants, top three with a ranker | Claude, Cursor on adapters | C1 |
 | M16 | The ranker learns the team's picks | Claude | M12 in use |
