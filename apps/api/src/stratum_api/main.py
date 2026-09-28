@@ -19,12 +19,13 @@ from typing import Annotated, Any, Literal
 
 from fastapi import Depends, FastAPI, Form, Header, HTTPException, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response
-from pydantic import BaseModel, Field
-from stratum_spec import SCHEMA_VERSION
+from pydantic import BaseModel, Field, ValidationError
+from stratum_spec import SCHEMA_VERSION, BrandKit
 from stratum_spec.models import Aspect
 from stratum_worker.app import reviews, service
 from stratum_worker.app.settings import Settings, settings
 from stratum_worker.app.supa import Supa, SupabaseError, close_pool
+from stratum_worker.brand import Check, Suggestion, check_palette, is_starter
 from stratum_worker.draft.bindings import BINDINGS
 from stratum_worker.draft.compose import ComposeError
 from stratum_worker.draft.pipeline import DraftError
@@ -139,6 +140,11 @@ async def _draft_error(_: Any, exc: Exception) -> Response:
     return Response(content=str(exc)[:500], status_code=422, media_type="text/plain")
 
 
+@app.exception_handler(service.BrandConflict)
+async def _brand_conflict(_: Any, exc: service.BrandConflict) -> Response:
+    return Response(content=str(exc)[:300], status_code=409, media_type="text/plain")
+
+
 @app.exception_handler(NoProviderAvailable)
 async def _no_provider(_: Any, exc: NoProviderAvailable) -> Response:
     """503, not 500: the server is fine, its configuration is not."""
@@ -200,7 +206,8 @@ class NewClient(BaseModel):
     slug: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{0,62}$")
     name: str = Field(min_length=1, max_length=200)
     trade: str = ""
-    brand: dict[str, Any]
+    # Leave out to start with plain charcoal-and-grey colours until the logo is read.
+    brand: dict[str, Any] | None = None
     rules: dict[str, Any]
 
 
@@ -213,11 +220,26 @@ async def list_clients(ctx: service.Context = Depends(context)) -> list[dict[str
 
 @app.post("/api/clients")
 async def create_client(body: NewClient, ctx: service.Context = Depends(context)) -> dict[str, Any]:
+    if body.brand is not None:
+        try:
+            BrandKit.model_validate(body.brand)
+        except ValidationError as exc:
+            raise HTTPException(422, "that brand kit is not usable: " + str(exc)[:200]) from exc
+        rows = await ctx.supa.insert(
+            "clients",
+            {"agency_id": ctx.agency_id, **body.model_dump()},
+            upsert=True,
+            on_conflict="agency_id,slug",
+        )
+        return rows[0]
+    # Without a brand kit, making a client that already exists opens it. It must not
+    # reset their colours to the starter kit because someone typed the name again.
+    existing = await ctx.supa.select("clients", slug=f"eq.{body.slug}")
+    if existing:
+        return existing[0]
+    starter = service.starter_kit(body.slug).model_dump(mode="json")
     rows = await ctx.supa.insert(
-        "clients",
-        {"agency_id": ctx.agency_id, **body.model_dump()},
-        upsert=True,
-        on_conflict="agency_id,slug",
+        "clients", {"agency_id": ctx.agency_id, **body.model_dump(), "brand": starter}
     )
     return rows[0]
 
@@ -251,6 +273,84 @@ async def upload_asset(
     sha = await service.store_image(ctx, client_id, data, kind=kind)
     rows = await ctx.supa.select("assets", sha256=f"eq.{sha}", select="*")
     return rows[0] if rows else {"sha256": sha}
+
+
+# --- brand kits -------------------------------------------------------------------
+
+
+class BrandSave(BaseModel):
+    palette: dict[str, str]
+    # The version the designer was looking at. If someone saved since, this is a 409.
+    version: int = Field(ge=1)
+    # The suggestion they started from, if any, so what they changed is recorded.
+    suggested: dict[str, str] | None = None
+
+
+def _checks(checks: tuple[Check, ...]) -> list[dict[str, Any]]:
+    return [{"what": c.what, "ratio": c.ratio, "needs": c.needs, "ok": c.ok} for c in checks]
+
+
+def _suggestion(made: Suggestion) -> dict[str, Any]:
+    return {
+        "kit": made.kit.model_dump(mode="json"),
+        "tokens": {
+            token: {"hex": c.hex, "source": c.source, "why": c.why}
+            for token, c in made.tokens.items()
+        },
+        "checks": _checks(made.checks),
+        "notes": list(made.notes),
+        "swatches": [{"hex": s.hex, "share": s.share} for s in made.reading.swatches],
+        "tone": made.reading.tone,
+        "logo": made.logo,
+    }
+
+
+async def _client(ctx: service.Context, client_id: str) -> dict[str, Any]:
+    rows = await ctx.supa.select("clients", id=f"eq.{client_id}")
+    if not rows:
+        raise HTTPException(404, "no such client")
+    return rows[0]
+
+
+@app.get("/api/clients/{client_id}/brand")
+async def get_brand(client_id: str, ctx: service.Context = Depends(context)) -> dict[str, Any]:
+    """The client's colours now, how readable they are, and earlier versions."""
+    client = await _client(ctx, client_id)
+    kit = service.brand_of(client)
+    history = await ctx.supa.select(
+        "brand_kits",
+        client_id=f"eq.{client_id}",
+        select="version,created_at",
+        order="version.desc",
+        limit="20",
+    )
+    return {
+        "kit": kit.model_dump(mode="json"),
+        "starter": is_starter(kit),
+        "checks": _checks(check_palette(kit.palette)),
+        "history": history,
+    }
+
+
+@app.get("/api/clients/{client_id}/brand/suggestion")
+async def suggest_brand(
+    client_id: str, logo: str | None = None, ctx: service.Context = Depends(context)
+) -> dict[str, Any]:
+    """Colours read from the newest logo (or the one named). Nothing is saved."""
+    client = await _client(ctx, client_id)
+    return _suggestion(await service.brand_suggestion(ctx, client, logo))
+
+
+@app.put("/api/clients/{client_id}/brand")
+async def save_brand(
+    client_id: str, body: BrandSave, ctx: service.Context = Depends(context)
+) -> dict[str, Any]:
+    """Save a palette as the client's next brand-kit version. Old posters keep theirs."""
+    client = await _client(ctx, client_id)
+    kit, checks = await service.save_brand(
+        ctx, client, body.palette, expected_version=body.version, suggested=body.suggested
+    )
+    return {"kit": kit.model_dump(mode="json"), "checks": _checks(checks)}
 
 
 # --- posts ------------------------------------------------------------------------
