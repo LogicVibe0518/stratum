@@ -22,19 +22,13 @@ from stratum_spec import (
     TextLayer,
 )
 
-from stratum_worker.render.text import fit, load_metrics
+from stratum_worker.render.layout import box_px, place_text
 
 PLACEHOLDER_FILL = "#d8d8d8"
 PLACEHOLDER_STROKE = "#b4b4b4"
 DIM_FILL = "#000000"
 # blur=1.0 means a standard deviation of 4% of the canvas's shorter side.
 BLUR_SCALE = 0.04
-
-
-def _px(spec: PosterSpec, layer: Layer) -> tuple[float, float, float, float]:
-    width, height = spec.canvas.size
-    box = layer.box
-    return box.x * width, box.y * height, box.w * width, box.h * height
 
 
 def _open_group(layer: Layer, x: float, y: float, w: float, h: float) -> str:
@@ -122,35 +116,16 @@ def _shape_svg(layer: ShapeLayer, kit: BrandKit, geom: tuple[float, ...]) -> str
     )
 
 
-def _text_svg(
-    layer: TextLayer, spec: PosterSpec, kit: BrandKit, geom: tuple[float, ...], root: Path
-) -> str:
-    x, y, w, h = geom
-    _, canvas_h = spec.canvas.size
-    face = kit.font(layer.font)
-    metrics = load_metrics(str(root / face.file))
-    content = layer.content.upper() if layer.uppercase else layer.content
-    fitted = fit(
-        content,
-        metrics,
-        box_w_px=w,
-        box_h_px=h,
-        min_px=layer.min_size * canvas_h,
-        max_px=layer.max_size * canvas_h,
-        max_lines=layer.max_lines,
-        line_height=face.line_height,
-    )
-    anchor = {"left": "start", "center": "middle", "right": "end"}[layer.align]
-    anchor_x = {"left": x, "center": x + w / 2, "right": x + w}[layer.align]
-    # Vertically centre the block inside its box, then place each baseline.
-    top = y + (h - fitted.height_px) / 2
+def _text_svg(layer: TextLayer, spec: PosterSpec, kit: BrandKit, root: Path) -> str:
+    placed = place_text(layer, spec, kit, root)
+    anchor = {"left": "start", "center": "middle", "right": "end"}[placed.align]
     parts = [
-        f'<text font-family="{escape(face.family)}" font-size="{fitted.size_px:.2f}" '
-        f'font-weight="{face.weight}" fill="{kit.color(layer.color)}" text-anchor="{anchor}">'
+        f'<text font-family="{escape(placed.family)}" font-size="{placed.size_px:.2f}" '
+        f'font-weight="{placed.weight}" fill="{placed.color}" text-anchor="{anchor}">'
     ]
-    for index, line in enumerate(fitted.lines):
-        baseline = top + fitted.line_height_px * (index + 0.78)
-        parts.append(f'<tspan x="{anchor_x:.2f}" y="{baseline:.2f}">{escape(line)}</tspan>')
+    for index, line in enumerate(placed.lines):
+        x, y = placed.anchor_x, placed.baseline(index)
+        parts.append(f'<tspan x="{x:.2f}" y="{y:.2f}">{escape(line)}</tspan>')
     parts.append("</text>")
     return "".join(parts)
 
@@ -173,10 +148,10 @@ def build_svg(
     for layer in spec.layers:
         if not layer.visible:
             continue
-        geom = _px(spec, layer)
+        geom = box_px(spec, layer)
         body.append(_open_group(layer, *geom))
         if isinstance(layer, TextLayer):
-            body.append(_text_svg(layer, spec, kit, geom, root))
+            body.append(_text_svg(layer, spec, kit, root))
         elif isinstance(layer, ShapeLayer):
             body.append(_shape_svg(layer, kit, geom))
         else:
