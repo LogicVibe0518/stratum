@@ -173,6 +173,11 @@ class PgBackend:
 
 
 async def fresh_database() -> AsyncIterator[tuple[Any, str]]:
+    # Skip here, not only in each test's decorator: with no URL, asyncpg quietly tries
+    # localhost:5432, and a test that forgot the decorator fails on any laptop without
+    # Postgres. (One did, on the first push.)
+    if not PG_URL:
+        pytest.skip("set STRATUM_TEST_DATABASE_URL")
     asyncpg = pytest.importorskip("asyncpg")
     name = f"stratum_test_{uuid.uuid4().hex[:10]}"
     admin = await asyncpg.connect(PG_URL)
@@ -357,6 +362,7 @@ async def test_the_database_decides_who_asked_for_a_job() -> None:
         assert await requester(job) == bob
 
 
+@pytest.mark.skipif(not PG_URL, reason="set STRATUM_TEST_DATABASE_URL")
 async def test_the_service_role_key_can_claim_and_settle_and_nothing_else() -> None:
     """The worker's key reads every agency's queue, so what it may write is kept tiny."""
     async for conn, _ in fresh_database():
