@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from stratum_spec import BrandKit, Layer, PosterSpec, TextLayer
+from stratum_spec import BrandKit, Layer, LogoPlate, PosterSpec, TextLayer
 
 from stratum_worker.render.text import fit, load_metrics
 
@@ -27,6 +27,46 @@ def box_px(spec: PosterSpec, layer: Layer) -> tuple[float, float, float, float]:
     width, height = spec.canvas.size
     box = layer.box
     return box.x * width, box.y * height, box.w * width, box.h * height
+
+
+Geom = tuple[float, float, float, float]
+
+
+def contained(box: Geom, image_size: tuple[int, int]) -> Geom:
+    """Where an image drawn "contain" really lands: as large as fits, centred.
+
+    Logos and cutouts are always drawn this way (never cropped), so a wide wordmark
+    in a squarish box fills its width and only part of its height.
+    """
+    x, y, w, h = box
+    image_w, image_h = image_size
+    scale = min(w / image_w, h / image_h)
+    shown_w, shown_h = image_w * scale, image_h * scale
+    return x + (w - shown_w) / 2, y + (h - shown_h) / 2, shown_w, shown_h
+
+
+def plated(box: Geom, image_size: tuple[int, int], plate: LogoPlate) -> tuple[Geom, Geom, float]:
+    """A logo on its panel, both kept inside the logo's box.
+
+    The panel hugs the logo as drawn, with `pad` of space on every side (a fraction
+    of the logo's shorter side), and the pair is scaled to fit the box the template
+    gave the logo. Growing outwards instead would run the panel into whatever the
+    template put next to the logo, usually the offer text.
+
+    Returns (where the logo is drawn, where the panel is drawn, corner radius).
+    """
+    x, y, w, h = box
+    image_w, image_h = image_size
+    short = min(image_w, image_h)
+    scale = min(w / (image_w + 2 * plate.pad * short), h / (image_h + 2 * plate.pad * short))
+    logo_w, logo_h, pad = image_w * scale, image_h * scale, plate.pad * short * scale
+    panel_w, panel_h = logo_w + 2 * pad, logo_h + 2 * pad
+    panel_x, panel_y = x + (w - panel_w) / 2, y + (h - panel_h) / 2
+    return (
+        (panel_x + pad, panel_y + pad, logo_w, logo_h),
+        (panel_x, panel_y, panel_w, panel_h),
+        plate.radius * min(panel_w, panel_h),
+    )
 
 
 @dataclass(frozen=True)

@@ -71,11 +71,11 @@ def test_a_black_logo_leads_with_black_and_asks_for_an_accent() -> None:
 
 
 def test_a_logo_the_same_colour_as_its_backdrop_is_called_out() -> None:
-    # A navy logo on a navy band vanishes. The check says so in plain words.
+    # A navy logo on a navy band would vanish. The check says so, and what is done about it.
     made = suggest(read_logo(draw(two_colour())), starter_kit("x"))
     logo_on_main = next(c for c in made.checks if c.what == "The logo on the main colour")
     assert not logo_on_main.ok
-    assert any("won't show" in note for note in made.notes)
+    assert any("gets a panel" in note for note in made.notes)
 
 
 def test_a_gradient_takes_its_far_end_as_the_accent() -> None:

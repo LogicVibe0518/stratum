@@ -13,8 +13,14 @@ from stratum_spec.models import SCHEMA_VERSION, PosterSpec
 
 Upgrader = Callable[[dict[str, Any]], dict[str, Any]]
 
-# version N -> function producing version N+1. Empty until the first bump.
-UPGRADERS: dict[int, Upgrader] = {}
+
+def _v1_to_v2(data: dict[str, Any]) -> dict[str, Any]:
+    """Schema 2 added LogoLayer.plate. A version-1 poster has no plate: unchanged."""
+    return {**data, "schema_version": 2}
+
+
+# version N -> function producing version N+1.
+UPGRADERS: dict[int, Upgrader] = {1: _v1_to_v2}
 
 
 class UnknownSchemaVersion(ValueError):

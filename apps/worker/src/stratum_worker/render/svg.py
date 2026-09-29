@@ -11,6 +11,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from xml.sax.saxutils import escape
 
+from PIL import Image
 from stratum_spec import (
     BrandKit,
     CutoutLayer,
@@ -22,7 +23,7 @@ from stratum_spec import (
     TextLayer,
 )
 
-from stratum_worker.render.layout import box_px, place_text
+from stratum_worker.render.layout import box_px, place_text, plated
 
 PLACEHOLDER_FILL = "#d8d8d8"
 PLACEHOLDER_STROKE = "#b4b4b4"
@@ -72,8 +73,20 @@ def _image_svg(
     spec: PosterSpec,
     geom: tuple[float, ...],
     href: str | None,
+    kit: BrandKit,
 ) -> str:
     x, y, w, h = geom
+    plate = ""
+    if href is not None and isinstance(layer, LogoLayer) and layer.plate is not None:
+        # The panel first, then the logo drawn exactly inside it.
+        with Image.open(href) as image:
+            size = image.size
+        (x, y, w, h), (px, py, pw, ph), radius = plated(geom, size, layer.plate)  # type: ignore[arg-type]
+        plate = (
+            f'<rect x="{px:.2f}" y="{py:.2f}" width="{pw:.2f}" height="{ph:.2f}" '
+            f'rx="{radius:.2f}" fill="{kit.color(layer.plate.fill)}" '
+            f'fill-opacity="{layer.plate.opacity:.4f}"/>'
+        )
     if href is None:
         body = _placeholder(x, y, w, h, layer.type)
     else:
@@ -93,6 +106,7 @@ def _image_svg(
         )
         if isinstance(layer, ImageLayer) and layer.blur > 0:
             body = _blurred(layer, spec, geom, body)
+        body = plate + body
     if isinstance(layer, ImageLayer) and layer.dim > 0:
         body += (
             f'<rect x="{x:.2f}" y="{y:.2f}" width="{w:.2f}" height="{h:.2f}" '
@@ -156,7 +170,7 @@ def build_svg(
             body.append(_shape_svg(layer, kit, geom))
         else:
             href = assets.get(layer.asset) if layer.asset else None
-            body.append(_image_svg(layer, spec, geom, href))
+            body.append(_image_svg(layer, spec, geom, href, kit))
         body.append("</g>")
     body.append("</svg>")
     return "".join(body)
