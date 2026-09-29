@@ -19,3 +19,7 @@ def test_previews_stay_brand_neutral() -> None:
     lowered = PAGE.lower()
     for name in ("instagram", "facebook", "tiktok", "linkedin"):
         assert name not in lowered
+
+
+def test_the_page_offers_the_canva_export() -> None:
+    assert "/canva.pptx?aspect=" in PAGE
