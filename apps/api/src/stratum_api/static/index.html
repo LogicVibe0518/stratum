@@ -641,6 +641,73 @@ dialog::backdrop {
   backdrop-filter: blur(8px);
 }
 #clientdialog { width: min(440px, calc(100vw - 32px)); }
+#branddialog {
+  width: min(520px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+}
+.brand-swatches, .found-row { display: flex; flex-wrap: wrap; gap: 10px 12px; }
+.brand-chip {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 72px;
+  min-width: 64px;
+}
+.brand-chip .swatch, .found-chip .swatch, .sample-accent {
+  display: block;
+  border: 1px solid var(--line);
+  background: var(--subtle);
+}
+.brand-chip .swatch { width: 100%; height: 28px; border-radius: 6px; }
+.brand-label { font-size: 12px; }
+.brand-hex { font-size: 11px; color: var(--subtle); }
+#brandmeta { margin-top: 10px; font-size: 13px; }
+#brandread:disabled { opacity: 0.45; }
+#clogo { height: auto; }
+#foundlabel { margin: 0 0 8px; color: var(--muted); font-size: 13px; font-weight: 500; }
+.found-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.found-chip .swatch { width: 14px; height: 14px; border-radius: 4px; flex: none; }
+.token-row label { margin-bottom: 4px; }
+.token-controls { display: flex; gap: 8px; align-items: center; }
+.token-controls input[type="color"] { width: 36px; height: 36px; padding: 2px; flex: none; }
+.token-controls input[type="text"] { flex: 1; min-width: 0; }
+.token-why { margin: 4px 0 0; font-size: 13px; }
+.sample {
+  margin-top: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.sample-hero {
+  aspect-ratio: 16 / 9;
+  display: grid;
+  place-items: center;
+  font-weight: 600;
+  font-size: 22px;
+  letter-spacing: -0.02em;
+  background: var(--subtle);
+}
+.sample-page { padding: 12px 14px 14px; background: var(--subtle); }
+.sample-page p { margin: 0; }
+#samplebody { font-size: 15px; }
+#samplemuted { font-size: 12px; margin-top: 4px; }
+.sample .empty-ink { color: var(--muted); }
+.sample-accent { height: 4px; }
+#brandchecks { margin-top: 14px; display: flex; flex-direction: column; gap: 6px; }
+#brandchecks:empty, #brandnotes:empty { display: none; }
+#brandnotes { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+.note-line { margin: 0; font-size: 13px; }
+.check-row { display: flex; align-items: center; gap: 8px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--subtle); flex: none; }
+.dot.good { background: var(--good); }
+.dot.bad { background: var(--bad); }
 #lightbox {
   width: min(960px, calc(100vw - 32px));
   max-height: calc(100dvh - 32px);
@@ -717,6 +784,18 @@ button, input, select, textarea, .card, .badge, .drop, .switch-ui, .toast {
   .wordmark { display: none; }
   .bar-right { flex-wrap: nowrap; width: auto; margin-left: auto; }
   .needs-row { grid-template-columns: minmax(0, 1fr) auto; }
+}
+@media (max-width: 600px) {
+  .brand-chip { flex: 1 1 calc(25% - 12px); min-width: calc(25% - 12px); }
+  #branddialog {
+    width: 100vw;
+    height: 100dvh;
+    max-width: 100vw;
+    max-height: 100dvh;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+  }
 }
 </style>
 </head>
@@ -813,6 +892,16 @@ button, input, select, textarea, .card, .badge, .drop, .switch-ui, .toast {
           <p class="hint">⌘/Ctrl+Enter from the brief</p>
           <p class="field-error" id="makeerr" role="alert"></p>
         </form>
+        <section class="card" id="brandpanel" aria-labelledby="brandheading">
+          <h2 id="brandheading">Brand</h2>
+          <div class="brand-swatches" id="brandswatches"></div>
+          <p class="muted" id="brandmeta"></p>
+          <div class="actions">
+            <button type="button" class="secondary" id="brandread" disabled>Read colours from logo</button>
+            <button type="button" class="ghost" id="brandedit">Edit colours</button>
+          </div>
+          <p class="hint hide" id="brandlogohint">Upload a logo first.</p>
+        </section>
         <div>
           <h2>Posts</h2>
           <div class="grid" id="postlist"></div>
@@ -923,9 +1012,38 @@ button, input, select, textarea, .card, .badge, .drop, .switch-ui, .toast {
     <p class="field-error" id="cnameerr" role="alert"></p>
     <label for="ctrade">Trade</label>
     <input id="ctrade" name="trade" placeholder="plumbing, roofing…" autocomplete="off">
+    <label for="clogo">Logo</label>
+    <input id="clogo" name="logo" type="file" accept="image/png,image/jpeg,image/webp">
+    <p class="hint">PNG with a transparent background works best.</p>
     <div class="actions">
       <button type="button" class="ghost" id="clientcancel">Cancel</button>
       <button type="submit" class="primary" id="clientcreate">Create client</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="branddialog" aria-labelledby="branddialogtitle">
+  <form id="brandform" novalidate>
+    <h2 id="branddialogtitle">Brand</h2>
+    <div id="foundwrap" class="hide">
+      <p id="foundlabel">Found in the logo:</p>
+      <div id="foundswatches" class="found-row"></div>
+    </div>
+    <div id="tokenrows"></div>
+    <div class="sample" id="brandsample">
+      <div class="sample-hero" id="samplehero"><span id="sampleheadline">Headline</span></div>
+      <div class="sample-page" id="samplepage">
+        <p id="samplebody">Body text</p>
+        <p id="samplemuted">Small print</p>
+      </div>
+      <div class="sample-accent" id="sampleaccent"></div>
+    </div>
+    <div id="brandchecks"></div>
+    <div id="brandnotes"></div>
+    <p class="field-error" id="branderr" role="alert"></p>
+    <div class="actions">
+      <button type="button" class="ghost" id="brandcancel">Cancel</button>
+      <button type="submit" class="primary" id="brandsave">Save</button>
     </div>
   </form>
 </dialog>
@@ -963,6 +1081,10 @@ let canvas = "grey";
 let previewKind = "canvas";
 let frameMode = "dark";
 let dialogReturn = null;
+let BRAND = null;
+let HAS_LOGO = false;
+let assetsLoaded = false;
+let brandDraft = null;
 const inflight = new Map();
 const previewURLs = [];
 let previewGen = 0;
@@ -1027,7 +1149,11 @@ async function api(path, options = {}, retried = false) {
   const r = await fetch(`/api${path}`, opts);
   if (r.status === 401 && !retried && await freshSession(true)) return api(path, options, true);
   if (r.status === 401) { SESSION = null; save(); show("auth"); throw new Error("please sign in again"); }
-  if (!r.ok) throw new Error(await errorText(r));
+  if (!r.ok) {
+    const err = new Error(await errorText(r));
+    err.status = r.status;
+    throw err;
+  }
   const type = r.headers.get("content-type") || "";
   return type.includes("json") ? r.json() : r.blob();
 }
@@ -1458,6 +1584,7 @@ function openClientDialog(opener) {
   setField("cname", "");
   $("cname").value = "";
   $("ctrade").value = "";
+  $("clogo").value = "";
   openDialog($("clientdialog"), opener);
 }
 
@@ -1472,21 +1599,32 @@ $("clientform").addEventListener("submit", async (event) => {
   if (!name) { setField("cname", "Enter the client's name."); return; }
   const slug = slugify(name, 60);
   if (!slug) { setField("cname", "Use a name with at least one letter or number."); return; }
-  const brand = { client_id: slug, version: 1,
-    palette:{ primary:"#12264a", secondary:"#ff6a00", surface:"#f2f4f7", text:"#12264a",
-              text_on_primary:"#ffffff", text_on_dark:"#ffffff", muted:"#5b6b82" },
-    fonts:{ display:{family:"Anton",file:"assets/fonts/Anton-Regular.ttf",line_height:1.05},
-            body:{family:"Barlow",file:"assets/fonts/Barlow-Regular.ttf",line_height:1.25},
-            body_bold:{family:"Barlow",file:"assets/fonts/Barlow-Bold.ttf",weight:700,line_height:1.25} } };
   const rules = { client_id: slug, version: 1 };
+  const logo = $("clogo").files && $("clogo").files[0];
   busy($("clientcreate"), true);
   try {
     const created = await api("/clients", {
       method: "POST",
-      json: { slug, name, trade, brand, rules },
+      json: { slug, name, trade, rules },
     });
+    let uploaded = false;
+    if (logo) {
+      const previous = CLIENT;
+      CLIENT = created;
+      try {
+        await sendFile(logo, "logo", () => {});
+        uploaded = true;
+      } catch (err) {
+        CLIENT = previous;
+        if (!SESSION) throw err;
+        toast(sentence(err));
+      }
+    }
     $("clientdialog").close();
     await openClient(created);
+    if (uploaded && CLIENT && CLIENT.id === created.id && !$("client").classList.contains("hide")) {
+      await openBrandSheet("suggestion", $("brandread"));
+    }
   } catch (err) {
     toast(sentence(err));
   } finally {
@@ -1496,6 +1634,387 @@ $("clientform").addEventListener("submit", async (event) => {
 
 $("clientdialog").addEventListener("close", () => {
   if (dialogReturn && typeof dialogReturn.focus === "function") dialogReturn.focus();
+});
+
+// --- brand ------------------------------------------------------------------------
+
+const BRAND_TOKENS = [
+  ["primary", "Main"],
+  ["secondary", "Accent"],
+  ["surface", "Page"],
+  ["text", "Text"],
+  ["text_on_primary", "On main"],
+  ["text_on_dark", "On dark"],
+  ["muted", "Small print"],
+];
+// The three pairings check_palette measures. Logo checks are left as returned.
+const TEXT_PAIRS = {
+  "Words on the main colour": ["text_on_primary", "primary"],
+  "Words on the page colour": ["text", "surface"],
+  "Words on dark bands and photo shading": ["text_on_dark", "text"],
+};
+const HEX = /^#[0-9a-f]{6}$/i;
+const EMPTY_PICKER = "#a1a1aa";
+
+function cleanHex(value) {
+  return String(value ?? "").trim();
+}
+
+// WCAG 2.2 relative luminance and contrast, the same formula as stratum_spec/colour.py.
+function wcagChannel(value) {
+  return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+}
+
+function wcagLuminance(hex) {
+  const text = hex.slice(1);
+  const weights = [0.2126, 0.7152, 0.0722];
+  let total = 0;
+  for (let i = 0; i < 3; i += 1) {
+    total += weights[i] * wcagChannel(parseInt(text.slice(i * 2, i * 2 + 2), 16) / 255);
+  }
+  return total;
+}
+
+function wcagContrast(one, two) {
+  const lighter = Math.max(wcagLuminance(one), wcagLuminance(two));
+  const darker = Math.min(wcagLuminance(one), wcagLuminance(two));
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+function paintBackground(el, hex) {
+  const colour = cleanHex(hex);
+  if (HEX.test(colour)) el.style.backgroundColor = colour;
+  else el.style.removeProperty("background-color");
+}
+
+function paintForeground(el, hex) {
+  const colour = cleanHex(hex);
+  if (HEX.test(colour)) {
+    el.style.color = colour;
+    el.classList.remove("empty-ink");
+  } else {
+    el.style.removeProperty("color");
+    el.classList.add("empty-ink");
+  }
+}
+
+function copyPalette(source) {
+  const out = {};
+  for (const [token] of BRAND_TOKENS) {
+    out[token] = source && typeof source[token] === "string" ? source[token] : "";
+  }
+  return out;
+}
+
+function relativeWhen(value) {
+  const then = Date.parse(value);
+  if (!Number.isFinite(then)) return "";
+  const seconds = Math.round((then - Date.now()) / 1000);
+  const abs = Math.abs(seconds);
+  if (abs < 45) return "just now";
+  const rtf = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
+  if (abs < 3600) return rtf.format(Math.round(seconds / 60), "minute");
+  if (abs < 86400) return rtf.format(Math.round(seconds / 3600), "hour");
+  if (abs < 86400 * 30) return rtf.format(Math.round(seconds / 86400), "day");
+  if (abs < 86400 * 365) return rtf.format(Math.round(seconds / (86400 * 30)), "month");
+  return rtf.format(Math.round(seconds / (86400 * 365)), "year");
+}
+
+function reasonFor(choice) {
+  if (!choice || typeof choice.why !== "string" || !choice.why) return "";
+  return choice.source === "logo" ? `From the logo: ${choice.why}` : choice.why;
+}
+
+function paintBrandActions() {
+  const read = $("brandread");
+  read.classList.remove("primary", "secondary");
+  read.classList.add(BRAND && BRAND.starter ? "primary" : "secondary");
+  if (read.getAttribute("aria-busy") !== "true") read.disabled = !HAS_LOGO;
+  $("brandlogohint").classList.toggle("hide", !assetsLoaded || HAS_LOGO);
+}
+
+function brandSwatch(label, hex) {
+  const item = document.createElement("div");
+  item.className = "brand-chip";
+  const chip = document.createElement("span");
+  chip.className = "swatch";
+  chip.setAttribute("aria-hidden", "true");
+  paintBackground(chip, hex);
+  const name = document.createElement("span");
+  name.className = "brand-label";
+  name.textContent = label;
+  const code = document.createElement("span");
+  code.className = "mono brand-hex";
+  code.textContent = typeof hex === "string" ? hex : "";
+  item.append(chip, name, code);
+  return item;
+}
+
+function paintBrand() {
+  const row = $("brandswatches");
+  row.replaceChildren();
+  if (!BRAND || !BRAND.kit) {
+    $("brandmeta").textContent = "";
+    paintBrandActions();
+    return;
+  }
+  const palette = BRAND.kit.palette || {};
+  for (const [token, label] of BRAND_TOKENS) row.append(brandSwatch(label, palette[token]));
+  const meta = $("brandmeta");
+  if (BRAND.starter) {
+    meta.textContent = "These are placeholder colours. Read the real ones from the logo.";
+  } else {
+    const latest = (BRAND.history && BRAND.history[0]) || {};
+    const version = latest.version || BRAND.kit.version || 1;
+    const when = relativeWhen(latest.created_at);
+    meta.textContent = when ? `Version ${version} · saved ${when}` : `Version ${version}`;
+  }
+  paintBrandActions();
+}
+
+async function loadBrand(token) {
+  if (!CLIENT) return;
+  const clientId = CLIENT.id;
+  const brand = await api(`/clients/${clientId}/brand`);
+  if (token !== viewToken || !CLIENT || CLIENT.id !== clientId) return;
+  BRAND = brand;
+  paintBrand();
+}
+
+function paintFound(swatches) {
+  const wrap = $("foundwrap");
+  const row = $("foundswatches");
+  row.replaceChildren();
+  if (!swatches.length) {
+    wrap.classList.add("hide");
+    return;
+  }
+  wrap.classList.remove("hide");
+  for (const swatch of swatches) {
+    const chip = document.createElement("span");
+    chip.className = "found-chip";
+    const box = document.createElement("span");
+    box.className = "swatch";
+    box.setAttribute("aria-hidden", "true");
+    paintBackground(box, swatch && swatch.hex);
+    const text = document.createElement("span");
+    const hex = swatch && typeof swatch.hex === "string" ? swatch.hex : "";
+    const share = Number(swatch && swatch.share);
+    const pct = Number.isFinite(share) ? `${Math.round(share * 100)}%` : "";
+    text.textContent = hex && pct ? `${hex} · ${pct}` : (hex || pct);
+    chip.append(box, text);
+    row.append(chip);
+  }
+}
+
+function paintSample() {
+  const palette = brandDraft.palette;
+  paintBackground($("samplehero"), palette.primary);
+  paintForeground($("sampleheadline"), palette.text_on_primary);
+  paintBackground($("samplepage"), palette.surface);
+  paintForeground($("samplebody"), palette.text);
+  paintForeground($("samplemuted"), palette.muted);
+  paintBackground($("sampleaccent"), palette.secondary);
+}
+
+function checkNeeds(check) {
+  const needs = Number(check && check.needs);
+  return Number.isFinite(needs) ? needs : 4.5;
+}
+
+function paintChecks() {
+  const list = $("brandchecks");
+  list.replaceChildren();
+  let textFailed = false;
+  for (const check of brandDraft.checks) {
+    const what = String(check && check.what || "");
+    const logo = what.startsWith("The logo");
+    const pair = TEXT_PAIRS[what];
+    let ratio = Number(check && check.ratio);
+    let ok = false;
+    if (pair && !logo) {
+      const one = cleanHex(brandDraft.palette[pair[0]]);
+      const two = cleanHex(brandDraft.palette[pair[1]]);
+      if (HEX.test(one) && HEX.test(two)) {
+        ratio = Math.round(wcagContrast(one, two) * 100) / 100;
+        ok = ratio >= checkNeeds(check);
+      } else {
+        ratio = NaN;
+      }
+      if (!ok) textFailed = true;
+    } else {
+      ok = Number.isFinite(ratio) && ratio >= checkNeeds(check);
+    }
+    const row = document.createElement("div");
+    row.className = "check-row";
+    const dot = document.createElement("span");
+    dot.className = ok ? "dot good" : "dot bad";
+    dot.setAttribute("aria-hidden", "true");
+    const text = document.createElement("span");
+    text.textContent = Number.isFinite(ratio) ? `${what}: ${ratio.toFixed(1)}:1` : `${what}: –`;
+    row.append(dot, text);
+    list.append(row);
+  }
+  const next = (Number(brandDraft.version) || 1) + 1;
+  $("brandsave").textContent = textFailed ? "Save anyway" : `Save as version ${next}`;
+}
+
+function paintNotes(notes) {
+  const list = $("brandnotes");
+  list.replaceChildren();
+  for (const note of notes) {
+    if (typeof note !== "string" || !note) continue;
+    const line = document.createElement("p");
+    line.className = "muted note-line";
+    line.textContent = note;
+    list.append(line);
+  }
+}
+
+function tokenRow(token, label) {
+  const row = document.createElement("div");
+  row.className = "token-row";
+  const name = document.createElement("label");
+  name.htmlFor = `brand-${token}`;
+  name.textContent = label;
+  const controls = document.createElement("div");
+  controls.className = "token-controls";
+  const color = document.createElement("input");
+  color.type = "color";
+  color.id = `brand-${token}`;
+  const current = cleanHex(brandDraft.palette[token]);
+  color.value = HEX.test(current) ? current.toLowerCase() : EMPTY_PICKER;
+  const text = document.createElement("input");
+  text.type = "text";
+  text.className = "mono";
+  text.spellcheck = false;
+  text.autocomplete = "off";
+  text.setAttribute("autocapitalize", "off");
+  text.setAttribute("aria-label", `${label} hex`);
+  text.value = typeof brandDraft.palette[token] === "string" ? brandDraft.palette[token] : "";
+  const reason = document.createElement("p");
+  reason.className = "muted token-why";
+  const why = brandDraft.why[token] || "";
+  reason.textContent = why;
+  if (!why) reason.classList.add("hide");
+  const edited = () => {
+    brandDraft.why[token] = "Changed by you.";
+    reason.textContent = "Changed by you.";
+    reason.classList.remove("hide");
+    paintSample();
+    paintChecks();
+  };
+  let syncing = false;
+  color.addEventListener("input", () => {
+    if (syncing) return;
+    text.value = color.value;
+    brandDraft.palette[token] = color.value;
+    edited();
+  });
+  text.addEventListener("input", () => {
+    const next = text.value.trim();
+    brandDraft.palette[token] = next;
+    syncing = true;
+    color.value = HEX.test(next) ? next.toLowerCase() : EMPTY_PICKER;
+    syncing = false;
+    edited();
+  });
+  controls.append(color, text);
+  row.append(name, controls, reason);
+  return row;
+}
+
+function fillBrandSheet(data, fromSuggestion) {
+  const kit = (data && data.kit) || {};
+  const palette = kit.palette || {};
+  const shown = {};
+  const why = {};
+  for (const [token] of BRAND_TOKENS) {
+    const choice = fromSuggestion && data.tokens ? data.tokens[token] : null;
+    if (choice && typeof choice.hex === "string") shown[token] = choice.hex;
+    else shown[token] = typeof palette[token] === "string" ? palette[token] : "";
+    why[token] = fromSuggestion ? reasonFor(choice) : "";
+  }
+  brandDraft = {
+    version: Number(kit.version) || 1,
+    palette: shown,
+    why,
+    suggested: fromSuggestion ? copyPalette(palette) : null,
+    checks: Array.isArray(data.checks) ? data.checks : [],
+  };
+  paintFound(fromSuggestion && Array.isArray(data.swatches) ? data.swatches : []);
+  const rows = $("tokenrows");
+  rows.replaceChildren();
+  for (const [token, label] of BRAND_TOKENS) rows.append(tokenRow(token, label));
+  paintSample();
+  paintChecks();
+  paintNotes(fromSuggestion && Array.isArray(data.notes) ? data.notes : []);
+  $("branderr").textContent = "";
+}
+
+async function openBrandSheet(mode, opener) {
+  if (!CLIENT) return;
+  const button = mode === "suggestion" ? $("brandread") : $("brandedit");
+  busy(button, true);
+  try {
+    let data = BRAND;
+    let fromSuggestion = false;
+    if (mode === "suggestion") {
+      data = await api(`/clients/${CLIENT.id}/brand/suggestion`);
+      fromSuggestion = true;
+    } else if (!data) {
+      await loadBrand(viewToken);
+      data = BRAND;
+    }
+    if (!data || !data.kit) throw new Error("Could not load the brand colours.");
+    fillBrandSheet(data, fromSuggestion);
+    openDialog($("branddialog"), opener || button);
+  } catch (err) {
+    toast(sentence(err));
+  } finally {
+    busy(button, false);
+    paintBrandActions();
+  }
+}
+
+$("brandread").addEventListener("click", () => { openBrandSheet("suggestion", $("brandread")); });
+$("brandedit").addEventListener("click", () => { openBrandSheet("edit", $("brandedit")); });
+$("brandcancel").addEventListener("click", () => { $("branddialog").close(); });
+$("branddialog").addEventListener("close", () => {
+  if (dialogReturn && typeof dialogReturn.focus === "function") dialogReturn.focus();
+});
+
+$("brandform").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!CLIENT || !brandDraft) return;
+  if ($("brandsave").getAttribute("aria-busy") === "true") return;
+  const clientId = CLIENT.id;
+  const palette = {};
+  for (const [token] of BRAND_TOKENS) palette[token] = cleanHex(brandDraft.palette[token]);
+  const body = { palette, version: brandDraft.version };
+  if (brandDraft.suggested) body.suggested = { ...brandDraft.suggested };
+  $("branderr").textContent = "";
+  busy($("brandsave"), true);
+  try {
+    await api(`/clients/${clientId}/brand`, { method: "PUT", json: body });
+    $("branddialog").close();
+    toast("Saved. Existing posts keep their colours; new posts use these.");
+    if (CLIENT && CLIENT.id === clientId) await loadBrand(viewToken);
+  } catch (err) {
+    const message = sentence(err);
+    if (err.status === 409) {
+      toast(message);
+      $("branddialog").close();
+      if (CLIENT && CLIENT.id === clientId) {
+        try { await loadBrand(viewToken); }
+        catch (reloadErr) { toast(sentence(reloadErr)); }
+      }
+      return;
+    }
+    $("branderr").textContent = message;
+  } finally {
+    busy($("brandsave"), false);
+  }
 });
 
 // --- client -----------------------------------------------------------------------
@@ -1610,7 +2129,13 @@ async function posts() {
 }
 
 async function assets() {
-  const rows = await api(`/clients/${CLIENT.id}/assets`);
+  const token = viewToken;
+  const clientId = CLIENT && CLIENT.id;
+  const rows = await api(`/clients/${clientId}/assets`);
+  if (token !== viewToken || !CLIENT || CLIENT.id !== clientId) return;
+  HAS_LOGO = rows.some((asset) => asset.kind === "logo");
+  assetsLoaded = true;
+  paintBrandActions();
   const list = $("assets");
   list.replaceChildren();
   if (!rows.length) {
@@ -1649,6 +2174,9 @@ function fillDesigns(designs) {
 async function openClient(client) {
   const token = ++viewToken;
   CLIENT = client;
+  BRAND = null;
+  HAS_LOGO = false;
+  assetsLoaded = false;
   show("client");
   $("clienttitle").textContent = client.name || "";
   setCrumbs([
@@ -1657,12 +2185,15 @@ async function openClient(client) {
   ]);
   $("postlist").replaceChildren(skeletons(3, "card-skel"));
   $("assets").replaceChildren(skeletons(4, "asset-skel"));
+  $("brandswatches").replaceChildren();
+  $("brandmeta").textContent = "";
+  paintBrandActions();
   $("makeerr").textContent = "";
   try {
     const designs = await api("/designs");
     if (token !== viewToken) return;
     fillDesigns(designs);
-    await Promise.all([assets(), posts()]);
+    await Promise.all([assets(), posts(), loadBrand(token)]);
     if (token !== viewToken) return;
     autosize($("brief"));
   } catch (err) {
