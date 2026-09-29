@@ -256,8 +256,26 @@ body.gate main > section { width: min(380px, 100%); }
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 12px;
   margin-bottom: 16px;
+}
+.post-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.menu-note {
+  margin: 0;
+  padding: 6px 8px 4px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+#canvamenu {
+  min-width: min(260px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
 }
 .count { color: var(--muted); font-weight: 500; margin-left: 8px; }
 .grid {
@@ -367,6 +385,13 @@ body.gate main > section { width: min(380px, 100%); }
 .story-shot { width: 100%; aspect-ratio: 9 / 16; background: var(--frame-bg); }
 .story-shot img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .story-empty { padding: 24px 16px; text-align: center; }
+.story-empty-frame {
+  aspect-ratio: 9 / 16;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.story-empty-frame .story-empty { width: 100%; }
 .grid-frame {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -682,7 +707,13 @@ button, input, select, textarea, .card, .badge, .drop, .switch-ui, .toast {
   .crumbs { gap: 0; }
   .crumbs .sep, .crumbs .crumb { display: none; }
   .crumbs [aria-current="page"] { max-width: 14ch; }
-  #back:not(.hide) { display: inline-flex; }
+  #back:not(.hide) {
+    display: inline-flex;
+    align-items: center;
+    height: auto;
+    padding: 0 4px;
+    line-height: inherit;
+  }
   .wordmark { display: none; }
   .bar-right { flex-wrap: nowrap; width: auto; margin-left: auto; }
   .needs-row { grid-template-columns: minmax(0, 1fr) auto; }
@@ -808,7 +839,15 @@ button, input, select, textarea, .card, .badge, .drop, .switch-ui, .toast {
   <section id="post" class="hide">
     <div class="section-head">
       <h1 id="posttitle"></h1>
-      <button type="button" class="secondary" id="download">Download all</button>
+      <div class="post-actions">
+        <div class="menu">
+          <button type="button" class="secondary" id="canvabtn" aria-haspopup="menu" aria-expanded="false" aria-controls="canvamenu">Open in Canva</button>
+          <div id="canvamenu" class="menu-pop" role="menu" hidden>
+            <p class="muted menu-note">In Canva: Create a design → Import file.</p>
+          </div>
+        </div>
+        <button type="button" class="secondary" id="download">Download all</button>
+      </div>
     </div>
     <div class="stats">
       <div class="stat"><b id="statver">–</b><span>version</span></div>
@@ -910,6 +949,7 @@ function show(id) {
   $("who").classList.toggle("hide", id === "auth" || id === "join");
   $("crumbs").classList.toggle("hide", id === "auth" || id === "join");
   if (id === "auth" || id === "join") $("back").classList.add("hide");
+  if (id !== "post") closeCanvaMenu(false);
 }
 
 let CONF = null, SESSION = null, CLIENT = null, POST = null;
@@ -928,7 +968,10 @@ const previewURLs = [];
 let previewGen = 0;
 const STATUSES = new Set(["draft", "review", "approved", "archived"]);
 
-const save = () => localStorage.setItem("stratum.session", JSON.stringify(SESSION || null));
+const save = () => {
+  try { localStorage.setItem("stratum.session", JSON.stringify(SESSION || null)); }
+  catch { /* a private window can refuse storage; sign-in still proceeds */ }
+};
 const load = () => {
   try { return JSON.parse(localStorage.getItem("stratum.session") || "null"); }
   catch { return null; }
@@ -1157,6 +1200,7 @@ function closeThemeMenu() {
 }
 
 function openThemeMenu() {
+  closeCanvaMenu(false);
   $("thememenu").hidden = false;
   $("themebtn").setAttribute("aria-expanded", "true");
   const current = $("thememenu").querySelector("[aria-checked='true']") || $("thememenu").querySelector("button");
@@ -2090,9 +2134,11 @@ function paintFeed() {
 function paintStory() {
   const root = $("storyview");
   root.replaceChildren();
+  root.classList.remove("story-empty-frame");
   applyFrameMode();
   const render = findRender((POSTDATA && POSTDATA.renders) || [], "9:16");
   if (!render) {
+    root.classList.add("story-empty-frame");
     const note = document.createElement("p");
     note.className = "story-empty";
     note.textContent = "This post has no Story format yet.";
@@ -2174,6 +2220,7 @@ function paintPost(data, options) {
   paintStats(data, opts.lastChange);
   paintFlags(data.flags || []);
   paintHistory(data.edits || []);
+  paintCanvaMenu(data.post || {});
   syncPreview(Boolean(opts.fade));
   const client = data.client || {};
   const post = data.post || {};
@@ -2331,6 +2378,102 @@ $("tweak").addEventListener("keydown", (event) => {
   }
 });
 
+const ASPECT_LABEL = {
+  "4:5": "4:5 feed",
+  "1:1": "1:1 square",
+  "9:16": "9:16 story",
+  "16:9": "16:9 wide",
+};
+
+function aspectLabel(aspect) {
+  return ASPECT_LABEL[aspect] || aspect;
+}
+
+function dispositionName(header) {
+  const value = String(header || "");
+  const star = /filename\*=(?:UTF-8'')?([^;]+)/i.exec(value);
+  const quoted = /filename="([^"]*)"/i.exec(value);
+  const plain = /filename=([^;]+)/i.exec(value);
+  const raw = (star && star[1]) || (quoted && quoted[1]) || (plain && plain[1]) || "";
+  const name = raw.trim().replace(/^"(.*)"$/, "$1");
+  if (!name) return "post.pptx";
+  try { return decodeURIComponent(name); }
+  catch { return name; }
+}
+
+function paintCanvaMenu(post) {
+  const menu = $("canvamenu");
+  const note = menu.querySelector(".menu-note");
+  menu.querySelectorAll("button").forEach((button) => button.remove());
+  const aspects = (post && post.aspects) || [];
+  for (const aspect of aspects) {
+    const value = String(aspect);
+    const item = document.createElement("button");
+    item.type = "button";
+    item.setAttribute("role", "menuitem");
+    item.textContent = aspectLabel(value);
+    item.addEventListener("click", () => { downloadCanva(value, item); });
+    menu.insertBefore(item, note);
+  }
+}
+
+function closeCanvaMenu(focus) {
+  const menu = $("canvamenu");
+  menu.hidden = true;
+  menu.style.left = "";
+  menu.style.right = "";
+  $("canvabtn").setAttribute("aria-expanded", "false");
+  if (focus) $("canvabtn").focus();
+}
+
+function placeCanvaMenu() {
+  const menu = $("canvamenu");
+  menu.style.left = "";
+  menu.style.right = "";
+  if (menu.getBoundingClientRect().left < 8) {
+    menu.style.right = "auto";
+    menu.style.left = "0";
+  }
+}
+
+function openCanvaMenu() {
+  closeThemeMenu();
+  $("canvamenu").hidden = false;
+  $("canvabtn").setAttribute("aria-expanded", "true");
+  placeCanvaMenu();
+  const first = $("canvamenu").querySelector("button");
+  if (first) first.focus();
+}
+
+async function downloadCanva(aspect, button) {
+  if (!POST || button.disabled) return;
+  busy(button, true);
+  const path = `/api/posts/${POST}/canva.pptx?aspect=${encodeURIComponent(aspect)}`;
+  try {
+    let res = await fetch(path, { headers: await authHeader() });
+    if (res.status === 401 && await freshSession(true)) {
+      res = await fetch(path, { headers: await authHeader() });
+    }
+    if (res.status === 401) {
+      SESSION = null;
+      save();
+      show("auth");
+      throw new Error("please sign in again");
+    }
+    if (!res.ok) throw new Error(await errorText(res));
+    const url = URL.createObjectURL(await res.blob());
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = dispositionName(res.headers.get("Content-Disposition"));
+    link.click();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    if (SESSION) toast(sentence(err));
+  } finally {
+    busy(button, false);
+  }
+}
+
 $("download").addEventListener("click", async () => {
   if (!POST) return;
   busy($("download"), true);
@@ -2391,6 +2534,21 @@ $("themebtn").addEventListener("click", (event) => {
   if ($("thememenu").hidden) openThemeMenu();
   else closeThemeMenu();
 });
+$("canvabtn").addEventListener("click", (event) => {
+  event.stopPropagation();
+  if ($("canvamenu").hidden) openCanvaMenu();
+  else closeCanvaMenu(false);
+});
+$("canvamenu").addEventListener("keydown", (event) => {
+  const items = [...$("canvamenu").querySelectorAll("button")];
+  const index = items.indexOf(document.activeElement);
+  if (index < 0) return;
+  if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+    event.preventDefault();
+    const delta = event.key === "ArrowDown" ? 1 : -1;
+    items[(index + delta + items.length) % items.length].focus();
+  }
+});
 for (const item of $("thememenu").querySelectorAll("[data-theme-value]")) {
   item.addEventListener("click", () => {
     applyTheme(item.dataset.themeValue);
@@ -2409,13 +2567,20 @@ $("thememenu").addEventListener("keydown", (event) => {
   }
 });
 document.addEventListener("click", (event) => {
-  if ($("thememenu").hidden) return;
-  if (event.target === $("themebtn") || $("thememenu").contains(event.target)) return;
-  closeThemeMenu();
+  if (!$("thememenu").hidden && event.target !== $("themebtn") && !$("thememenu").contains(event.target)) {
+    closeThemeMenu();
+  }
+  if (!$("canvamenu").hidden && event.target !== $("canvabtn") && !$("canvamenu").contains(event.target)) {
+    closeCanvaMenu(false);
+  }
 });
 document.addEventListener("keydown", (event) => {
   if (event.key !== "Escape") return;
   if ([...document.querySelectorAll("dialog")].some((dialog) => dialog.open)) return;
+  if (!$("canvamenu").hidden) {
+    closeCanvaMenu(true);
+    return;
+  }
   if (!$("thememenu").hidden) {
     closeThemeMenu();
     $("themebtn").focus();
