@@ -19,14 +19,13 @@ from stratum_worker.gateway.errors import (
     ProviderUnavailable,
 )
 from stratum_worker.gateway.prompts import RenderedPrompt
-from stratum_worker.gateway.tasks import RESULT_TYPES, TaskName
+from stratum_worker.gateway.tasks import CUT_OFF, RESULT_TYPES, UNPARSEABLE, TaskName
 
-# Returned in place of a result when the model answered with something that is not
-# a JSON object (or not an image). Every task result model forbids extra keys, so
-# the gateway's validation rejects it and takes its invalid-output path: retry once,
-# record the cost, then fail over. Never return {} instead - an empty
-# EditParseResult is valid and would silently mean "no changes".
-UNPARSEABLE = "_unparseable_output"
+# unparseable() is returned in place of a result when the model answered with
+# something that is not a JSON object (or not an image). Every task result model
+# forbids extra keys, so the gateway's validation rejects it and takes its
+# invalid-output path: retry once, record the cost, then fail over. Never return {}
+# instead - an empty EditParseResult is valid and would silently mean "no changes".
 MAX_ERROR_CHARS = 200
 CHARS_PER_TOKEN = 4  # rough, for pre-call budget estimates only
 
@@ -153,6 +152,10 @@ def parse_chat(body: dict[str, object], provider: str) -> ChatAnswer:
         except ValueError:
             parsed = None
         result = parsed if isinstance(parsed, dict) else unparseable(content)
+    if UNPARSEABLE in result and choices[0].get("finish_reason") == "length":
+        # Said plainly, because it is not the model misbehaving: the answer did not fit
+        # in max_output_tokens, and a retry at the same limit is cut off the same way.
+        result = unparseable(CUT_OFF)
     return ChatAnswer(
         result=result,
         tokens_in=_int(usage.get("prompt_tokens")),

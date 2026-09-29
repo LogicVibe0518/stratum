@@ -21,7 +21,7 @@ PINNED: dict[tuple[TaskName, int], str] = {
         TaskName.CAPTION_GENERATE,
         1,
     ): "9d7292ec7d2c51bde6d9cb19c422c180f91dfd7b90c4e9bfc002db90b33fe1ec",
-    (TaskName.EDIT_PARSE, 2): "a4ed328f1a619c8a779c1e1252ca3b169dc1a8610e1deab545ca1135a8fac5d0",
+    (TaskName.EDIT_PARSE, 3): "adc826225994a71a15eb35fb64681aadab2e5cfa14fab1b44439044a06fe65cb",
     (
         TaskName.BACKGROUND_CREATE,
         1,

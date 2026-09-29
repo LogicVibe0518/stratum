@@ -21,6 +21,14 @@ class TaskName(StrEnum):
     BACKGROUND_CREATE = "background.create"
 
 
+# What a provider returns in place of a result it could not read (providers/_http.py).
+# Every result model forbids extra keys, so this always fails validation and takes
+# the gateway's invalid-output path. CUT_OFF is the detail when the answer stopped at
+# max_output_tokens: a budget problem, which a retry at the same limit repeats.
+UNPARSEABLE = "_unparseable_output"
+CUT_OFF = "the answer was cut off at max_output_tokens"
+
+
 class Frozen(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -148,10 +156,12 @@ RESULT_TYPES: dict[TaskName, type[BaseModel]] = {
 }
 
 # Latency budgets. edit.parse is on the interactive path (and later the voice path),
-# so it gets the tightest timeout and is never routed through a slow model.
+# so it is never routed through a slow model. A one-line change answers in about 3 s;
+# the budget is for the request with four changes in it, which writes several times
+# as much and must finish rather than time out on both providers.
 TIMEOUTS_S: dict[TaskName, float] = {
     TaskName.POST_COPY: 25.0,
     TaskName.CAPTION_GENERATE: 20.0,
-    TaskName.EDIT_PARSE: 8.0,
+    TaskName.EDIT_PARSE: 20.0,
     TaskName.BACKGROUND_CREATE: 60.0,
 }

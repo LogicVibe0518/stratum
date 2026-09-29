@@ -108,7 +108,7 @@ _DEFAULTS: dict[str, object] = {
     "tasks": {
         "post.copy": {"order": ["openrouter", "openai"], "max_output_tokens": 900},
         "caption.generate": {"order": ["openrouter", "openai"], "max_output_tokens": 600},
-        "edit.parse": {"order": ["openrouter", "openai"], "max_output_tokens": 400},
+        "edit.parse": {"order": ["openrouter", "openai"], "max_output_tokens": 1200},
         "background.create": {"order": ["fal", "openai"]},
     },
     "models": {
