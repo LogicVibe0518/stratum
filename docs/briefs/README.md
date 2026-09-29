@@ -41,6 +41,7 @@ and the hard logic; Cursor does the rest; Claude reviews before anything merges.
 | M14 | Export: PowerPoint for Canva plus the zip | Claude (done, #14) | C1 |
 | C1b | Polish from the C1 review, and "Open in Canva" buttons | Cursor | M14 |
 | M9 | Brand kit from the logo; brand kits keep their history | Claude (done) | C1 |
+| M9b | The logo always shows: a panel behind it when needed, never recoloured | Claude (done) | M9 |
 | C3 | Brand panel and sheet, new-client form asks for the logo | Cursor | M9, C1b |
 | M10–M12 | Real photos, layout variants, top three with a ranker | Claude, Cursor on adapters | C1 |
 | M16 | The ranker learns the team's picks | Claude | M12 in use |

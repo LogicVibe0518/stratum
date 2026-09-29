@@ -20,8 +20,9 @@ from typing import Any
 
 from pydantic import TypeAdapter, ValidationError
 from stratum_spec import BrandKit, load_template, load_variants, retarget
+from stratum_spec import load as load_spec
 from stratum_spec.client import ClientRules
-from stratum_spec.models import Aspect, PosterSpec, TextLayer
+from stratum_spec.models import Aspect, LogoLayer, PosterSpec, TextLayer
 from stratum_spec.ops import EditOp, OpError, apply_ops
 from stratum_spec.templates import Variants
 
@@ -41,6 +42,7 @@ from stratum_worker.brand import (
 from stratum_worker.draft.bindings import binding_for
 from stratum_worker.draft.capacity import measure
 from stratum_worker.draft.compose import ComposeError, build_spec
+from stratum_worker.draft.logo_fit import LogoInk, fit_logo
 from stratum_worker.draft.models import Flag, PostCopy
 from stratum_worker.draft.pipeline import CollectingTracer, DraftError
 from stratum_worker.draft.preflight import check_claims, check_copy, check_layout
@@ -86,7 +88,7 @@ async def render_preview(
     path = preview_path(ctx.settings, version["id"], aspect)
     if path.is_file():
         return path.read_bytes()
-    spec = PosterSpec.model_validate(version["spec"])
+    spec = load_spec(version["spec"])
     template = ctx.settings.templates_dir / f"{post['template_id']}.json"
     bound = {getattr(one, "asset", None) for one in spec.layers if getattr(one, "asset", None)}
     asset_paths = {s: await local_path(ctx, s) for s in bound if isinstance(s, str)}
@@ -178,6 +180,30 @@ async def local_path(ctx: Context, sha: str) -> str:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(data)
     return str(path.resolve())
+
+
+# A logo's colours depend only on its bytes, and its SHA-256 names those bytes, so
+# what is read once is right forever. Each entry is a few dozen floats.
+_INKS: dict[str, LogoInk | None] = {}
+
+
+async def logo_ink(ctx: Context, sha: str) -> LogoInk | None:
+    """The colours of one logo file, or None if it cannot be read as a logo."""
+    if sha not in _INKS:
+        data = Path(await local_path(ctx, sha)).read_bytes()
+        try:
+            reading = await asyncio.to_thread(read_logo, data)
+        except LogoError:
+            _INKS[sha] = None
+        else:
+            _INKS[sha] = LogoInk.from_reading(reading)
+    return _INKS[sha]
+
+
+async def inks_for(ctx: Context, spec: PosterSpec) -> dict[str, LogoInk]:
+    shas = {layer.asset for layer in spec.layers if isinstance(layer, LogoLayer) and layer.asset}
+    found = {sha: await logo_ink(ctx, sha) for sha in shas}
+    return {sha: ink for sha, ink in found.items() if ink is not None}
 
 
 async def pick_photos(
@@ -312,6 +338,7 @@ async def render_versions(
     from stratum_worker.render import render_poster
 
     laid_out = {aspect: retarget(spec, aspect, variants) for aspect in post["aspects"]}
+    inks = await inks_for(ctx, spec)
 
     def draw(aspect: str) -> dict[str, Any]:
         one = laid_out[aspect]
@@ -326,7 +353,7 @@ async def render_versions(
         drawn["preview"] = preview(drawn["png"])
     flags: list[Flag] = []
     for one in laid_out.values():
-        flags.extend(check_layout(one, kit, root=ctx.settings.repo_root))
+        flags.extend(check_layout(one, kit, root=ctx.settings.repo_root, logos=inks))
     return out, flags
 
 
@@ -483,6 +510,12 @@ async def draft(ctx: Context, post: dict[str, Any], client: dict[str, Any]) -> d
     texts.update(binding.fixed or {})
     kit = brand_of(client)
     spec = build_spec(template, kit, texts, assets)
+    if binding.logo:
+        # The template cannot know this client's logo colours; this is where a navy
+        # logo headed for a navy band gets a panel behind it instead.
+        ink = await logo_ink(ctx, assets[binding.logo])
+        if ink is not None:
+            spec = fit_logo(spec, kit, ink, variants, post["aspects"])
 
     asset_paths = {sha: await local_path(ctx, sha) for sha in set(assets.values())}
     renders, layout_flags = await render_versions(ctx, post, spec, variants, asset_paths, kit)
@@ -518,7 +551,7 @@ async def tweak(
     if not versions:
         raise DraftError("this post has no draft yet")
     latest = versions[0]
-    spec = PosterSpec.model_validate(latest["spec"])
+    spec = load_spec(latest["spec"])
     # An edit keeps the colours the poster was made with. Moving a post onto a newer
     # brand kit is its own decision, not a side effect of "make the logo bigger".
     kit = await kit_for(ctx, client, spec.brand_kit_version)
@@ -644,7 +677,7 @@ async def _prepare(
     versions = await ctx.supa.select("post_versions", id=f"eq.{version_id}", select="spec")
     if not versions:
         raise DraftError("that version is gone")
-    spec = PosterSpec.model_validate(versions[0]["spec"])
+    spec = load_spec(versions[0]["spec"])
     variants = load_variants(ctx.settings.templates_dir / f"{post['template_id']}.json")
     bound = {getattr(one, "asset", None) for one in spec.layers if getattr(one, "asset", None)}
     assets = {s: await local_path(ctx, s) for s in bound if isinstance(s, str)}
@@ -772,7 +805,7 @@ async def quick(
     if not versions:
         raise DraftError("this post has no draft yet")
     latest = versions[0]
-    spec = PosterSpec.model_validate(latest["spec"])
+    spec = load_spec(latest["spec"])
     ids = {layer.id for layer in spec.layers}
 
     ops: list[Any] = []
@@ -783,7 +816,11 @@ async def quick(
     elif action in ("hide_logo", "show_logo") and "logo" in ids:
         visible = action == "show_logo"
         ops.append(SetVisible(layer="logo", visible=visible))
-        if "logo_chip" in ids:
+        # A logo with its own panel had its chip switched off for a reason: bringing
+        # the logo back must not bring back the chip it was unreadable on.
+        logo = spec.layer("logo")
+        has_plate = isinstance(logo, LogoLayer) and logo.plate is not None
+        if "logo_chip" in ids and not (visible and has_plate):
             ops.append(SetVisible(layer="logo_chip", visible=visible))
     elif action == "next_photo":
         photos = await ctx.supa.select(

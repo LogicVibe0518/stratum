@@ -81,6 +81,9 @@ class LogoReading:
     tone: Tone
     background: str | None
     notes: tuple[str, ...]
+    # False when the file is solid to its edges (a JPEG, or a badge): the logo then
+    # carries its own background wherever it is placed.
+    transparent: bool = True
 
     @property
     def colourful(self) -> tuple[Swatch, ...]:
@@ -280,7 +283,13 @@ def read_logo(data: bytes | Image.Image) -> LogoReading:
             "The logo has many colours or a gradient. The main ones are listed; check "
             "them against the brand guide if there is one."
         )
-    return LogoReading(swatches=tuple(found), tone=tone, background=background, notes=tuple(notes))
+    return LogoReading(
+        swatches=tuple(found),
+        tone=tone,
+        background=background,
+        notes=tuple(notes),
+        transparent=transparent,
+    )
 
 
 __all__ = ["LogoError", "LogoReading", "Swatch", "read_logo"]
