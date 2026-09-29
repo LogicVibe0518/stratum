@@ -82,20 +82,66 @@ def test_a_post_whose_job_was_never_written_is_queued_on_retry(
     import asyncio
 
     http, world, agency, client = api
-    asyncio.run(
+    # The same request as _body(): an earlier attempt that died between the inserts.
+    [orphan] = asyncio.run(
         world.factory(agency).insert(
             "posts",
             {
                 "agency_id": agency,
                 "client_id": client,
                 "slug": "boiler-offer",
-                "brief": "x",
+                "brief": "20% off boiler servicing.",
                 "template_id": "offer_4x5",
+                "aspects": ["4:5", "1:1", "9:16", "16:9"],
             },
         )
     )
     assert http.post("/api/posts?queue=true", json=_body(client)).status_code == 200
-    assert len(world.jobs()) == 1
+    [job] = world.jobs()
+    assert job["payload"]["post_id"] == orphan["id"]
+
+
+# --- two different posts that open with the same words (live, 29 Sep) ---------------------
+
+
+def _slugs(world: World, agency: str) -> list[str]:
+    import asyncio
+
+    rows = asyncio.run(world.factory(agency).select("posts", order="created_at"))
+    return [row["slug"] for row in rows]
+
+
+def test_a_different_brief_with_the_same_opening_words_is_a_new_post(
+    api: tuple[TestClient, World, str, str],
+) -> None:
+    http, world, agency, client = api
+    first = http.post("/api/posts?queue=true", json=_body(client)).json()
+    other = {**_body(client), "brief": "20% off boiler servicing, this week only."}
+    second = http.post("/api/posts?queue=true", json=other).json()
+    assert first != second
+    assert _slugs(world, agency) == ["boiler-offer", "boiler-offer-2"]
+
+
+def test_the_same_brief_in_another_design_is_a_new_post(
+    api: tuple[TestClient, World, str, str],
+) -> None:
+    http, world, agency, client = api
+    http.post("/api/posts?queue=true", json=_body(client))
+    http.post("/api/posts?queue=true", json={**_body(client), "template_id": "full_bleed"})
+    assert _slugs(world, agency) == ["boiler-offer", "boiler-offer-2"]
+    assert len(world.jobs()) == 2
+
+
+def test_the_second_post_sent_twice_is_still_one_post(
+    api: tuple[TestClient, World, str, str],
+) -> None:
+    http, world, agency, client = api
+    http.post("/api/posts?queue=true", json=_body(client))
+    other = {**_body(client), "template_id": "full_bleed"}
+    once = http.post("/api/posts?queue=true", json=other).json()
+    twice = http.post("/api/posts?queue=true", json=other).json()
+    assert once == twice
+    assert _slugs(world, agency) == ["boiler-offer", "boiler-offer-2"]
 
 
 def test_get_job_reports_status_attempts_error_and_result(

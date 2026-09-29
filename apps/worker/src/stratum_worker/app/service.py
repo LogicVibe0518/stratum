@@ -45,7 +45,19 @@ from stratum_worker.draft.compose import ComposeError, build_spec
 from stratum_worker.draft.logo_fit import LogoInk, fit_logo
 from stratum_worker.draft.models import Flag, PostCopy
 from stratum_worker.draft.pipeline import CollectingTracer, DraftError
-from stratum_worker.draft.preflight import check_claims, check_copy, check_layout
+from stratum_worker.draft.preflight import (
+    check_brief_on_poster,
+    check_claims,
+    check_copy,
+    check_layout,
+)
+from stratum_worker.gateway.errors import (
+    InvalidProviderOutput,
+    NoProviderAvailable,
+    ProviderRateLimited,
+    ProviderTimeout,
+    ProviderUnavailable,
+)
 from stratum_worker.gateway.gateway import Gateway
 from stratum_worker.gateway.tasks import (
     BackgroundRequest,
@@ -424,10 +436,31 @@ async def render_versions(
     out = list(await asyncio.gather(*(asyncio.to_thread(draw, a) for a in laid_out)))
     for drawn in out:
         drawn["preview"] = preview(drawn["png"])
-    flags: list[Flag] = []
-    for one in laid_out.values():
-        flags.extend(check_layout(one, kit, root=ctx.settings.repo_root, logos=inks))
-    return out, flags
+    return out, per_size(
+        {
+            aspect: check_layout(one, kit, root=ctx.settings.repo_root, logos=inks)
+            for aspect, one in laid_out.items()
+        }
+    )
+
+
+def per_size(found: dict[str, tuple[Flag, ...]]) -> list[Flag]:
+    """One flag per problem, saying which sizes have it when not all of them do.
+
+    Checked size by size, the same problem came back once per size: "To check" showed
+    two identical lines about the logo and no way to tell which post they meant.
+    """
+    sizes: dict[Flag, list[str]] = {}
+    for aspect, flags in found.items():
+        for flag in flags:
+            sizes.setdefault(flag, []).append(aspect)
+    merged: list[Flag] = []
+    for flag, aspects in sizes.items():
+        if len(aspects) < len(found):
+            named = " and ".join(aspects) if len(aspects) < 3 else ", ".join(aspects)
+            flag = flag.model_copy(update={"message": f"{flag.message} ({named} only)"})
+        merged.append(flag)
+    return merged
 
 
 async def save_version(
@@ -586,6 +619,7 @@ async def draft(ctx: Context, post: dict[str, Any], client: dict[str, Any]) -> d
     renders, layout_flags = await render_versions(ctx, post, spec, variants, asset_paths, kit)
     flags.extend(layout_flags)
     flags.extend(check_copy(words, rules_of(client), post["brief"]))
+    flags.extend(brief_flags({**post, "words": words.model_dump(mode="json")}, spec))
 
     version = await save_version(ctx, post, spec, renders, flags, note="first draft")
     cost = sum(float(step.get("cost_usd", 0)) for step in steps)
@@ -598,6 +632,52 @@ async def draft(ctx: Context, post: dict[str, Any], client: dict[str, Any]) -> d
     )
     version["seconds"] = round(time.perf_counter() - started, 2)
     return version
+
+
+def brief_flags(post: dict[str, Any], spec: PosterSpec) -> list[Flag]:
+    """The brief's offer and dates, if the poster as it now stands does not show them.
+
+    Run on every new version - draft, tweak and quick change - so the flag stays until
+    the poster says what the brief asked for, and goes as soon as it does.
+    """
+    shown = "\n".join(
+        one.content for one in spec.layers if isinstance(one, TextLayer) and one.visible
+    )
+    words = post.get("words") or {}
+    has_offer_line = "offer_detail" in binding_for(post["template_id"]).texts.values()
+    return list(
+        check_brief_on_poster(
+            post["brief"],
+            shown,
+            str(words.get("caption", "")),
+            has_offer_line=has_offer_line,
+        )
+    )
+
+
+NOTHING_CHANGED = (
+    "That would not change anything on this poster, so nothing was saved. Say which "
+    "part to change, for example 'make the logo smaller'."
+)
+
+
+def why_unread(exc: NoProviderAvailable) -> str:
+    """What a designer is told when no model could read their change."""
+    cause = exc.__cause__
+    if isinstance(cause, ProviderTimeout | InvalidProviderOutput):
+        return (
+            "That was too much to work out in one go. Try it as two or three shorter "
+            "changes, one per message."
+        )
+    if isinstance(cause, ProviderUnavailable | ProviderRateLimited):
+        return (
+            "The AI that reads changes is not answering right now. Try again in a "
+            "minute; the instant changes above still work."
+        )
+    return (
+        "The AI that reads changes is not available right now. The instant changes "
+        "above still work."
+    )
 
 
 async def tweak(
@@ -629,22 +709,14 @@ async def tweak(
     for layer in spec.layers:
         content = getattr(layer, "content", "")
         room = f", fits {fits[layer.id]} characters" if layer.id in fits else ""
-        described[layer.id] = f"{layer.type}{room}: {content or layer.type}"[:120]
+        # Said, because "show both images" otherwise gets set_visible(true) on layers
+        # that were never hidden - a change that changes nothing (live, 29 Sep).
+        hidden = ", hidden" if not layer.visible else ""
+        described[layer.id] = f"{layer.type}{room}{hidden}: {content or layer.type}"[:120]
     tracer = CollectingTracer(inner=ctx.gateway.tracer)
     gateway = Gateway(router=ctx.gateway.router, budget=ctx.gateway.budget, tracer=tracer)
-    result = await gateway.run(
-        TaskName.EDIT_PARSE,
-        EditParseRequest(
-            message=message,
-            layers=described,
-            palette=[f"palette.{name}" for name in kit.palette],
-        ),
-        agency_id=ctx.agency_id,
-    )
-    assert isinstance(result, EditParseResult)
-    step = tracer.step("edit_parse", TaskName.EDIT_PARSE)
 
-    async def record(outcome: str, ops: list[dict[str, Any]]) -> None:
+    async def record(outcome: str, ops: list[dict[str, Any]], cost_usd: float) -> None:
         await ctx.supa.insert(
             "edits",
             {
@@ -655,13 +727,31 @@ async def tweak(
                 "ops": ops,
                 "outcome": outcome,
                 "latency_ms": int((time.perf_counter() - started) * 1000),
-                "cost_usd": step.cost_usd,
+                "cost_usd": cost_usd,
                 "created_by": ctx.user_id,
             },
         )
 
+    try:
+        result = await gateway.run(
+            TaskName.EDIT_PARSE,
+            EditParseRequest(
+                message=message,
+                layers=described,
+                palette=[f"palette.{name}" for name in kit.palette],
+            ),
+            agency_id=ctx.agency_id,
+        )
+    except NoProviderAvailable as exc:
+        # The poster is untouched and the designer is told what to try, in a
+        # sentence - not "edit.parse: every provider failed" and a 503.
+        await record("failed", [], sum(one.cost_usd for one in tracer.records))
+        return {"outcome": "failed", "why": why_unread(exc)}
+    assert isinstance(result, EditParseResult)
+    step = tracer.step("edit_parse", TaskName.EDIT_PARSE)
+
     if not result.ops:
-        await record("needs_human", list(result.ops))
+        await record("needs_human", list(result.ops), step.cost_usd)
         return {
             "outcome": "needs_human",
             "why": result.needs_human or "I could not tell what to change.",
@@ -671,8 +761,13 @@ async def tweak(
         ops = OPS.validate_python(result.ops)
         changed = apply_ops(spec, ops)
     except (ValidationError, OpError) as exc:
-        await record("failed", list(result.ops))
+        await record("failed", list(result.ops), step.cost_usd)
         return {"outcome": "failed", "why": str(exc)[:300]}
+    if changed.model_dump() == spec.model_dump():
+        # Nothing moved, so there is no new version and it is not called "applied":
+        # a designer who asked for a second photo was told it was done, and it wasn't.
+        await record("needs_human", list(result.ops), step.cost_usd)
+        return {"outcome": "needs_human", "why": result.needs_human or NOTHING_CHANGED}
 
     path = ctx.settings.templates_dir / f"{post['template_id']}.json"
     variants = load_variants(path)
@@ -695,12 +790,13 @@ async def tweak(
     )
     on_poster = "\n".join(one.content for one in changed.layers if isinstance(one, TextLayer))
     flags = list(flags) + list(check_claims(on_poster, rules_of(client), authorised))
+    flags += brief_flags(post, changed)
 
     saved, _ = await asyncio.gather(
         save_version(
             ctx, post, changed, renders, flags, note=message[:200], after=latest["version"]
         ),
-        record("applied", list(result.ops)),
+        record("applied", list(result.ops), step.cost_usd),
     )
     version: dict[str, Any] = saved
     await ctx.supa.insert(
@@ -916,6 +1012,7 @@ async def quick(
     renders, flags = await render_versions(
         ctx, post, changed, load_variants(path), asset_paths, kit
     )
+    flags = [*flags, *brief_flags(post, changed)]
     saved, _ = await asyncio.gather(
         save_version(
             ctx, post, changed, renders, flags, note=QUICK[action], after=latest["version"]
