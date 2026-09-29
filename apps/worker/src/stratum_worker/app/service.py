@@ -22,7 +22,7 @@ from pydantic import TypeAdapter, ValidationError
 from stratum_spec import BrandKit, load_template, load_variants, retarget
 from stratum_spec import load as load_spec
 from stratum_spec.client import ClientRules
-from stratum_spec.models import Aspect, LogoLayer, PosterSpec, TextLayer
+from stratum_spec.models import LogoLayer, PosterSpec, TextLayer
 from stratum_spec.ops import EditOp, OpError, apply_ops
 from stratum_spec.templates import Variants
 
@@ -206,10 +206,22 @@ async def inks_for(ctx: Context, spec: PosterSpec) -> dict[str, LogoInk]:
     return {sha: ink for sha, ink in found.items() if ink is not None}
 
 
+# Below this on its shorter side a photo cannot fill a poster at all; above it, a
+# small or soft photo of the client's real work still beats an invented one.
+PHOTO_FLOOR_PX = 320
+
+
 async def pick_photos(
     ctx: Context, client_id: str, needed: dict[str, str]
 ) -> tuple[dict[str, str], list[Flag]]:
-    """Best photo first, by role. Only a background may be invented."""
+    """Best photo first, by role. Only a background may be invented.
+
+    Good photos are used first, sharpest first. If there are not enough, photos that
+    are small, soft or dark are used next, and the draft says so. A real photo of
+    the client's own business beats a generated one even when it is imperfect, and
+    a designer can swap it in one click once the client sends a better one. Only
+    thumbnails too small to fill a poster at all are never used.
+    """
     rows = await ctx.supa.select(
         "assets",
         client_id=f"eq.{client_id}",
@@ -217,17 +229,55 @@ async def pick_photos(
         select="sha256,flags,quality",
         order="created_at.desc",
     )
-    usable = [r for r in rows if not (UNUSABLE & set(r.get("flags") or []))]
-    usable.sort(key=lambda r: (r.get("quality") or {}).get("sharpness", 0.0), reverse=True)
-    assets = {layer: row["sha256"] for layer, row in zip(needed, usable, strict=False)}
+
+    def sharpness(row: dict[str, Any]) -> float:
+        return float((row.get("quality") or {}).get("sharpness", 0.0))
+
+    def shorter_side(row: dict[str, Any]) -> float:
+        return float((row.get("quality") or {}).get("min_dimension", PHOTO_FLOOR_PX))
+
+    good = sorted(
+        (r for r in rows if not (UNUSABLE & set(r.get("flags") or []))),
+        key=sharpness,
+        reverse=True,
+    )
+    weak = sorted(
+        (
+            r
+            for r in rows
+            if UNUSABLE & set(r.get("flags") or []) and shorter_side(r) >= PHOTO_FLOOR_PX
+        ),
+        key=sharpness,
+        reverse=True,
+    )
+    chosen = list(zip(needed, good + weak, strict=False))
+    assets = {layer: row["sha256"] for layer, row in chosen}
+
     flags: list[Flag] = []
-    if len(rows) > len(usable):
+    used_weak = [row for _, row in chosen if row in weak]
+    if used_weak:
+        problems = sorted(
+            {
+                {"too_small": "small", "too_blurry": "soft", "too_dark": "dark"}[flag]
+                for row in used_weak
+                for flag in UNUSABLE & set(row.get("flags") or [])
+            }
+        )
+        flags.append(
+            Flag(
+                code="photo_weak",
+                message=(
+                    f"Used {len(used_weak)} photo(s) that are {' and '.join(problems)}, "
+                    f"because nothing better was uploaded. Ask for a larger, sharper one."
+                ),
+            )
+        )
+    tiny = len(rows) - len(good) - len(weak)
+    if tiny:
         flags.append(
             Flag(
                 code="photo_unusable",
-                message=(
-                    f"{len(rows) - len(usable)} photo(s) were too blurry, dark or small to use."
-                ),
+                message=f"{tiny} photo(s) were too small to fill a poster, so were not used.",
             )
         )
     return assets, flags
@@ -273,18 +323,34 @@ async def write_copy(
     return words, [step.model_dump()]
 
 
-async def make_background(
-    ctx: Context, client: dict[str, Any], aspect: Aspect
-) -> tuple[str, list[dict[str, Any]]]:
-    trade = (client.get("trade") or "local trade").replace("_", " ")
-    request = BackgroundRequest(
-        prompt=(
-            f"A clean, realistic photograph of a {trade} work setting suitable as a "
-            f"poster background. Plain and uncluttered, nothing in the lower half. "
-            f"Absolutely no words, letters, numbers, logos or signage."
-        ),
-        aspect=aspect,
+# Prices, dates and phone numbers in a brief invite an image model to paint them,
+# and a generated background must carry no text at all. The words go on the poster
+# as text layers; the picture only needs the subject.
+_FIGURES = re.compile(r"[0-9£$€%]+")
+
+
+def background_prompt(client: dict[str, Any], post: dict[str, Any]) -> str:
+    """What to paint behind a post when the client has sent no usable photo.
+
+    Built from what the post is about, not just the trade: a meditation centre's
+    summer retreat and a plumber's boiler offer need different pictures, and
+    "a local trade work setting" fits neither well.
+    """
+    trade = (client.get("trade") or "").replace("_", " ").strip()
+    who = f"{client['name']}, a {trade}" if trade else str(client["name"])
+    topic = " ".join(_FIGURES.sub(" ", post.get("brief", "")).split())[:300]
+    return (
+        f"A clean, realistic photograph for the background of a social media post by "
+        f"{who}. The post is about: {topic}. Show a believable scene that fits it. "
+        f"Plain and uncluttered, with calm space in the lower half for text. "
+        f"Absolutely no words, letters, numbers, logos, signs or watermarks."
     )
+
+
+async def make_background(
+    ctx: Context, client: dict[str, Any], post: dict[str, Any]
+) -> tuple[str, list[dict[str, Any]]]:
+    request = BackgroundRequest(prompt=background_prompt(client, post), aspect=post["aspects"][0])
     tracer = CollectingTracer(inner=ctx.gateway.tracer)
     gateway = Gateway(router=ctx.gateway.router, budget=ctx.gateway.budget, tracer=tracer)
     result = await gateway.run(TaskName.BACKGROUND_CREATE, request, agency_id=ctx.agency_id)
@@ -457,26 +523,18 @@ async def draft(ctx: Context, post: dict[str, Any], client: dict[str, Any]) -> d
     missing = [layer for layer in binding.photos if layer not in assets]
     unfillable = [layer for layer in missing if binding.photos[layer] != "background"]
     if unfillable:
+        # Never invented: a generated "after" photo would show work that was never
+        # done, which is a false advertising claim, not a design shortcut.
         raise DraftError(
-            f"This design needs a real photo for {', '.join(unfillable)}. "
-            f"Upload one for {client['name']}, or choose a different design."
+            f"This design shows real work, so it needs {len(binding.photos)} real "
+            f"photos ({', '.join(binding.photos)}) and has {len(assets)} usable. Upload "
+            f"them for {client['name']}, or pick a design that can use a generated "
+            f"background."
         )
     if missing:
-        # Reuse this client's most recent generated background rather than paying
-        # for a new one every post - but keep saying so, every time.
-        previous = await ctx.supa.select(
-            "assets",
-            client_id=f"eq.{client['id']}",
-            kind="eq.generated",
-            select="sha256",
-            order="created_at.desc",
-            limit="1",
-        )
-        if previous:
-            sha = previous[0]["sha256"]
-            more: list[dict[str, Any]] = []
-        else:
-            sha, more = await make_background(ctx, client, post["aspects"][0])
+        # One background per post, painted for what this post is about. At about
+        # $0.006 each, a picture that fits beats reusing one made for another post.
+        sha, more = await make_background(ctx, client, post)
         steps += more
         for layer in missing:
             assets[layer] = sha

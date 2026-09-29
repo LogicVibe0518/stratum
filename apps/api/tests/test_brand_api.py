@@ -146,3 +146,27 @@ def test_a_client_without_a_logo_is_asked_for_one(api: tuple[TestClient, str]) -
 def test_an_unknown_client_is_a_404(api: tuple[TestClient, str]) -> None:
     http, _ = api
     assert http.get("/api/clients/nope/brand").status_code == 404
+
+
+# --- uploads: a sentence, never a 500 ----------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("name", "data", "status", "said"),
+    [
+        ("brochure.pdf", b"%PDF-1.7 not a picture", 415, "brochure.pdf isn't a JPEG, PNG"),
+        ("IMG_0042.HEIC", b"\x00\x00\x00\x18ftypheic\x00\x00\x00\x00", 415, "iPhone HEIC"),
+        ("broken.png", b"\x89PNG\r\n\x1a\n" + b"\x00" * 64, 422, "looks damaged"),
+    ],
+)
+def test_a_file_that_cannot_be_used_gets_a_sentence_not_a_500(
+    api: tuple[TestClient, str], name: str, data: bytes, status: int, said: str
+) -> None:
+    http, client = api
+    res = http.post(
+        f"/api/clients/{client}/assets",
+        files={"file": (name, data, "application/octet-stream")},
+        data={"kind": "photo"},
+    )
+    assert res.status_code == status, res.text
+    assert said in res.json()["detail"]

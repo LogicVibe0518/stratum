@@ -184,7 +184,7 @@ def test_text_file_renamed_to_jpg_is_rejected(tmp_path: Path) -> None:
     src = tmp_path / "invoice.jpg"
     src.write_text("definitely not a photo\n", encoding="utf-8")
 
-    with pytest.raises(UnsupportedFileType, match="not a JPEG, PNG or WebP"):
+    with pytest.raises(UnsupportedFileType, match="not a JPEG, PNG, WebP or AVIF"):
         ingest(src, tmp_path / "store")
     assert not (tmp_path / "store").exists() or not any((tmp_path / "store").iterdir())
 
