@@ -23,3 +23,12 @@ def test_previews_stay_brand_neutral() -> None:
 
 def test_the_page_offers_the_canva_export() -> None:
     assert "/canva.pptx?aspect=" in PAGE
+
+
+def test_the_page_reads_and_saves_brand_colours() -> None:
+    assert "/brand/suggestion" in PAGE
+    assert '"PUT"' in PAGE
+
+
+def test_new_clients_are_not_given_a_hard_coded_brand() -> None:
+    assert "#ff6a00" not in PAGE.lower()
