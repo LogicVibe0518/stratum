@@ -13,13 +13,16 @@ decides what to do with a blocker.
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from pathlib import Path
 
 from stratum_spec.brand import BrandKit
 from stratum_spec.client import ClientRules
 from stratum_spec.colour import blend, contrast_ratio, min_contrast_for
-from stratum_spec.models import Box, LogoLayer, PosterSpec, ShapeLayer, TextLayer
+from stratum_spec.models import LogoLayer, PosterSpec, ShapeLayer, TextLayer
 
+from stratum_worker.draft.backdrop import ASSUMED_BACKDROP, covers
+from stratum_worker.draft.logo_fit import LogoInk, check_logos
 from stratum_worker.draft.models import Flag, PostCopy
 from stratum_worker.render.text import fit, load_metrics
 
@@ -197,19 +200,7 @@ STORY_SAFE_BOTTOM = 0.80
 ELLIPSIS = "…"
 
 
-# What we assume is behind a semi-transparent band when we cannot know. Mid-grey is
-# the honest choice: it is the worst case for BOTH light and dark text, so a poster
-# that passes this check passes over any photograph.
-ASSUMED_BACKDROP = "#808080"
-
-
-def _covers(outer: Box, inner: Box) -> bool:
-    return (
-        outer.x <= inner.x
-        and outer.y <= inner.y
-        and outer.x + outer.w >= inner.x + inner.w
-        and outer.y + outer.h >= inner.y + inner.h
-    )
+_covers = covers
 
 
 def _backing(spec: PosterSpec, index: int) -> ShapeLayer | None:
@@ -263,14 +254,34 @@ def _contrast_flags(
     ]
 
 
-def check_layout(spec: PosterSpec, kit: BrandKit, *, root: Path) -> tuple[Flag, ...]:
+def check_layout(
+    spec: PosterSpec,
+    kit: BrandKit,
+    *,
+    root: Path,
+    logos: Mapping[str, LogoInk] | None = None,
+) -> tuple[Flag, ...]:
     """What the rendered poster gets wrong, found without looking at the pixels.
 
     Every check here re-derives what the renderer will do rather than inspecting the
     PNG, so it says WHICH layer is wrong and why - something no pixel diff can do.
+    `logos` maps a logo's SHA-256 to its colours; without it the logo is not checked.
     """
     flags: list[Flag] = []
     width, height = spec.canvas.size
+
+    for layer_id, share in check_logos(spec, kit, logos or {}):
+        flags.append(
+            Flag(
+                code="logo_hard_to_see",
+                message=(
+                    f"Only {share:.0%} of '{layer_id}' stands out from what is behind it, "
+                    f"so the logo will be hard to see in {spec.canvas.aspect}. Try another "
+                    f"design, or upload a version of the logo for dark or light backgrounds."
+                ),
+                severity="blocker",
+            )
+        )
 
     # A backing shape exists only to make something else readable. If the thing it
     # backs is hidden, the shape is a grey rectangle floating in a corner - which is

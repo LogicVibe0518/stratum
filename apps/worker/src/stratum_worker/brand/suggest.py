@@ -286,7 +286,10 @@ def suggest(reading: LogoReading, base: BrandKit) -> Suggestion:
         checks = checks + _logo_checks(reading.swatches[0], palette)
     for check in checks:
         if not check.ok and check.what.startswith("The logo"):
-            notes.append(f"{check.sentence()} On designs that put the logo there, it won't show.")
+            notes.append(
+                f"{check.sentence()} Where a design puts the logo there, it gets a panel "
+                f"behind it so it still shows."
+            )
     return Suggestion(
         kit=kit, tokens=tokens, checks=checks, notes=tuple(dict.fromkeys(notes)), reading=reading
     )

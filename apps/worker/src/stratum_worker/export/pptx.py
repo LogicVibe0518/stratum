@@ -45,7 +45,7 @@ from stratum_spec import (
     TextLayer,
 )
 
-from stratum_worker.render.layout import box_px, place_text
+from stratum_worker.render.layout import box_px, contained, place_text, plated
 from stratum_worker.render.svg import BLUR_SCALE, DIM_FILL, PLACEHOLDER_FILL
 
 EMU_PER_PX = 9525  # 914400 EMU per inch / 96 px per inch
@@ -162,16 +162,10 @@ def _cover(slide: Any, layer: ImageLayer, spec: PosterSpec, image: Image.Image, 
 
 def _contain(slide: Any, image: Image.Image, geom: Geom) -> Any:
     """The whole image, as large as fits, centred in the box. Logos and cutouts always."""
-    x, y, w, h = geom
-    scale = min(w / image.width, h / image.height)
-    shown_w, shown_h = image.width * scale, image.height * scale
+    x, y, shown_w, shown_h = contained(geom, image.size)
     image = _limit(image, shown_w, shown_h)
     return slide.shapes.add_picture(
-        io.BytesIO(_encode(image)),
-        _emu(x + (w - shown_w) / 2),
-        _emu(y + (h - shown_h) / 2),
-        _emu(shown_w),
-        _emu(shown_h),
+        io.BytesIO(_encode(image)), _emu(x), _emu(y), _emu(shown_w), _emu(shown_h)
     )
 
 
@@ -185,8 +179,27 @@ def _rectangle(slide: Any, geom: Geom, colour: str, opacity: float = 1.0) -> Any
     return shape
 
 
+def _plate(slide: Any, layer: LogoLayer, kit: BrandKit, panel: Geom, radius: float) -> Any:
+    """The panel behind a logo, as its own shape so a designer can restyle or delete it."""
+    assert layer.plate is not None
+    x, y, w, h = panel
+    shape = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, _emu(x), _emu(y), _emu(w), _emu(h))
+    shape.adjustments[0] = min(0.5, radius / min(w, h))
+    shape.fill.solid()
+    shape.fill.fore_color.rgb = _rgb(kit.color(layer.plate.fill))
+    _alpha(shape._element.spPr, layer.plate.opacity * layer.opacity)
+    _plain(shape)
+    shape.name = f"{layer.id} plate"
+    return shape
+
+
 def _image_layer(
-    slide: Any, layer: AnyImage, spec: PosterSpec, assets: Mapping[str, str], geom: Geom
+    slide: Any,
+    layer: AnyImage,
+    spec: PosterSpec,
+    kit: BrandKit,
+    assets: Mapping[str, str],
+    geom: Geom,
 ) -> list[Any]:
     path = assets.get(layer.asset) if layer.asset else None
     if path is None:
@@ -197,13 +210,17 @@ def _image_layer(
     with Image.open(path) as source:
         source.load()
         image = source.copy()
+    made: list[Any] = []
+    if isinstance(layer, LogoLayer) and layer.plate is not None:
+        geom, panel, radius = plated(geom, image.size, layer.plate)
+        made.append(_plate(slide, layer, kit, panel, radius))
     if isinstance(layer, ImageLayer) and layer.fit == "cover":
         picture = _cover(slide, layer, spec, image, geom)
     else:
         picture = _contain(slide, image, geom)
     picture.name = layer.id
     _picture_alpha(picture, layer.opacity)
-    made = [picture]
+    made.append(picture)
     if isinstance(layer, ImageLayer) and layer.dim > 0:
         dim = _rectangle(slide, geom, DIM_FILL, layer.dim * layer.opacity)
         dim.name = f"{layer.id} dim"
@@ -286,7 +303,7 @@ def export_pptx(
         elif isinstance(layer, ShapeLayer):
             made = [_shape_layer(slide, layer, kit, geom)]
         elif isinstance(layer, ImageLayer | CutoutLayer | LogoLayer):
-            made = _image_layer(slide, layer, spec, assets, geom)
+            made = _image_layer(slide, layer, spec, kit, assets, geom)
         else:  # pragma: no cover - the spec's union is closed
             raise ExportError(f"no PowerPoint mapping for layer type {layer.type!r}")
         for shape in made:

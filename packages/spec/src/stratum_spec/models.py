@@ -16,7 +16,8 @@ from typing import Annotated, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-SCHEMA_VERSION = 1
+# 2: LogoLayer.plate (M9b). Version-1 specs have no plate and upgrade unchanged.
+SCHEMA_VERSION = 2
 
 # A coordinate may sit slightly outside the canvas (full-bleed art, deliberate crops).
 Coord = Annotated[float, Field(ge=-1.0, le=2.0)]
@@ -75,6 +76,23 @@ class CutoutLayer(BaseLayer):
     shadow: bool = True
 
 
+class LogoPlate(Frozen):
+    """A panel drawn behind the logo so it can be seen.
+
+    A navy logo on a navy band disappears. The fix is never to recolour the logo -
+    it is the client's own artwork - but to change what it sits on. The plate hugs
+    the logo as drawn, not its box, so a wide wordmark gets a wide, short panel, and
+    logo and plate together stay inside the logo's box.
+    """
+
+    fill: ColorToken = "palette.surface"
+    opacity: Unit = 0.96
+    # Space around the logo on every side, as a fraction of the logo's shorter side.
+    pad: Unit = 0.25
+    # Corner radius, as a fraction of the plate's height.
+    radius: Unit = 0.2
+
+
 class LogoLayer(BaseLayer):
     """Always the client's original file. Never generated, never recoloured."""
 
@@ -82,6 +100,7 @@ class LogoLayer(BaseLayer):
     asset: AssetRef | None = None
     variant: Literal["full", "white", "mono"] = "full"
     safe_area: Unit = 0.02
+    plate: LogoPlate | None = None
 
 
 class ShapeLayer(BaseLayer):
