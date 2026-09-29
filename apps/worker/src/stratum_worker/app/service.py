@@ -28,7 +28,7 @@ from stratum_spec.templates import Variants
 
 from stratum_worker.app.settings import Settings
 from stratum_worker.app.supa import Supa
-from stratum_worker.assets import AssetStore
+from stratum_worker.assets import AssetNotFound, AssetStore
 from stratum_worker.brand import (
     Check,
     LogoError,
@@ -173,12 +173,19 @@ async def local_path(ctx: Context, sha: str) -> str:
     The store on disk is a cache in front of object storage, not the record. A server
     that loses its disk, or a second server that never had it, keeps working: the
     first render after a restart pays one download and everything after is local.
+
+    On Railway the API and the worker are separate machines with separate disks, so
+    the worker has never ingested a photo someone uploaded: this fallback is the
+    normal path there, not the exception.
     """
-    path = ctx.store.path_for(sha, "full")
+    try:
+        return str(ctx.store.path_for(sha, "full").resolve())
+    except AssetNotFound:
+        pass  # not ingested on this machine
+    path = ctx.store.fetched(sha)
     if not path.is_file():
         data = await ctx.supa.download(f"{ctx.agency_id}/assets/{sha}.png")
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(data)
+        path = await asyncio.to_thread(ctx.store.keep_fetched, sha, data)
     return str(path.resolve())
 
 

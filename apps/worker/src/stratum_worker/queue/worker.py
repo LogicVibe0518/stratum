@@ -158,8 +158,20 @@ def work_timeout(lease_seconds: int) -> float:
     return lease_seconds - margin
 
 
+def build_id() -> str:
+    """The commit this process is running, so every lease names the code that ran it.
+
+    Railway sets RAILWAY_GIT_COMMIT_SHA. Anywhere else it is "local". In the first
+    live test a laptop worker, started before a fix was merged, took a job from the
+    cloud worker and reported an error the fix had already removed. A lease that says
+    "local" makes that visible at once.
+    """
+    sha = os.environ.get("RAILWAY_GIT_COMMIT_SHA", "")
+    return sha[:7] if sha else "local"
+
+
 def new_worker_id(slot: int = 0) -> str:
-    return f"{socket.gethostname()}:{os.getpid()}:{uuid.uuid4().hex[:8]}:{slot}"
+    return f"{socket.gethostname()}:{os.getpid()}:{build_id()}:{uuid.uuid4().hex[:8]}:{slot}"
 
 
 @dataclass
@@ -375,8 +387,10 @@ def main(argv: list[str] | None = None) -> None:
             with contextlib.suppress(NotImplementedError, RuntimeError):
                 loop.add_signal_handler(sig, stop.set)
         log.info(
-            "stratum-queue: %d workers waiting for jobs. Quiet means idle. Ctrl+C to stop.",
+            "stratum-queue: %d workers on build %s waiting for jobs. Quiet means idle. "
+            "Ctrl+C to stop.",
             args.concurrency,
+            build_id(),
         )
         await run_pool(
             ledger, factory, deps, concurrency=args.concurrency, stop=stop, lease_seconds=args.lease
