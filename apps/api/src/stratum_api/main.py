@@ -428,6 +428,7 @@ async def create_post(
 ) -> dict[str, Any]:
     if body.template_id not in BINDINGS:
         raise HTTPException(400, f"unknown design {body.template_id!r}")
+    body = await _own_slug(body, ctx)
     if queue:
         return await _enqueue_post(body, ctx)
     rows = await ctx.supa.insert(
@@ -450,6 +451,37 @@ async def create_post(
         raise HTTPException(404, "no such client")
     version = await service.draft(ctx, post, clients[0])
     return {"post": post, "version": version}
+
+
+def _same_request(post: dict[str, Any], body: NewPost) -> bool:
+    return (
+        str(post.get("brief", "")).strip() == body.brief.strip()
+        and post.get("template_id") == body.template_id
+        and list(post.get("aspects") or []) == list(body.aspects)
+    )
+
+
+async def _own_slug(body: NewPost, ctx: service.Context) -> NewPost:
+    """A different post gets its own short name, even when it opens the same way.
+
+    The page names a post from the first four words of its brief, and the queue's
+    idempotency key is built from that name. So a second post starting "an enriching
+    journey of" - a new design, a new brief - quietly opened the first one (live,
+    29 Sep). The same request sent twice still lands on the same post: that is what
+    the key is for. Anything else gets the next free name: "...-2", "...-3".
+    """
+    base = body.slug[:74]  # the pattern allows 79 characters; leave room for "-99"
+    for n in range(1, 100):
+        slug = body.slug if n == 1 else f"{base}-{n}"
+        rows = await ctx.supa.select(
+            "posts",
+            client_id=f"eq.{body.client_id}",
+            slug=f"eq.{slug}",
+            select="brief,template_id,aspects",
+        )
+        if not rows or _same_request(rows[0], body):
+            return body if slug == body.slug else body.model_copy(update={"slug": slug})
+    raise HTTPException(409, f"Too many posts start '{body.slug}'. Give this one a short name.")
 
 
 async def _enqueue_post(body: NewPost, ctx: service.Context) -> dict[str, Any]:
