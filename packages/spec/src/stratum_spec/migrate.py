@@ -19,8 +19,14 @@ def _v1_to_v2(data: dict[str, Any]) -> dict[str, Any]:
     return {**data, "schema_version": 2}
 
 
+def _v2_to_v3(data: dict[str, Any]) -> dict[str, Any]:
+    """Schema 3 added PosterSpec.variants. A version-2 poster carries none, and is
+    laid out in other sizes from its template file, exactly as before."""
+    return {**data, "schema_version": 3, "variants": data.get("variants", {})}
+
+
 # version N -> function producing version N+1.
-UPGRADERS: dict[int, Upgrader] = {1: _v1_to_v2}
+UPGRADERS: dict[int, Upgrader] = {1: _v1_to_v2, 2: _v2_to_v3}
 
 
 class UnknownSchemaVersion(ValueError):

@@ -10,7 +10,7 @@ import json
 from pathlib import Path
 
 from stratum_spec.migrate import load
-from stratum_spec.models import PosterSpec
+from stratum_spec.models import LayoutOverride, PosterSpec
 
 
 def load_template(path: Path) -> PosterSpec:
@@ -97,13 +97,42 @@ def load_variants(path: Path) -> Variants:
     return variants
 
 
-def retarget(spec: PosterSpec, aspect: str, variants: Variants) -> PosterSpec:
+def embed(spec: PosterSpec, variants: Variants) -> PosterSpec:
+    """The same poster, carrying its template's per-size layout from now on.
+
+    Called when a poster is made, so a later edit to the template file never moves
+    an existing poster, and edits to the poster reach every size.
+    """
+    return PosterSpec.model_validate(
+        {
+            **spec.model_dump(),
+            "variants": {
+                aspect: {
+                    layer_id: LayoutOverride.model_validate(fields).model_dump()
+                    for layer_id, fields in layers.items()
+                }
+                for aspect, layers in variants.items()
+            },
+        }
+    )
+
+
+def retarget(spec: PosterSpec, aspect: str, variants: Variants | None = None) -> PosterSpec:
     """Return the same poster laid out for another aspect.
 
     No model runs, no asset is re-read and not a word changes - which is why shipping
     four formats costs what shipping one costs.
+
+    A poster that carries its own layout (schema 3) is laid out from that alone;
+    `variants` from the template file are only for posters made before it did.
     """
-    overrides = variants.get(aspect, {})
+    if spec.variants:
+        own = next((layers for key, layers in spec.variants.items() if key == aspect), {})
+        overrides: dict[str, dict[str, object]] = {
+            layer_id: override.changes() for layer_id, override in own.items()
+        }
+    else:
+        overrides = (variants or {}).get(aspect, {})
     known = {layer.id for layer in spec.layers}
     unknown = set(overrides) - known
     if unknown:
@@ -120,14 +149,16 @@ def retarget(spec: PosterSpec, aspect: str, variants: Variants) -> PosterSpec:
             "canvas": {
                 **spec.canvas.model_dump(),
                 "aspect": aspect,
-                "base_width": _base_width(spec.canvas.base_width, aspect),
+                "base_width": base_width_for(spec.canvas.base_width, aspect),
             },
             "layers": [layer.model_dump() for layer in layers],
+            # One size, fully laid out: it has no other sizes of its own.
+            "variants": {},
         }
     )
 
 
-def _base_width(base_width: int, aspect: str) -> int:
+def base_width_for(base_width: int, aspect: str) -> int:
     """Keep the SHORTER side at the template's base width.
 
     base_width is a width, so a 16:9 poster from a 1080-wide template would come out

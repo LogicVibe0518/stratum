@@ -9,6 +9,7 @@ from stratum_spec.models import (
     CutoutLayer,
     ImageLayer,
     Layer,
+    LayoutOverride,
     LogoLayer,
     LogoPlate,
     PosterSpec,
@@ -28,7 +29,13 @@ from stratum_spec.ops import (
     apply_op,
     apply_ops,
 )
-from stratum_spec.templates import load_template, load_templates, load_variants, retarget
+from stratum_spec.templates import (
+    embed,
+    load_template,
+    load_templates,
+    load_variants,
+    retarget,
+)
 
 __all__ = [
     "SCHEMA_VERSION",
@@ -40,6 +47,7 @@ __all__ = [
     "FontFace",
     "ImageLayer",
     "Layer",
+    "LayoutOverride",
     "LogoLayer",
     "LogoPlate",
     "Move",
@@ -57,6 +65,7 @@ __all__ = [
     "UnknownToken",
     "apply_op",
     "apply_ops",
+    "embed",
     "load",
     "load_template",
     "load_templates",
