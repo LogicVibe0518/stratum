@@ -42,10 +42,13 @@ META_FILE = "meta.json"
 # Process-wide on purpose: no code path in the worker should decode more than this.
 Image.MAX_IMAGE_PIXELS = MAX_PIXELS
 
-Format = Literal["JPEG", "PNG", "WEBP"]
+Format = Literal["JPEG", "PNG", "WEBP", "AVIF"]
 _HIGH_BIT_DEPTH_MODES = frozenset({"I", "I;16", "I;16B", "I;16L", "I;16N", "F"})
 # ISO-BMFF brands used by HEIC/HEIF stills and sequences (bytes 8-12 of the file).
 _HEIF_BRANDS = frozenset({b"heic", b"heix", b"hevc", b"hevx", b"heim", b"heis", b"mif1", b"msf1"})
+# AVIF is the same container with AV1 inside. Pillow decodes it natively (libavif,
+# BSD-licensed); image search results and modern websites increasingly serve it.
+_AVIF_BRANDS = frozenset({b"avif", b"avis"})
 _SRGB = ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB"))
 
 
@@ -68,6 +71,8 @@ def sniff(data: bytes) -> Format | None:
         return "PNG"
     if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
         return "WEBP"
+    if data[4:8] == b"ftyp" and data[8:12] in _AVIF_BRANDS:
+        return "AVIF"
     return None
 
 
@@ -81,7 +86,7 @@ def decode(data: bytes, name: str) -> Image.Image:
         raise UnsupportedFileType("HEIC is not supported yet - export as JPEG")
     fmt = sniff(data)
     if fmt is None:
-        raise UnsupportedFileType(f"{name} is not a JPEG, PNG or WebP image")
+        raise UnsupportedFileType(f"{name} is not a JPEG, PNG, WebP or AVIF image")
     try:
         image = Image.open(io.BytesIO(data), formats=[fmt])
     except Image.DecompressionBombError as exc:
