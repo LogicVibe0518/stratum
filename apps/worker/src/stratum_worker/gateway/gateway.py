@@ -12,6 +12,7 @@ Responsibilities, in order of importance:
 from __future__ import annotations
 
 import asyncio
+import logging
 import random
 import secrets
 from dataclasses import dataclass, field
@@ -32,10 +33,31 @@ from stratum_worker.gateway.errors import (
 )
 from stratum_worker.gateway.providers.base import ProviderCall
 from stratum_worker.gateway.router import Router
-from stratum_worker.gateway.tasks import RESULT_TYPES, TIMEOUTS_S, TaskName
+from stratum_worker.gateway.tasks import CUT_OFF, RESULT_TYPES, TIMEOUTS_S, UNPARSEABLE, TaskName
 
 BASE_BACKOFF_S = 0.25
 MAX_BACKOFF_S = 4.0
+
+log = logging.getLogger("stratum.gateway")
+
+
+def _log_failure(task: TaskName, provider: str, outcome: str, reason: str) -> None:
+    """One line per failed attempt, so the server log says WHY a task failed.
+
+    The trace has the detail; the log is where someone looks first, and before this
+    it said nothing at all - "every provider failed" was the only clue. Never the
+    model's words or the request: those are client data.
+    """
+    log.warning("%s via %s: %s (%s)", task.value, provider, outcome, reason[:200])
+
+
+def _invalid_reason(raw: object, exc: ValidationError) -> str:
+    detail = raw.get(UNPARSEABLE) if isinstance(raw, dict) else None
+    if detail == CUT_OFF:
+        return CUT_OFF
+    if isinstance(detail, str):
+        return "the answer was not a JSON object"
+    return f"{exc.error_count()} validation errors"
 
 
 class Tracer(Protocol):
@@ -125,6 +147,7 @@ class Gateway:
                     # same one burns the caller's latency budget twice. Move on.
                     last_error = ProviderTimeout(f"{provider.name} timed out")
                     breaker.record_failure()
+                    _log_failure(task, provider.name, "timeout", f"after {budget_s:g}s")
                     self.tracer.record(
                         run_id=run_id,
                         task=task,
@@ -151,6 +174,7 @@ class Gateway:
                 except (ProviderUnavailable, ProviderRateLimited) as exc:
                     last_error = exc
                     breaker.record_failure()
+                    _log_failure(task, provider.name, type(exc).__name__, str(exc))
                     self.tracer.record(
                         run_id=run_id,
                         task=task,
@@ -168,9 +192,9 @@ class Gateway:
                 try:
                     validated = result_type.model_validate(raw)
                 except ValidationError as exc:
-                    last_error = InvalidProviderOutput(
-                        f"{provider.name}: {exc.error_count()} validation errors"
-                    )
+                    reason = _invalid_reason(raw, exc)
+                    last_error = InvalidProviderOutput(f"{provider.name}: {reason}")
+                    _log_failure(task, provider.name, "invalid_output", reason)
                     self.tracer.record(
                         run_id=run_id,
                         task=task,

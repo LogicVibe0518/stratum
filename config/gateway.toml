@@ -26,7 +26,10 @@ max_output_tokens = 600
 
 [tasks."edit.parse"]        # interactive path: keep it on fast models
 order = ["openrouter", "openai"]
-max_output_tokens = 400
+# Was 400. On 29 Sep (live) a request with several changes in it failed on both
+# providers after 18-22 s; the likeliest cause is an answer cut off at 400 tokens,
+# which every retry repeats. A one-line change used roughly 200. This is headroom.
+max_output_tokens = 1200
 
 [tasks."background.create"]
 order = ["fal", "openai"]

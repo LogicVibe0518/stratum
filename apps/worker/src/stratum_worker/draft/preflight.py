@@ -188,7 +188,89 @@ def check_copy(copy: PostCopy, rules: ClientRules, brief: str) -> tuple[Flag, ..
     return tuple(flags)
 
 
-__all__ = ["check_claims", "check_copy", "check_layout", "first_sentence"]
+# --- does the poster say what the brief asked for? --------------------------------
+
+_MONTHS = ("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec")
+_MONTH = r"(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?"
+_DAY = r"(\d{1,2})(?:st|nd|rd|th)?"
+DAY_MONTH = re.compile(rf"\b{_DAY}\s+(?:of\s+)?{_MONTH}(?![a-z])", re.IGNORECASE)
+MONTH_DAY = re.compile(rf"\b{_MONTH}\s+{_DAY}\b", re.IGNORECASE)
+
+
+def _dates(text: str) -> dict[tuple[int, int], str]:
+    """(day, month) -> the words as written, for "5th nov", "5 November", "Nov 5"."""
+    found: dict[tuple[int, int], str] = {}
+    taken: set[tuple[int, int]] = set()  # month words already read as "5th nov"
+    for match in DAY_MONTH.finditer(text):
+        day, month = int(match.group(1)), _MONTHS.index(match.group(2).casefold()) + 1
+        found.setdefault((day, month), match.group().strip())
+        taken.add(match.span(2))
+    for match in MONTH_DAY.finditer(text):
+        if match.span(1) in taken:  # "5th nov 1st feb" is not also "nov 1st"
+            continue
+        month, day = _MONTHS.index(match.group(1).casefold()) + 1, int(match.group(2))
+        found.setdefault((day, month), match.group().strip())
+    return {key: raw for key, raw in found.items() if 1 <= key[0] <= 31}
+
+
+def _figures(text: str) -> dict[str, str]:
+    """Money and percentages, normalised -> as written."""
+    return {_normalise(m.group()): m.group().strip() for m in CLAIM.finditer(text)}
+
+
+def _missing(brief: str, text: str) -> list[str]:
+    dates = _dates(text)
+    missing = [raw for key, raw in _dates(brief).items() if key not in dates]
+    shown = _normalise(text)
+    missing += [raw for key, raw in _figures(brief).items() if key not in shown]
+    return missing
+
+
+def _listed(items: list[str]) -> str:
+    quoted = [f"'{item}'" for item in items]
+    return quoted[0] if len(quoted) == 1 else f"{', '.join(quoted[:-1])} and {quoted[-1]}"
+
+
+def check_brief_on_poster(
+    brief: str, poster: str, caption: str, *, has_offer_line: bool
+) -> tuple[Flag, ...]:
+    """The brief's offer and dates, when the poster itself does not show them.
+
+    Found on the live site: a brief said "5th nov 2026 to 1st feb 2027 ... 50% off",
+    the model wrote both into the offer line, and the design had no offer line - so
+    the poster showed neither, and the draft said "Nothing to check". A figure the
+    client asked for is exactly what their customers look for on the poster.
+    """
+    missing = _missing(brief, poster)
+    if not missing:
+        return ()
+    them = "it" if len(missing) == 1 else "them"
+    where = (
+        f" The caption has {them}."
+        if caption and not _missing(" ; ".join(missing), caption)
+        else ""
+    )
+    fix = (
+        f"To add {them}, type a change such as 'add {missing[0]} to the offer line'."
+        if has_offer_line
+        else f"This design has no line for {them}: to show {them}, make the post with "
+        f"a design that has an offer line."
+    )
+    return (
+        Flag(
+            code="brief_not_on_poster",
+            message=f"The brief says {_listed(missing)}, but the poster does not.{where} {fix}",
+        ),
+    )
+
+
+__all__ = [
+    "check_brief_on_poster",
+    "check_claims",
+    "check_copy",
+    "check_layout",
+    "first_sentence",
+]
 
 
 # --- the poster itself ------------------------------------------------------------
