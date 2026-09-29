@@ -25,6 +25,12 @@ from stratum_spec.models import Aspect
 from stratum_worker.app import reviews, service
 from stratum_worker.app.settings import Settings, settings
 from stratum_worker.app.supa import Supa, SupabaseError, close_pool
+from stratum_worker.assets.errors import (
+    AssetError,
+    FileTooLarge,
+    ImageTooLarge,
+    UnsupportedFileType,
+)
 from stratum_worker.brand import Check, Suggestion, check_palette, is_starter
 from stratum_worker.draft.bindings import BINDINGS
 from stratum_worker.draft.compose import ComposeError
@@ -267,12 +273,33 @@ async def upload_asset(
 ) -> dict[str, Any]:
     if kind not in ("photo", "logo"):
         raise HTTPException(400, "kind must be photo or logo")
-    data = await file.read()
-    if len(data) > 50 * 1024 * 1024:
-        raise HTTPException(413, "that image is over 50 MB")
-    sha = await service.store_image(ctx, client_id, data, kind=kind)
+    name = file.filename or "That file"
+    data = await file.read(MAX_UPLOAD_BYTES + 1)
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise HTTPException(413, f"{name} is over the 25 MB limit.")
+    try:
+        sha = await service.store_image(ctx, client_id, data, kind=kind)
+    except AssetError as exc:
+        # Intake's own messages name a temporary file; say it with the name the
+        # person actually chose, and say what to do next.
+        raise HTTPException(*_upload_refusal(name, exc)) from exc
     rows = await ctx.supa.select("assets", sha256=f"eq.{sha}", select="*")
     return rows[0] if rows else {"sha256": sha}
+
+
+MAX_UPLOAD_BYTES = 25 * 1024 * 1024
+
+
+def _upload_refusal(name: str, exc: AssetError) -> tuple[int, str]:
+    if isinstance(exc, UnsupportedFileType):
+        if "HEIC" in str(exc):
+            return 415, f"{name} is an iPhone HEIC photo. Export it as JPEG, then upload that."
+        return 415, f"{name} isn't a JPEG, PNG, WebP or AVIF image."
+    if isinstance(exc, FileTooLarge):
+        return 413, f"{name} is over the 25 MB limit."
+    if isinstance(exc, ImageTooLarge):
+        return 413, f"{name} is bigger than 8000 x 8000 pixels. Resize it and try again."
+    return 422, f"{name} looks damaged and won't open. Save it again as a JPEG and retry."
 
 
 # --- brand kits -------------------------------------------------------------------
