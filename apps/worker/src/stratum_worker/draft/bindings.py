@@ -114,11 +114,18 @@ class UnknownTemplate(KeyError):
 
 
 def binding_for(template_id: str) -> Binding:
-    try:
+    if template_id in BINDINGS:
         return BINDINGS[template_id]
-    except KeyError as exc:
+    # Imported here: the design space measures text with the renderer, which the
+    # draft package also uses, and the two must not import each other at load time.
+    from stratum_worker.design import UnknownDesign, binding_parts
+
+    try:
+        texts, photos = binding_parts(template_id)
+    except UnknownDesign as exc:
         known = ", ".join(sorted(BINDINGS))
         raise UnknownTemplate(f"no binding for template {template_id!r}; have {known}") from exc
+    return Binding(texts=texts, photos=photos, logo="logo")
 
 
 __all__ = ["BINDINGS", "Binding", "UnknownTemplate", "binding_for"]

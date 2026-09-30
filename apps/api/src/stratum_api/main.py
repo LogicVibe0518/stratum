@@ -32,6 +32,7 @@ from stratum_worker.assets.errors import (
     UnsupportedFileType,
 )
 from stratum_worker.brand import Check, Suggestion, check_palette, is_starter
+from stratum_worker.design import PRESETS, is_design
 from stratum_worker.draft.bindings import BINDINGS
 from stratum_worker.draft.compose import ComposeError
 from stratum_worker.draft.pipeline import DraftError
@@ -175,7 +176,7 @@ def healthz() -> dict[str, object]:
     return {
         "status": "degraded" if missing else "ok",
         "spec_schema_version": SCHEMA_VERSION,
-        "templates": sorted(BINDINGS),
+        "templates": sorted([*BINDINGS, *PRESETS]),
         "supabase": settings().configured,
         "ai_tasks": coverage,
         # Named rather than implied: a server with no providers used to start
@@ -426,7 +427,7 @@ async def list_posts(
 async def create_post(
     body: NewPost, queue: bool = False, ctx: service.Context = Depends(context)
 ) -> dict[str, Any]:
-    if body.template_id not in BINDINGS:
+    if body.template_id not in BINDINGS and not is_design(body.template_id):
         raise HTTPException(400, f"unknown design {body.template_id!r}")
     body = await _own_slug(body, ctx)
     if queue:
@@ -707,7 +708,8 @@ async def preview_image(
 
 @app.get("/api/designs")
 def designs() -> list[str]:
-    return sorted(BINDINGS)
+    """Hand-made templates, plus named designs from the design space (M11a)."""
+    return sorted([*BINDINGS, *PRESETS])
 
 
 # --- client review links ----------------------------------------------------------
