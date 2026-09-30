@@ -22,7 +22,7 @@ from pydantic import TypeAdapter, ValidationError
 from stratum_spec import BrandKit, embed, load_template, load_variants, retarget
 from stratum_spec import load as load_spec
 from stratum_spec.client import ClientRules
-from stratum_spec.models import LogoLayer, PosterSpec, TextLayer
+from stratum_spec.models import Aspect, ImageLayer, LogoLayer, PosterSpec, TextLayer
 from stratum_spec.ops import EditOp, OpError, apply_ops
 from stratum_spec.templates import Variants
 
@@ -68,6 +68,8 @@ from stratum_worker.gateway.tasks import (
     PostCopyResult,
     TaskName,
 )
+from stratum_worker.photo.frame import face_flags, frame_photos
+from stratum_worker.photo.read import PhotoRead, read_photo
 
 OPS = TypeAdapter(list[EditOp])
 HEX = re.compile(r"#[0-9a-f]{6}")
@@ -412,6 +414,53 @@ async def store_image(ctx: Context, client_id: str | None, data: bytes, *, kind:
     return meta.sha256
 
 
+async def photo_reads(spec: PosterSpec, asset_paths: dict[str, str]) -> dict[str, PhotoRead]:
+    """Each photo on the poster measured once: faces, what stands out, what is busy.
+
+    Cached per file inside read_photo, so framing a draft and checking it read each
+    photo once. The face model is CPU work, so it runs in a thread.
+    """
+    shas = sorted(
+        {
+            layer.asset
+            for layer in spec.layers
+            if isinstance(layer, ImageLayer)
+            and layer.fit == "cover"
+            and layer.asset is not None
+            and layer.asset in asset_paths
+        }
+    )
+    reads = await asyncio.gather(*(asyncio.to_thread(read_photo, asset_paths[sha]) for sha in shas))
+    return dict(zip(shas, reads, strict=True))
+
+
+def swapped_photos(before: PosterSpec, after: PosterSpec) -> set[str]:
+    """Photo layers whose photo an edit replaced."""
+    old = {layer.id: getattr(layer, "asset", None) for layer in before.layers}
+    return {
+        layer.id
+        for layer in after.layers
+        if isinstance(layer, ImageLayer) and layer.asset != old.get(layer.id)
+    }
+
+
+async def reframe(
+    ctx: Context,
+    before: PosterSpec,
+    after: PosterSpec,
+    asset_paths: dict[str, str],
+    kit: BrandKit,
+    aspects: list[Aspect],
+) -> PosterSpec:
+    """Frame the photos an edit swapped in. Every other crop stays as the client saw it:
+    a tweak to the words must not quietly move the photo."""
+    swapped = swapped_photos(before, after)
+    if not swapped:
+        return after
+    reads = await photo_reads(after, asset_paths)
+    return frame_photos(after, reads, kit, ctx.settings.repo_root, aspects, only=swapped)
+
+
 async def render_versions(
     ctx: Context,
     post: dict[str, Any],
@@ -424,6 +473,7 @@ async def render_versions(
 
     laid_out = {aspect: retarget(spec, aspect, variants) for aspect in post["aspects"]}
     inks = await inks_for(ctx, spec)
+    reads = await photo_reads(spec, asset_paths)
 
     def draw(aspect: str) -> dict[str, Any]:
         one = laid_out[aspect]
@@ -436,9 +486,11 @@ async def render_versions(
     out = list(await asyncio.gather(*(asyncio.to_thread(draw, a) for a in laid_out)))
     for drawn in out:
         drawn["preview"] = preview(drawn["png"])
+    root = ctx.settings.repo_root
     return out, per_size(
         {
-            aspect: check_layout(one, kit, root=ctx.settings.repo_root, logos=inks)
+            aspect: check_layout(one, kit, root=root, logos=inks)
+            + face_flags(one, reads, kit, root)
             for aspect, one in laid_out.items()
         }
     )
@@ -669,6 +721,10 @@ async def draft(ctx: Context, post: dict[str, Any], client: dict[str, Any]) -> d
             spec = fit_logo(spec, kit, ink, variants, post["aspects"])
 
     asset_paths = {sha: await local_path(ctx, sha) for sha in set(assets.values())}
+    # Which part of each photo shows, per size: faces whole and clear of the words,
+    # the words over the calmest part. Chosen once, here, and stored in the poster.
+    reads = await photo_reads(spec, asset_paths)
+    spec = frame_photos(spec, reads, kit, ctx.settings.repo_root, post["aspects"])
     renders, layout_flags = await render_versions(ctx, post, spec, variants, asset_paths, kit)
     flags.extend(layout_flags)
     flags.extend(check_copy(words, rules_of(client), post["brief"]))
@@ -827,6 +883,7 @@ async def tweak(
         getattr(layer, "asset", None) for layer in changed.layers if getattr(layer, "asset", None)
     }
     asset_paths = {sha: await local_path(ctx, sha) for sha in shas if isinstance(sha, str)}
+    changed = await reframe(ctx, spec, changed, asset_paths, kit, post["aspects"])
     renders, flags = await render_versions(ctx, post, changed, variants, asset_paths, kit)
 
     # An edit can change the words on the poster, so the claims are checked again -
@@ -1060,6 +1117,7 @@ async def quick(
     bound = {getattr(one, "asset", None) for one in changed.layers if getattr(one, "asset", None)}
     asset_paths = {s: await local_path(ctx, s) for s in bound if isinstance(s, str)}
     kit = await kit_for(ctx, client, changed.brand_kit_version)
+    changed = await reframe(ctx, spec, changed, asset_paths, kit, post["aspects"])
     renders, flags = await render_versions(
         ctx, post, changed, file_variants(ctx, post["template_id"]), asset_paths, kit
     )

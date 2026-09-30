@@ -24,7 +24,8 @@ from stratum_spec.models import Box, ImageLayer, LogoLayer, PosterSpec, ShapeLay
 
 from stratum_worker.draft.backdrop import behind, covers
 from stratum_worker.draft.preflight import STORY_SAFE_BOTTOM, STORY_SAFE_TOP
-from stratum_worker.render.layout import place_text
+from stratum_worker.photo.read import edge_map
+from stratum_worker.render.layout import crop_window, place_text
 from stratum_worker.render.text import load_metrics
 
 FEATURES: tuple[str, ...] = (
@@ -164,8 +165,13 @@ def _busyness(spec: PosterSpec, ink: Ink, edges: dict[str, np.ndarray] | None) -
             continue
         edge = edges[layer.asset]
         eh, ew = edge.shape
-        scale = max(lw / ew, lh / eh)  # "cover": the photo fills its box, centred
-        off_x, off_y = (ew * scale - lw) / 2, (eh * scale - lh) / 2
+        if layer.crop is None:
+            scale = max(lw / ew, lh / eh)  # "cover": the photo fills its box, centred
+            off_x, off_y = (ew * scale - lw) / 2, (eh * scale - lh) / 2
+        else:  # framed (schema 4): the part of the photo its crop window shows
+            win_x, win_y, win_w, _ = crop_window((ew, eh), (lw, lh), layer.crop)
+            scale = lw / win_w
+            off_x, off_y = win_x * scale, win_y * scale
         x0 = int((ink.x - lx + off_x) / scale)
         x1 = max(x0 + 1, int((ink.right - lx + off_x) / scale))
         y0 = int((ink.y - ly + off_y) / scale)
@@ -336,28 +342,6 @@ def measure(
     return out
 
 
-def edge_map(image: np.ndarray, *, size: int = 96) -> np.ndarray:
-    """Edge density of a photo, 0..1, on a small grid: how busy each part of it is.
-
-    Gradient magnitude of the luminance, normalised by a high percentile so one
-    bright edge does not flatten the rest, then box-blurred so a text line samples
-    the neighbourhood it sits in, not single pixels.
-    """
-    from PIL import Image
-
-    grey = Image.fromarray(image).convert("L")
-    grey.thumbnail((size, size))
-    lum = np.asarray(grey, dtype=np.float64) / 255.0
-    gy, gx = np.gradient(lum)
-    magnitude = np.hypot(gx, gy)
-    scale = float(np.percentile(magnitude, 99)) or 1.0
-    norm: np.ndarray = np.clip(magnitude / scale, 0.0, 1.0)
-    padded = np.pad(norm, 2, mode="edge")
-    out: np.ndarray = np.zeros_like(norm)
-    for dy in range(5):
-        for dx in range(5):
-            out += padded[dy : dy + norm.shape[0], dx : dx + norm.shape[1]] / 25.0
-    return out
-
-
+# edge_map moved to photo.read (M10b), which frames photos with it. Re-exported
+# unchanged, so critic v1's measurements - and the model trained on them - are too.
 __all__ = ["FEATURES", "INDEX", "edge_map", "measure"]

@@ -39,3 +39,8 @@ out/
 clients/*/photos/*
 !clients/*/photos/.gitkeep
 clients/*/out/
+
+# Contact sheets made locally. frames.png is drawn from whatever photo you give it,
+# which may be a real person: never commit it.
+/frames.png
+/design-sheet.png

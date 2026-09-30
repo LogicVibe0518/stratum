@@ -41,7 +41,7 @@ strict = true
 packages = ["stratum_spec", "stratum_api", "stratum_worker"]
 
 [[tool.mypy.overrides]]
-module = ["resvg.*", "fontTools.*"]
+module = ["resvg.*", "fontTools.*", "onnxruntime.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

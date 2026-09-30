@@ -1,7 +1,14 @@
 from __future__ import annotations
 
 import pytest
-from stratum_spec import SCHEMA_VERSION, PosterSpec, UnknownSchemaVersion, load, upgrade
+from stratum_spec import (
+    SCHEMA_VERSION,
+    ImageLayer,
+    PosterSpec,
+    UnknownSchemaVersion,
+    load,
+    upgrade,
+)
 
 
 def test_current_version_passes_through(spec: PosterSpec) -> None:
@@ -24,8 +31,9 @@ def test_a_version_1_poster_upgrades_to_the_current_schema_unchanged(spec: Poste
     data.pop("variants", None)
     for layer in data["layers"]:
         layer.pop("plate", None)
+        layer.pop("crop", None)
     upgraded = load(data)
-    assert upgraded.schema_version == SCHEMA_VERSION == 3
+    assert upgraded.schema_version == SCHEMA_VERSION == 4
     assert upgraded.model_dump(exclude={"schema_version"}) == spec.model_dump(
         exclude={"schema_version"}
     )
@@ -38,9 +46,28 @@ def test_a_version_2_poster_upgrades_to_3_carrying_no_layout_of_its_own(
     data = spec.model_dump(mode="json")
     data["schema_version"] = 2
     data.pop("variants")
+    for layer in data["layers"]:
+        layer.pop("crop", None)
     upgraded = load(data)
-    assert upgraded.schema_version == 3
+    assert upgraded.schema_version == SCHEMA_VERSION
     assert upgraded.variants == {}
     assert upgraded.model_dump(exclude={"schema_version"}) == spec.model_dump(
         exclude={"schema_version"}
     )
+
+
+def test_a_version_3_poster_upgrades_to_4_showing_the_centre_of_every_photo(
+    spec: PosterSpec,
+) -> None:
+    # A real stored shape from schema 3: image layers and size overrides with no "crop".
+    data = spec.model_dump(mode="json")
+    data["schema_version"] = 3
+    for layer in data["layers"]:
+        layer.pop("crop", None)
+    data["variants"] = {"9:16": {"bg": {"dim": 0.2}}}
+    upgraded = load(data)
+    assert upgraded.schema_version == 4
+    photo = upgraded.layer("bg")
+    assert isinstance(photo, ImageLayer)
+    assert photo.crop is None
+    assert upgraded.variants["9:16"]["bg"].crop is None
