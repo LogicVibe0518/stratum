@@ -25,8 +25,14 @@ def _v2_to_v3(data: dict[str, Any]) -> dict[str, Any]:
     return {**data, "schema_version": 3, "variants": data.get("variants", {})}
 
 
+def _v3_to_v4(data: dict[str, Any]) -> dict[str, Any]:
+    """Schema 4 added ImageLayer.crop. A version-3 poster has none, so every photo
+    still shows its centre, exactly as before."""
+    return {**data, "schema_version": 4}
+
+
 # version N -> function producing version N+1.
-UPGRADERS: dict[int, Upgrader] = {1: _v1_to_v2, 2: _v2_to_v3}
+UPGRADERS: dict[int, Upgrader] = {1: _v1_to_v2, 2: _v2_to_v3, 3: _v3_to_v4}
 
 
 class UnknownSchemaVersion(ValueError):

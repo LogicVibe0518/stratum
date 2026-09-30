@@ -1,4 +1,4 @@
-.PHONY: setup sync check lint fmt type test live api notebook design-sheet
+.PHONY: setup sync check lint fmt type test live api notebook design-sheet frame-sheet
 
 # Git hooks are shared by every worktree of a repo, and pre-commit writes the path of
 # THIS checkout's Python into them. Installing from a worktree would point the main
@@ -46,3 +46,8 @@ notebook: sync
 # A contact sheet of design-space candidates for one fictional client.
 design-sheet: sync
 	uv run python -m stratum_worker.design.preview --client kowalski-plumbing --out design-sheet.png
+
+# Before/after framing on a photo you may use: make frame-sheet PHOTO=path/to/photo.jpg
+frame-sheet: sync
+	@test -n "$(PHOTO)" || (echo "usage: make frame-sheet PHOTO=path/to/photo.jpg" && exit 2)
+	uv run python -m stratum_worker.photo.sheet "$(PHOTO)" --out frames.png

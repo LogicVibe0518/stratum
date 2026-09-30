@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from stratum_spec import BrandKit, Layer, LogoPlate, PosterSpec, TextLayer
+from stratum_spec import BrandKit, Crop, Layer, LogoPlate, PosterSpec, TextLayer
 
 from stratum_worker.render.text import fit, load_metrics
 
@@ -43,6 +43,36 @@ def contained(box: Geom, image_size: tuple[int, int]) -> Geom:
     scale = min(w / image_w, h / image_h)
     shown_w, shown_h = image_w * scale, image_h * scale
     return x + (w - shown_w) / 2, y + (h - shown_h) / 2, shown_w, shown_h
+
+
+CENTRE = Crop()
+
+
+def crop_window(
+    image_size: tuple[int, int], box_size: tuple[float, float], crop: Crop | None
+) -> Geom:
+    """The part of a photo a "cover" image shows, in the photo's own pixels: x, y, w, h.
+
+    At zoom 1 the window is the largest one with the box's shape that fits in the
+    photo, so the photo fills the box with nothing to spare. Zoom shrinks it about
+    its centre. The window never leaves the photo: a crop asking for more than the
+    edge gets the edge. With no crop, the centre - what every poster before schema 4
+    showed, and what "xMidYMid slice" draws.
+    """
+    crop = crop or CENTRE
+    image_w, image_h = image_size
+    box_w, box_h = box_size
+    ratio = box_w / box_h
+    if image_w / image_h > ratio:  # the photo is wider than the box: trim the sides
+        window_h = float(image_h)
+        window_w = window_h * ratio
+    else:  # taller: trim top and bottom
+        window_w = float(image_w)
+        window_h = window_w / ratio
+    window_w, window_h = window_w / crop.zoom, window_h / crop.zoom
+    x = min(max(crop.x * image_w - window_w / 2, 0.0), image_w - window_w)
+    y = min(max(crop.y * image_h - window_h / 2, 0.0), image_h - window_h)
+    return x, y, window_w, window_h
 
 
 def plated(box: Geom, image_size: tuple[int, int], plate: LogoPlate) -> tuple[Geom, Geom, float]:

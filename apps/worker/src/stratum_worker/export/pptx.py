@@ -45,7 +45,7 @@ from stratum_spec import (
     TextLayer,
 )
 
-from stratum_worker.render.layout import box_px, contained, place_text, plated
+from stratum_worker.render.layout import box_px, contained, crop_window, place_text, plated
 from stratum_worker.render.svg import BLUR_SCALE, DIM_FILL, PLACEHOLDER_FILL
 
 EMU_PER_PX = 9525  # 914400 EMU per inch / 96 px per inch
@@ -139,17 +139,28 @@ def _limit(image: Image.Image, shown_w: float, shown_h: float) -> Image.Image:
 
 
 def _cover(slide: Any, layer: ImageLayer, spec: PosterSpec, image: Image.Image, geom: Geom) -> Any:
-    """Fill the box, cropping the overflow evenly: what the poster shows, nothing else."""
+    """Fill the box, trimming the photo as the poster does: its crop, or evenly."""
     x, y, w, h = geom
-    scale = max(w / image.width, h / image.height)
+    window = crop_window(image.size, (w, h), layer.crop) if layer.crop is not None else None
+    scale = max(w / image.width, h / image.height) if window is None else w / window[2]
     if layer.blur > 0:
         # The renderer blurs at canvas scale; the same blur measured in source pixels.
         sigma = layer.blur * BLUR_SCALE * min(spec.canvas.size) / scale
         image = image.convert("RGB").filter(ImageFilter.GaussianBlur(sigma))
+    source_size = image.size
     image = _limit(image, image.width * scale, image.height * scale)
     picture = slide.shapes.add_picture(
         io.BytesIO(_encode(image)), _emu(x), _emu(y), _emu(w), _emu(h)
     )
+    if window is not None:
+        # The crop window, as the share of the photo trimmed from each side. Shares,
+        # not pixels, so the shrink `_limit` may have applied does not matter.
+        (win_x, win_y, win_w, win_h), (full_w, full_h) = window, source_size
+        picture.crop_left = win_x / full_w
+        picture.crop_right = 1 - (win_x + win_w) / full_w
+        picture.crop_top = win_y / full_h
+        picture.crop_bottom = 1 - (win_y + win_h) / full_h
+        return picture
     image_ratio, box_ratio = image.width / image.height, w / h
     if image_ratio > box_ratio:  # wider than the box: trim the sides
         side = (1 - box_ratio / image_ratio) / 2

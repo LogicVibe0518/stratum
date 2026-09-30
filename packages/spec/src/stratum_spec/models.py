@@ -18,7 +18,8 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # 2: LogoLayer.plate (M9b). Version-1 specs have no plate and upgrade unchanged.
 # 3: PosterSpec.variants (M11a). A poster carries its own layout for every size.
-SCHEMA_VERSION = 3
+# 4: ImageLayer.crop (M10b). Which part of a photo shows; none = the centre, as before.
+SCHEMA_VERSION = 4
 
 # A coordinate may sit slightly outside the canvas (full-bleed art, deliberate crops).
 Coord = Annotated[float, Field(ge=-1.0, le=2.0)]
@@ -58,6 +59,23 @@ class BaseLayer(Frozen):
     locked: bool = False
 
 
+class Crop(Frozen):
+    """Which part of a photo a "cover" image shows.
+
+    A photo rarely has the shape of its box, so part of it is cut off. Before schema
+    4 that part was always cut evenly from both sides, which cut heads off and put
+    headlines over faces. Now the draft chooses, per size, where the window sits.
+
+    x, y: the centre of the part shown, as fractions of the photo's width and height.
+        The window is kept inside the photo, so x=1.0 means "as far right as it goes".
+    zoom: 1 shows as much of the photo as fills the box; 1.25 shows 80% of that.
+    """
+
+    x: Unit = 0.5
+    y: Unit = 0.5
+    zoom: float = Field(default=1.0, ge=1.0, le=3.0)
+
+
 class ImageLayer(BaseLayer):
     """A photo: the client's own, licensed stock, or a generated background."""
 
@@ -67,6 +85,8 @@ class ImageLayer(BaseLayer):
     fit: Literal["cover", "contain"] = "cover"
     blur: float = Field(default=0.0, ge=0.0, le=1.0)
     dim: float = Field(default=0.0, ge=0.0, le=1.0)
+    # Only for fit="cover". None = the centre of the photo.
+    crop: Crop | None = None
 
 
 class CutoutLayer(BaseLayer):
@@ -159,6 +179,7 @@ class LayoutOverride(Frozen):
     radius: Unit | None = None
     safe_area: Unit | None = None
     uppercase: bool | None = None
+    crop: Crop | None = None
 
     def changes(self) -> dict[str, object]:
         """The fields this override sets, ready to lay over a layer's own."""
