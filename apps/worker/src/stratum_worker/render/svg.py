@@ -23,7 +23,7 @@ from stratum_spec import (
     TextLayer,
 )
 
-from stratum_worker.render.layout import box_px, place_text, plated
+from stratum_worker.render.layout import box_px, crop_window, place_text, plated
 
 PLACEHOLDER_FILL = "#d8d8d8"
 PLACEHOLDER_STROKE = "#b4b4b4"
@@ -68,6 +68,24 @@ def _blurred(layer: ImageLayer, spec: PosterSpec, geom: tuple[float, ...], image
     )
 
 
+def _framed_image(layer: ImageLayer, geom: tuple[float, ...], href: str) -> str:
+    """The photo scaled and shifted so its crop window fills the box exactly.
+
+    Drawn whole and clipped by the caller, so the part outside the window is simply
+    not visible - the same picture "xMidYMid slice" draws when the crop is the centre.
+    """
+    x, y, w, h = geom
+    with Image.open(href) as image:
+        size = image.size
+    win_x, win_y, win_w, _ = crop_window(size, (w, h), layer.crop)
+    scale = w / win_w
+    return (
+        f'<image x="{x - win_x * scale:.2f}" y="{y - win_y * scale:.2f}" '
+        f'width="{size[0] * scale:.2f}" height="{size[1] * scale:.2f}" '
+        f'href="{escape(href, {chr(34): "&quot;"})}" preserveAspectRatio="none"/>'
+    )
+
+
 def _image_svg(
     layer: ImageLayer | CutoutLayer | LogoLayer,
     spec: PosterSpec,
@@ -100,12 +118,27 @@ def _image_svg(
             if isinstance(layer, ImageLayer) and layer.fit == "cover"
             else "xMidYMid meet"
         )
-        body = (
-            f'<image x="{x:.2f}" y="{y:.2f}" width="{w:.2f}" height="{h:.2f}" '
-            f'href="{escape(href, {chr(34): "&quot;"})}" preserveAspectRatio="{preserve}"/>'
+        framed = (
+            layer
+            if isinstance(layer, ImageLayer) and layer.fit == "cover" and layer.crop is not None
+            else None
         )
+        if framed is not None:
+            body = _framed_image(framed, geom, href)
+        else:
+            body = (
+                f'<image x="{x:.2f}" y="{y:.2f}" width="{w:.2f}" height="{h:.2f}" '
+                f'href="{escape(href, {chr(34): "&quot;"})}" preserveAspectRatio="{preserve}"/>'
+            )
         if isinstance(layer, ImageLayer) and layer.blur > 0:
             body = _blurred(layer, spec, geom, body)
+        elif framed is not None:
+            clip_id = f"crop-{layer.id}"  # layer ids cannot contain "-": never collides
+            body = (
+                f'<defs><clipPath id="{clip_id}"><rect x="{x:.2f}" y="{y:.2f}" '
+                f'width="{w:.2f}" height="{h:.2f}"/></clipPath></defs>'
+                f'<g clip-path="url(#{clip_id})">{body}</g>'
+            )
         body = plate + body
     if isinstance(layer, ImageLayer) and layer.dim > 0:
         body += (

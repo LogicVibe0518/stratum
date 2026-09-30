@@ -21,7 +21,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from pydantic import BaseModel
-from stratum_spec.models import Aspect, PosterSpec
+from stratum_spec.models import Aspect, ImageLayer, PosterSpec
 from stratum_spec.templates import Variants, load_template, load_variants, retarget
 
 from stratum_worker.assets.models import AssetMeta
@@ -47,6 +47,8 @@ from stratum_worker.gateway.tasks import (
     PostCopyResult,
     TaskName,
 )
+from stratum_worker.photo.frame import face_flags, frame_photos
+from stratum_worker.photo.read import read_photo
 from stratum_worker.render import render_poster
 
 # A photo with any of these is not fit to build a post around. The others
@@ -344,9 +346,17 @@ def _render_all(
     out.mkdir(parents=True, exist_ok=True)
     posters: list[RenderedPoster] = []
     layout_flags: list[Flag] = []
+    photos = {
+        assets[layer.id]
+        for layer in template.layers
+        if isinstance(layer, ImageLayer) and layer.id in assets and assets[layer.id] in asset_paths
+    }
+    reads = {sha: read_photo(asset_paths[sha]) for sha in sorted(photos)}
     for aspect in brief.aspects:
         spec = build_spec(template, client.kit, texts, assets, aspect=aspect)
         spec = retarget(spec, aspect, variants)
+        # One size at a time here, so each size is framed as its own poster.
+        spec = frame_photos(spec, reads, client.kit, deps.repo_root, [aspect])
         png = render_poster(spec, client.kit, assets=asset_paths, root=deps.repo_root)
         suffix = _aspect_suffix(aspect)
         png_path = out / f"poster-{suffix}.png"
@@ -354,6 +364,7 @@ def _render_all(
         png_path.write_bytes(png)
         spec_path.write_text(spec.model_dump_json(indent=2), encoding="utf-8")
         layout_flags.extend(check_layout(spec, client.kit, root=deps.repo_root))
+        layout_flags.extend(face_flags(spec, reads, client.kit, deps.repo_root))
         width, height = spec.canvas.size
         posters.append(
             RenderedPoster(

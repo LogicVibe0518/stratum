@@ -153,6 +153,10 @@ def _override_box(change: Callable[[Box], Box]) -> Callable[[LayoutOverride], La
     return apply
 
 
+def _uncropped(override: LayoutOverride) -> LayoutOverride:
+    return override if override.crop is None else override.model_copy(update={"crop": None})
+
+
 def apply_op(spec: PosterSpec, op: EditOp) -> PosterSpec:
     """Apply one op, returning a new spec. Never mutates the input."""
     if isinstance(op, NeedsHuman):
@@ -195,6 +199,11 @@ def apply_op(spec: PosterSpec, op: EditOp) -> PosterSpec:
     if isinstance(op, SwapAsset):
         if not isinstance(target, _ASSET_LAYERS):
             raise OpError(f"layer {op.layer!r} holds no asset")
+        if isinstance(target, ImageLayer):
+            # A crop was chosen for the old photo's subject. Kept, it would frame
+            # the new photo by where someone else stood, so every size goes back
+            # to the centre until the photo is framed again.
+            return _replace(spec, op.layer, sized=_uncropped, asset=op.asset, crop=None)
         return _replace(spec, op.layer, asset=op.asset)
 
     visible = op.visible
