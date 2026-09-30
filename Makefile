@@ -1,4 +1,4 @@
-.PHONY: setup sync check lint fmt type test live api
+.PHONY: setup sync check lint fmt type test live api notebook design-sheet
 
 # Git hooks are shared by every worktree of a repo, and pre-commit writes the path of
 # THIS checkout's Python into them. Installing from a worktree would point the main
@@ -36,3 +36,13 @@ live: sync
 
 api: sync
 	uv run uvicorn stratum_api.main:app --reload --port 8000
+
+# The critic (M12a) is trained by a person, step by step, in this notebook. Opens
+# JupyterLab in the browser; jupyter, pandas and matplotlib are fetched for this run
+# only and are not project dependencies.
+notebook: sync
+	uv run --with jupyterlab --with pandas --with matplotlib jupyter lab ml/critic/walkthrough.ipynb
+
+# A contact sheet of design-space candidates for one fictional client.
+design-sheet: sync
+	uv run python -m stratum_worker.design.preview --client kowalski-plumbing --out design-sheet.png

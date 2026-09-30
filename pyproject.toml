@@ -19,6 +19,7 @@ dev = [
   "pillow",
   "pytest-asyncio",
   "asyncpg",
+  "lightgbm>=4.7.0",
 ]
 
 [tool.ruff]
@@ -28,6 +29,11 @@ target-version = "py312"
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "S", "SIM", "RUF"]
 ignore = ["S101"]  # assert is fine in tests
+
+[tool.ruff.lint.per-file-ignores]
+# Seeded generators make test data reproducible; nothing in a test is a secret.
+"**/tests/**" = ["S311"]
+"**/*.ipynb" = ["S311"]
 
 [tool.mypy]
 python_version = "3.12"
