@@ -7,16 +7,19 @@ write a spec directly.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from stratum_spec.models import (
     AssetRef,
+    Box,
     ColorToken,
     CutoutLayer,
     ImageLayer,
     LayerId,
+    LayoutOverride,
     LogoLayer,
     PosterSpec,
     ShapeLayer,
@@ -92,13 +95,62 @@ def _clamp(value: float, low: float, high: float) -> float:
     return max(low, min(high, value))
 
 
-def _replace(spec: PosterSpec, layer_id: str, **changes: object) -> PosterSpec:
+def _replace(
+    spec: PosterSpec,
+    layer_id: str,
+    *,
+    sized: Callable[[LayoutOverride], LayoutOverride] | None = None,
+    **changes: object,
+) -> PosterSpec:
+    """Change one layer; `sized` makes the same change in every other size's layout.
+
+    Without it, "make the logo bigger" changed the base size only: every size that
+    lays the logo out differently kept the old logo.
+    """
     target = spec.layer(layer_id)  # raises KeyError if missing
     if target.locked:
         raise OpError(f"layer {layer_id!r} is locked")
     updated = target.model_copy(update=changes)
     layers = [updated if candidate.id == layer_id else candidate for candidate in spec.layers]
-    return spec.model_copy(update={"layers": layers})
+    variants = spec.variants
+    if sized is not None:
+        variants = {
+            aspect: {
+                one: sized(override) if one == layer_id else override
+                for one, override in overrides.items()
+            }
+            for aspect, overrides in spec.variants.items()
+        }
+    return spec.model_copy(update={"layers": layers, "variants": variants})
+
+
+def _moved(box: Box, dx: float, dy: float) -> Box:
+    return box.model_copy(
+        update={"x": _clamp(box.x + dx, -1.0, 2.0), "y": _clamp(box.y + dy, -1.0, 2.0)}
+    )
+
+
+def _scaled(box: Box, factor: float) -> Box:
+    """Scale about the box centre, so "bigger" does not drift to the corner."""
+    new_w = _clamp(box.w * factor, 0.01, 3.0)
+    new_h = _clamp(box.h * factor, 0.01, 3.0)
+    return box.model_copy(
+        update={
+            "w": new_w,
+            "h": new_h,
+            "x": _clamp(box.x - (new_w - box.w) / 2, -1.0, 2.0),
+            "y": _clamp(box.y - (new_h - box.h) / 2, -1.0, 2.0),
+        }
+    )
+
+
+def _override_box(change: Callable[[Box], Box]) -> Callable[[LayoutOverride], LayoutOverride]:
+    def apply(override: LayoutOverride) -> LayoutOverride:
+        if override.box is None:
+            return override  # this size uses the base box, which already changed
+        return override.model_copy(update={"box": change(override.box)})
+
+    return apply
 
 
 def apply_op(spec: PosterSpec, op: EditOp) -> PosterSpec:
@@ -118,39 +170,42 @@ def apply_op(spec: PosterSpec, op: EditOp) -> PosterSpec:
     if isinstance(op, SetColor):
         if not isinstance(target, _COLOR_LAYERS):
             raise OpError(f"layer {op.layer!r} has no colour")
-        field = "color" if isinstance(target, TextLayer) else "fill"
-        return _replace(spec, op.layer, **{field: op.color})
+        if isinstance(target, TextLayer):
+            return _replace(spec, op.layer, color=op.color)
+        return _replace(spec, op.layer, fill=op.color)
 
     if isinstance(op, Move):
-        box = target.box.model_copy(
-            update={
-                "x": _clamp(target.box.x + op.dx, -1.0, 2.0),
-                "y": _clamp(target.box.y + op.dy, -1.0, 2.0),
-            }
+        dx, dy = op.dx, op.dy
+        return _replace(
+            spec,
+            op.layer,
+            sized=_override_box(lambda box: _moved(box, dx, dy)),
+            box=_moved(target.box, dx, dy),
         )
-        return _replace(spec, op.layer, box=box)
 
     if isinstance(op, Scale):
         factor = _clamp(op.factor, MIN_SCALE, MAX_SCALE)
-        # Scale about the box centre so "bigger" does not drift to the corner.
-        new_w = _clamp(target.box.w * factor, 0.01, 3.0)
-        new_h = _clamp(target.box.h * factor, 0.01, 3.0)
-        box = target.box.model_copy(
-            update={
-                "w": new_w,
-                "h": new_h,
-                "x": _clamp(target.box.x - (new_w - target.box.w) / 2, -1.0, 2.0),
-                "y": _clamp(target.box.y - (new_h - target.box.h) / 2, -1.0, 2.0),
-            }
+        return _replace(
+            spec,
+            op.layer,
+            sized=_override_box(lambda box: _scaled(box, factor)),
+            box=_scaled(target.box, factor),
         )
-        return _replace(spec, op.layer, box=box)
 
     if isinstance(op, SwapAsset):
         if not isinstance(target, _ASSET_LAYERS):
             raise OpError(f"layer {op.layer!r} holds no asset")
         return _replace(spec, op.layer, asset=op.asset)
 
-    return _replace(spec, op.layer, visible=op.visible)
+    visible = op.visible
+
+    def shown(override: LayoutOverride) -> LayoutOverride:
+        # A size that hid this layer on purpose follows the person's explicit ask.
+        if override.visible is None:
+            return override
+        return override.model_copy(update={"visible": visible})
+
+    return _replace(spec, op.layer, sized=shown, visible=visible)
 
 
 def apply_ops(spec: PosterSpec, ops: list[EditOp]) -> PosterSpec:

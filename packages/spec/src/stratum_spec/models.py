@@ -17,7 +17,8 @@ from typing import Annotated, Literal, Self
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # 2: LogoLayer.plate (M9b). Version-1 specs have no plate and upgrade unchanged.
-SCHEMA_VERSION = 2
+# 3: PosterSpec.variants (M11a). A poster carries its own layout for every size.
+SCHEMA_VERSION = 3
 
 # A coordinate may sit slightly outside the canvas (full-bleed art, deliberate crops).
 Coord = Annotated[float, Field(ge=-1.0, le=2.0)]
@@ -137,6 +138,33 @@ Layer = Annotated[
 ]
 
 
+class LayoutOverride(Frozen):
+    """How one layer is laid out in one size, where that differs from the base size.
+
+    Layout only. Content, colour, font and asset are deliberately absent, so no size
+    of a poster can say or show something the client did not approve in another.
+    A field left as None keeps the base layer's value.
+    """
+
+    box: Box | None = None
+    align: Literal["left", "center", "right"] | None = None
+    max_lines: int | None = Field(default=None, ge=1, le=12)
+    min_size: Unit | None = None
+    max_size: Unit | None = None
+    visible: bool | None = None
+    opacity: Unit | None = None
+    fit: Literal["cover", "contain"] | None = None
+    dim: Unit | None = None
+    blur: Unit | None = None
+    radius: Unit | None = None
+    safe_area: Unit | None = None
+    uppercase: bool | None = None
+
+    def changes(self) -> dict[str, object]:
+        """The fields this override sets, ready to lay over a layer's own."""
+        return self.model_dump(exclude_none=True)
+
+
 class Canvas(Frozen):
     aspect: Aspect = "4:5"
     base_width: int = Field(default=1080, ge=256, le=4096)
@@ -156,12 +184,25 @@ class PosterSpec(Frozen):
     brand_kit_version: int = Field(default=1, ge=1)
     canvas: Canvas = Canvas()
     layers: list[Layer] = Field(min_length=1, max_length=64)
+    # Per-size layout, carried by the poster itself (schema 3). Before this, the
+    # other sizes were read from the template file at render time: editing a
+    # template quietly moved every old poster's story, and an edit such as "make
+    # the logo bigger" reached the feed post but not the story.
+    variants: dict[Aspect, dict[LayerId, LayoutOverride]] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def _ids_unique(self) -> Self:
         ids = [layer.id for layer in self.layers]
         if len(ids) != len(set(ids)):
             raise ValueError("layer ids must be unique")
+        known = set(ids)
+        for aspect, overrides in self.variants.items():
+            unknown = set(overrides) - known
+            if unknown:
+                raise ValueError(
+                    f"the {aspect} layout names layers the poster does not have: "
+                    f"{', '.join(sorted(unknown))}"
+                )
         return self
 
     def layer(self, layer_id: str) -> Layer:

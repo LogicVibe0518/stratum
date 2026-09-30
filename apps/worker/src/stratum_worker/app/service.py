@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from pydantic import TypeAdapter, ValidationError
-from stratum_spec import BrandKit, load_template, load_variants, retarget
+from stratum_spec import BrandKit, embed, load_template, load_variants, retarget
 from stratum_spec import load as load_spec
 from stratum_spec.client import ClientRules
 from stratum_spec.models import LogoLayer, PosterSpec, TextLayer
@@ -39,6 +39,7 @@ from stratum_worker.brand import (
     starter_kit,
     suggest,
 )
+from stratum_worker.design import PLACEHOLDER, Copy, decode, is_design, lay_out
 from stratum_worker.draft.bindings import binding_for
 from stratum_worker.draft.capacity import measure
 from stratum_worker.draft.compose import ComposeError, build_spec
@@ -101,10 +102,9 @@ async def render_preview(
     if path.is_file():
         return path.read_bytes()
     spec = load_spec(version["spec"])
-    template = ctx.settings.templates_dir / f"{post['template_id']}.json"
     bound = {getattr(one, "asset", None) for one in spec.layers if getattr(one, "asset", None)}
     asset_paths = {s: await local_path(ctx, s) for s in bound if isinstance(s, str)}
-    one = retarget(spec, aspect, load_variants(template))
+    one = retarget(spec, aspect, file_variants(ctx, post["template_id"]))
     kit = await kit_for(ctx, client, spec.brand_kit_version)
     png = await asyncio.to_thread(
         render_poster, one, kit, assets=asset_paths, root=ctx.settings.repo_root
@@ -550,12 +550,58 @@ async def save_version(
     return saved
 
 
+def file_variants(ctx: Context, template_id: str) -> Variants:
+    """The template file's per-size layout, for posters made before they carried
+    their own (spec schema 3). A design-space poster always carries its own."""
+    path = ctx.settings.templates_dir / f"{template_id}.json"
+    return load_variants(path) if path.is_file() else {}
+
+
+def template_for(
+    ctx: Context,
+    template_id: str,
+    kit: BrandKit,
+    *,
+    copy: Copy = PLACEHOLDER,
+    logo_aspect: float = 0.0,
+) -> PosterSpec:
+    """The design to fill, carrying its layout for every size.
+
+    A hand-made template comes from its file. A design-space design is laid out
+    here, around `copy` measured with this brand's fonts.
+    """
+    if is_design(template_id):
+        laid = lay_out(template_id, kit, ctx.settings.repo_root, copy=copy, logo_aspect=logo_aspect)
+        if laid is None:
+            raise DraftError(
+                f"These words do not fit the {decode(template_id).title} design in every "
+                f"size. Shorten the headline or the offer, or pick another design."
+            )
+        return laid
+    path = ctx.settings.templates_dir / f"{template_id}.json"
+    return embed(load_template(path), load_variants(path))
+
+
+def missing_photos_error(client: dict[str, Any], roles: dict[str, str], usable: int) -> DraftError:
+    """Why a design that needs the client's own photos cannot be made yet."""
+    if {"before", "after"} & set(roles.values()):
+        return DraftError(
+            f"This design shows real work, so it needs {len(roles)} real photos "
+            f"({', '.join(roles)}) and has {usable} usable. Upload them for "
+            f"{client['name']}, or pick a design that can use a generated background."
+        )
+    return DraftError(
+        f"This design shows {len(roles)} of {client['name']}'s own photos and has "
+        f"{usable} usable. Upload more, or pick a design with one photo."
+    )
+
+
 async def draft(ctx: Context, post: dict[str, Any], client: dict[str, Any]) -> dict[str, Any]:
     """Steps 1-7, recorded as they go."""
     started = time.perf_counter()
     binding = binding_for(post["template_id"])
-    path = ctx.settings.templates_dir / f"{post['template_id']}.json"
-    template, variants = load_template(path), load_variants(path)
+    kit = brand_of(client)
+    template = template_for(ctx, post["template_id"], kit)
 
     words, steps = await write_copy(ctx, client, post, template)
 
@@ -565,12 +611,7 @@ async def draft(ctx: Context, post: dict[str, Any], client: dict[str, Any]) -> d
     if unfillable:
         # Never invented: a generated "after" photo would show work that was never
         # done, which is a false advertising claim, not a design shortcut.
-        raise DraftError(
-            f"This design shows real work, so it needs {len(binding.photos)} real "
-            f"photos ({', '.join(binding.photos)}) and has {len(assets)} usable. Upload "
-            f"them for {client['name']}, or pick a design that can use a generated "
-            f"background."
-        )
+        raise missing_photos_error(client, binding.photos, len(assets))
     if missing:
         # One background per post, painted for what this post is about. At about
         # $0.006 each, a picture that fits beats reusing one made for another post.
@@ -593,7 +634,7 @@ async def draft(ctx: Context, post: dict[str, Any], client: dict[str, Any]) -> d
         "assets",
         client_id=f"eq.{client['id']}",
         kind="eq.logo",
-        select="sha256",
+        select="sha256,width,height",
         order="created_at.desc",
         limit="1",
     )
@@ -604,10 +645,22 @@ async def draft(ctx: Context, post: dict[str, Any], client: dict[str, Any]) -> d
             )
         assets[binding.logo] = logos[0]["sha256"]
 
+    if is_design(post["template_id"]):
+        # Laid out again around the real words, and the logo's real shape, so the
+        # offer sits one gap under the headline's last line and the logo's box is
+        # the logo.
+        width, height = (logos[0].get("width"), logos[0].get("height")) if logos else (0, 0)
+        template = template_for(
+            ctx,
+            post["template_id"],
+            kit,
+            copy=Copy(headline=words.headline, offer=words.offer_detail, cta=words.cta),
+            logo_aspect=(width / height) if width and height else 0.0,
+        )
     texts = {layer: getattr(words, field) for layer, field in binding.texts.items()}
     texts.update(binding.fixed or {})
-    kit = brand_of(client)
     spec = build_spec(template, kit, texts, assets)
+    variants: Variants = {}  # the spec carries its own sizes now
     if binding.logo:
         # The template cannot know this client's logo colours; this is where a navy
         # logo headed for a navy band gets a panel behind it instead.
@@ -769,8 +822,7 @@ async def tweak(
         await record("needs_human", list(result.ops), step.cost_usd)
         return {"outcome": "needs_human", "why": result.needs_human or NOTHING_CHANGED}
 
-    path = ctx.settings.templates_dir / f"{post['template_id']}.json"
-    variants = load_variants(path)
+    variants = file_variants(ctx, post["template_id"])
     shas = {
         getattr(layer, "asset", None) for layer in changed.layers if getattr(layer, "asset", None)
     }
@@ -839,7 +891,7 @@ async def _prepare(
     if not versions:
         raise DraftError("that version is gone")
     spec = load_spec(versions[0]["spec"])
-    variants = load_variants(ctx.settings.templates_dir / f"{post['template_id']}.json")
+    variants = file_variants(ctx, post["template_id"])
     bound = {getattr(one, "asset", None) for one in spec.layers if getattr(one, "asset", None)}
     assets = {s: await local_path(ctx, s) for s in bound if isinstance(s, str)}
     kit = await kit_for(ctx, client, spec.brand_kit_version)
@@ -1005,12 +1057,11 @@ async def quick(
         raise DraftError("that design has nothing to change that way")
 
     changed = apply_ops(spec, ops)
-    path = ctx.settings.templates_dir / f"{post['template_id']}.json"
     bound = {getattr(one, "asset", None) for one in changed.layers if getattr(one, "asset", None)}
     asset_paths = {s: await local_path(ctx, s) for s in bound if isinstance(s, str)}
     kit = await kit_for(ctx, client, changed.brand_kit_version)
     renders, flags = await render_versions(
-        ctx, post, changed, load_variants(path), asset_paths, kit
+        ctx, post, changed, file_variants(ctx, post["template_id"]), asset_paths, kit
     )
     flags = [*flags, *brief_flags(post, changed)]
     saved, _ = await asyncio.gather(
