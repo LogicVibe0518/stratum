@@ -1,0 +1,116 @@
+{
+  "model": "critic-v1",
+  "trained_by": "Rushil",
+  "trees": 200,
+  "data": {
+    "train": 2940,
+    "valid": 294,
+    "test": 294
+  },
+  "validation_curve": {
+    "25": 0.943,
+    "50": 0.9528,
+    "100": 0.9632,
+    "200": 0.966,
+    "400": 0.9663
+  },
+  "test": {
+    "your model": {
+      "base_wins": [
+        0.993,
+        0.989,
+        0.997
+      ],
+      "top1": [
+        0.932,
+        0.893,
+        0.972
+      ],
+      "order": [
+        0.946,
+        0.93,
+        0.96
+      ]
+    },
+    "hand-written rule": {
+      "base_wins": [
+        0.847,
+        0.829,
+        0.866
+      ],
+      "top1": [
+        0.245,
+        0.178,
+        0.316
+      ],
+      "order": [
+        0.858,
+        0.826,
+        0.889
+      ]
+    }
+  },
+  "test_by_damage": {
+    "model": {
+      "misalign": 0.9796,
+      "crowd_edge": 0.9864,
+      "collide": 1.0,
+      "tiny_type": 1.0,
+      "shout": 1.0,
+      "strip_backing": 1.0,
+      "low_contrast": 1.0,
+      "unbalance": 0.9728,
+      "logo_clash": 1.0,
+      "uneven_gaps": 0.9932
+    },
+    "rule": {
+      "misalign": 0.9456,
+      "crowd_edge": 0.898,
+      "collide": 1.0,
+      "tiny_type": 0.6458,
+      "shout": 0.9722,
+      "strip_backing": 0.4839,
+      "low_contrast": 0.8912,
+      "unbalance": 0.7007,
+      "logo_clash": 0.8958,
+      "uneven_gaps": 0.6803
+    }
+  },
+  "importance": {
+    "contrast_min": 0.1571,
+    "align_misfit": 0.1019,
+    "gap_unevenness": 0.0981,
+    "margin_min": 0.0907,
+    "gap_min": 0.0827,
+    "logo_text_overlap": 0.0786,
+    "text_centre_y": 0.0546,
+    "offer_size": 0.0544,
+    "cta_size": 0.0507,
+    "balance_x": 0.0467,
+    "left_edge_spread": 0.0396,
+    "balance_y": 0.0286,
+    "text_overlap": 0.0256,
+    "safe_overflow": 0.0209,
+    "hierarchy": 0.0144,
+    "contrast_margin": 0.0119,
+    "photo_share": 0.0114,
+    "cta_to_offer": 0.0108,
+    "text_on_photo": 0.0078,
+    "busyness_under_text": 0.0059,
+    "logo_share": 0.0018,
+    "text_share": 0.0017,
+    "is_16x9": 0.001,
+    "offer_line_chars": 0.001,
+    "orphan": 0.0005,
+    "raggedness": 0.0004,
+    "is_1x1": 0.0004,
+    "is_9x16": 0.0003,
+    "headline_size": 0.0001,
+    "headline_lines": 0.0001,
+    "is_4x5": 0.0001,
+    "offer_lines": 0.0,
+    "accent": 0.0,
+    "truncated": 0.0,
+    "at_minimum": 0.0
+  }
+}
