@@ -218,6 +218,62 @@ Each line is one message in "Change something", on a Best three post.
 
 Note what came back for each line. Anything that reads like jargon is a bug.
 
+## Follow-up after the first live test (2 Oct, prompt v5)
+
+Rushil's live test on 1 Oct sent ten messages. The model's answers, read from the
+`edits` table, were good:
+- "green" became a question with three choices;
+- "golden" darkened the panel first, so gold text would still be readable;
+- "the text in the middle in a different colour" picked white and said why.
+
+The test found four problems, fixed here:
+
+1. **A restyle lost the earlier changes.** "Darken both photos" was followed by
+   "undo the calmer change", which the model answered with a restyle back to bold.
+   That brought the photos back to full brightness and the warm grey text back to
+   the design's colour.
+   - Now `edit/restyle.carry_over` lays the old design out fresh around the same
+     words and photos. Whatever differs between that and the poster is the person's
+     own change, and it is made again on the new layout:
+     - text colours, if they are still readable on the new background (WCAG: 3:1
+       for the headline, 4.5:1 for the rest);
+     - shape colours, unless the restyle itself changes the background;
+     - how dark each photo is (matched by photo, so it follows the photo into
+       another family);
+     - hidden parts;
+     - the logo's size.
+   - A colour that would not read is not kept, and the note says so.
+2. **The note was jargon:** "Switched to Two photos (share 0.58, gutter none, …)".
+   `said()` now names what changed in words:
+   - "Changed the style: a smaller, calmer headline."
+   - "Switched to the Photo with words over it design, with the words on a cream
+     card."
+   - Then "Kept the darker photo, the warm grey headline and the bigger logo."
+3. **"Undo all changes" went back one step.** There is now `{"op": "undo", "all":
+   true}`, and the typed words "undo all", "start over", "reset" and "back to the
+   original" need no model. Both go back to the first draft.
+4. **"Darken the photo" with two photos asked which one.** Prompt v5: a small change
+   that is easy to undo is applied to every layer it could mean, and the note says
+   so. It asks only when the readings would look very different.
+
+Also in v5:
+- the model is told that restyle keeps earlier changes, so it does not repeat them;
+- to take back one earlier change that was not the last, it makes the opposite
+  change.
+
+**Tests added:**
+- `test_restyle.py`: notes in words, and carry-over (kept, nothing to keep, a colour
+  that would not read, a shape colour when the background changes, no fresh layout).
+- `test_edit_actions.py`: undo all.
+- `test_smarter_tweaks.py`: a restyle keeps the darker photo, the text colour and the
+  logo size; an unreadable colour is said; "start over" needs no model; the model's
+  undo-all.
+
+**For C7 (the page),** also seen in the live test:
+- the History time column wraps ("Ti / me");
+- the result column shows "needs_human";
+- the note is shown in the warning colour.
+
 ## Five things to be able to say
 
 1. The model now sees the poster the way a designer describes it: where each layer

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 from pydantic import ValidationError
-from stratum_worker.edit.actions import Ask, Restyle, Undo, is_undo, split
+from stratum_worker.edit.actions import Ask, Restyle, Undo, is_undo, split, undo_asked
 
 
 def test_spec_ops_and_service_ops_are_separated_in_order() -> None:
@@ -49,6 +49,7 @@ def test_a_long_question_is_shortened_not_dropped() -> None:
         {"op": "ask", "question": ""},
         {"op": "ask", "question": "Which?", "choices": [{"label": "x", "kind": "delete"}]},
         {"op": "undo", "to": 1},
+        {"op": "undo", "all": "yes please"},
     ],
 )
 def test_anything_else_is_refused(raw: dict[str, object]) -> None:
@@ -64,3 +65,15 @@ def test_undo_is_recognised_without_a_model(message: str) -> None:
 @pytest.mark.parametrize("message", ["undo the logo change and make it bigger", "go back to blue"])
 def test_a_longer_request_is_left_to_the_model(message: str) -> None:
     assert not is_undo(message)
+
+
+@pytest.mark.parametrize(
+    "message", ["undo all changes", "Start over.", "go back to the  original", "RESET"]
+)
+def test_undo_all_is_recognised_without_a_model(message: str) -> None:
+    assert undo_asked(message) == Undo(all=True)
+
+
+def test_one_step_and_all_steps_are_told_apart() -> None:
+    assert undo_asked("undo") == Undo()
+    assert split([{"op": "undo", "all": True}])[1] == [Undo(all=True)]

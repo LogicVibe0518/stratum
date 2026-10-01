@@ -54,7 +54,7 @@ from stratum_worker.draft.preflight import (
     check_copy,
     check_layout,
 )
-from stratum_worker.edit.actions import Ask, Choice, Restyle, Undo, is_undo, split
+from stratum_worker.edit.actions import Ask, Choice, Restyle, Undo, split, undo_asked
 from stratum_worker.edit.context import (
     asked_colours,
     colour_lines,
@@ -888,8 +888,9 @@ async def tweak(
     """
     from stratum_worker.app import actions  # restyle and undo use this module
 
-    if is_undo(message):
-        return await actions.undo(ctx, post, client, message)
+    typed = undo_asked(message)
+    if typed is not None:
+        return await actions.undo(ctx, post, client, message, everything=typed.all)
     started = time.perf_counter()
     versions = await ctx.supa.select(
         "post_versions", post_id=f"eq.{post['id']}", order="version.desc", limit="1"
@@ -975,8 +976,9 @@ async def tweak(
         await record("needs_human", raw, step.cost_usd)
         return _asking(asks[0].question, asks[0].choices)
     restyles = [one for one in service_ops if isinstance(one, Restyle)]
-    if any(isinstance(one, Undo) for one in service_ops) and not ops and not restyles:
-        return await actions.undo(ctx, post, client, message)
+    undos = [one for one in service_ops if isinstance(one, Undo)]
+    if undos and not ops and not restyles:
+        return await actions.undo(ctx, post, client, message, everything=undos[0].all)
     if not ops and not restyles:
         await record("needs_human", raw, step.cost_usd)
         return {
