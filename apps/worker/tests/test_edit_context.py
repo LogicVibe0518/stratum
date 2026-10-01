@@ -167,4 +167,4 @@ def test_the_prompt_carries_every_part(kit: BrandKit) -> None:
     ):
         assert part in rendered.user
     assert '"op": "restyle"' in rendered.system and '"op": "ask"' in rendered.system
-    assert "@v4" in rendered.id
+    assert "@v5" in rendered.id

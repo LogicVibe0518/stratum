@@ -191,7 +191,7 @@ async def test_restyle_switches_the_design_and_keeps_the_words(tmp_path: Path) -
     out = await one.tweak(post, "make the panel dark")
 
     assert out["outcome"] == "applied"
-    assert out["note"].startswith("Switched to Photo and panel (")
+    assert out["note"] == "Changed the style: a navy background behind the words."
     now = await one.fresh(post)
     assert decode(now["template_id"]).choice == {**decode(PANEL).choice, "fill": "dark"}
     spec = await one.latest_spec(post)
@@ -337,3 +337,77 @@ async def test_an_inferred_change_says_what_it_did(tmp_path: Path) -> None:
     assert out["outcome"] == "applied"
     assert out["note"] == "Made the headline a little bigger so it stands out."
     assert out["why"] == out["note"] and out["unable"] == ""
+
+
+# --- a restyle keeps what the person changed (live, 1 Oct) ----------------------------------
+
+
+async def test_a_restyle_keeps_darker_photos_text_colours_and_logo_size(tmp_path: Path) -> None:
+    changes = {
+        "ops": [
+            {"op": "dim", "layer": "bg", "amount": 0.3},
+            {"op": "set_color", "layer": "headline", "color": "palette.muted"},
+            {"op": "scale", "layer": "logo", "factor": 1.2},
+        ]
+    }
+    calmer = {"ops": [{"op": "restyle", "changes": {"scale": "calm"}}]}
+    one = await studio(tmp_path, changes, calmer)
+    post = await one.post()
+    await one.tweak(post, "darken the photo, slate headline, bigger logo")
+    before = await one.latest_spec(post)
+    out = await one.tweak(post, "make it calmer")
+
+    assert out["outcome"] == "applied", out
+    assert out["note"] == (
+        "Changed the style: a smaller, calmer headline. Kept the darker photo, the slate "
+        "blue headline and the bigger logo."
+    )
+    spec = await one.latest_spec(post)
+    photo, headline = spec.layer("bg"), spec.layer("headline")
+    assert isinstance(photo, ImageLayer) and photo.dim == 0.3
+    assert isinstance(headline, TextLayer) and headline.color == "palette.muted"
+    assert spec.layer("logo").box.w > before.layer("logo").box.w * 0.9  # still the bigger one
+
+
+async def test_a_colour_that_would_not_read_on_the_new_background_is_said(tmp_path: Path) -> None:
+    slate = {"ops": [{"op": "set_color", "layer": "headline", "color": "palette.muted"}]}
+    dark = {"ops": [{"op": "restyle", "changes": {"fill": "dark"}}]}
+    one = await studio(tmp_path, slate, dark)
+    post = await one.post()
+    await one.tweak(post, "slate blue headline")
+    out = await one.tweak(post, "dark panel")
+
+    assert "Your slate blue headline would not be readable on the new background" in out["note"]
+    headline = (await one.latest_spec(post)).layer("headline")
+    assert isinstance(headline, TextLayer) and headline.color != "palette.muted"
+
+
+async def test_start_over_goes_back_to_the_first_draft_without_a_model(tmp_path: Path) -> None:
+    first = {"ops": [{"op": "set_text", "layer": "headline", "text": "Boilers fixed fast"}]}
+    second = {"ops": [{"op": "scale", "layer": "logo", "factor": 1.2}]}
+    one = await studio(tmp_path, first, second)
+    post = await one.post()
+    await one.tweak(post, "headline: Boilers fixed fast")
+    await one.tweak(post, "bigger logo")
+    calls = len(one.provider.calls)
+
+    out = await one.tweak(post, "Start over")
+
+    assert len(one.provider.calls) == calls
+    assert out["note"] == "Back to the first draft (version 1)."
+    versions = await one.versions(post)
+    assert load_spec(versions[-1]["spec"]) == load_spec(versions[0]["spec"])
+
+
+async def test_the_model_can_ask_for_everything_to_be_undone(tmp_path: Path) -> None:
+    first = {"ops": [{"op": "scale", "layer": "logo", "factor": 1.2}]}
+    second = {"ops": [{"op": "scale", "layer": "logo", "factor": 1.2}]}
+    everything = {"ops": [{"op": "undo", "all": True}]}
+    one = await studio(tmp_path, first, second, everything)
+    post = await one.post()
+    await one.tweak(post, "bigger logo")
+    await one.tweak(post, "bigger logo")
+    out = await one.tweak(post, "forget all of that and give me what you first made")
+    assert out["note"] == "Back to the first draft (version 1)."
+    versions = await one.versions(post)
+    assert load_spec(versions[-1]["spec"]) == load_spec(versions[0]["spec"])
