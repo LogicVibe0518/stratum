@@ -585,6 +585,41 @@ img.entering { animation: fade-in var(--speed) ease-out; }
 .stat span { color: var(--muted); font-size: 12px; }
 .stat b.bad { color: var(--bad); }
 .stat b.warn { color: var(--warn); }
+.options { width: 100%; display: flex; flex-direction: column; gap: 8px; }
+.options h2 { margin: 0; }
+.options-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  width: 100%;
+}
+.options-card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  width: 100%;
+  height: auto;
+  padding: 8px;
+  text-align: left;
+  font-weight: 400;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.options-card:hover:not(:disabled) { background: var(--surface); border-color: var(--line-strong); }
+.options-card.shown,
+.options-card.shown:hover:not(:disabled) { border: 2px solid var(--focus); }
+.options-card img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 5;
+  object-fit: cover;
+  background: var(--raised);
+}
+.options-card .cap { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+.options-card .shown-mark { color: var(--text); }
 .stage-wrap { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; min-width: 0; }
 .stage {
   width: 100%;
@@ -784,6 +819,12 @@ button, input, select, textarea, .card, .badge, .drop, .switch-ui, .toast {
   .wordmark { display: none; }
   .bar-right { flex-wrap: nowrap; width: auto; margin-left: auto; }
   .needs-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .options-strip {
+    display: flex;
+    overflow-x: auto;
+    gap: 10px;
+  }
+  .options-card { flex: 0 0 40%; width: 40%; }
 }
 @media (max-width: 600px) {
   .brand-chip { flex: 1 1 calc(25% - 12px); min-width: calc(25% - 12px); }
@@ -967,6 +1008,11 @@ button, input, select, textarea, .card, .badge, .drop, .switch-ui, .toast {
         <div class="frame hide" id="feedview" data-frame="dark"></div>
         <div class="frame hide" id="storyview" data-frame="dark"></div>
         <div class="frame grid-frame hide" id="gridview" data-frame="dark"></div>
+        <section class="options hide" id="options">
+          <h2>Options</h2>
+          <p class="muted hide" id="optionstatus" role="status"></p>
+          <div class="options-strip" id="optionstrip"></div>
+        </section>
       </div>
       <aside class="side">
         <section>
@@ -1295,8 +1341,14 @@ function slugify(value, max) {
 }
 
 function designLabel(id) {
+  if (id === "best_three") return "Best three";
   const text = String(id ?? "").replaceAll("_", " ").trim();
   return text ? text.charAt(0).toUpperCase() + text.slice(1) : "";
+}
+
+function designPickerLabel(id) {
+  if (id === "best_three") return "Best three (Stratum chooses)";
+  return designLabel(id);
 }
 
 function themeLabel(theme) {
@@ -2168,7 +2220,7 @@ async function assets() {
 
 function fillDesigns(designs) {
   $("design").innerHTML = designs.map((id) =>
-    `<option value="${esc(id)}">${esc(designLabel(id))}</option>`).join("");
+    `<option value="${esc(id)}">${esc(designPickerLabel(id))}</option>`).join("");
 }
 
 async function openClient(client) {
@@ -2742,6 +2794,7 @@ function syncPreview(fade) {
   else if (previewKind === "story") paintStory();
   else if (previewKind === "grid") paintGrid();
   else paintStage((POSTDATA && POSTDATA.renders) || [], fade);
+  paintOptions(POSTDATA);
 }
 
 function paintPost(data, options) {
@@ -2760,6 +2813,78 @@ function paintPost(data, options) {
     { label: client.name || "Client", action: () => { openClient(CLIENT && CLIENT.id === client.id ? CLIENT : client); } },
     { label: post.slug || "Post" },
   ]);
+}
+
+function optionPreviewUrl(option) {
+  return safeSrc(String(option && option.preview ? option.preview : "").replaceAll("{shape}", "4x5"));
+}
+
+function paintOptions(data) {
+  const choices = (data && data.options) || [];
+  const strip = $("optionstrip");
+  const status = $("optionstatus");
+  $("options").classList.toggle("hide", choices.length === 0);
+  status.textContent = "";
+  status.className = "muted hide";
+  strip.replaceChildren();
+  if (!choices.length) return;
+  const shown = (data.post && data.post.template_id) || "";
+  for (const option of choices) {
+    strip.append(optionCard(option, option.design_id === shown));
+  }
+  loadPreviews(strip, false, previewGen);
+}
+
+function optionCard(option, shown) {
+  const name = option.name || "";
+  const title = option.title || "";
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = shown ? "options-card shown" : "options-card";
+  button.setAttribute("aria-label", `Use option ${name}, ${title}`);
+  if (shown) button.setAttribute("aria-current", "true");
+  const img = document.createElement("img");
+  img.alt = "";
+  img.loading = "lazy";
+  img.dataset.src = optionPreviewUrl(option);
+  const cap = document.createElement("span");
+  cap.className = "cap";
+  cap.textContent = `Option ${name} · ${title}`;
+  button.append(img, cap);
+  if (shown) {
+    const mark = document.createElement("span");
+    mark.className = "shown-mark";
+    mark.textContent = " Shown";
+    cap.append(mark);
+  } else {
+    button.addEventListener("click", () => { pickOption(option.id); });
+  }
+  return button;
+}
+
+async function pickOption(optionId) {
+  if (changing || !POST || !optionId) return;
+  changing = true;
+  const cards = [...$("optionstrip").querySelectorAll("button")];
+  for (const card of cards) card.disabled = true;
+  const status = $("optionstatus");
+  status.className = "muted";
+  status.classList.remove("hide");
+  status.textContent = "Switching…";
+  const started = performance.now();
+  try {
+    await api(`/posts/${POST}/options/${encodeURIComponent(optionId)}/pick`, { method: "POST" });
+    const seconds = (performance.now() - started) / 1000;
+    await refreshPost({ fade: true, keepScroll: true, lastChange: seconds });
+    if (POSTDATA && POSTDATA.latest) toast(`v${POSTDATA.latest.version} · ${seconds.toFixed(1)}s`);
+  } catch (err) {
+    status.className = "field-error";
+    status.classList.remove("hide");
+    status.textContent = sentence(err);
+    for (const card of cards) card.disabled = false;
+  } finally {
+    changing = false;
+  }
 }
 
 async function ensureQuick() {
