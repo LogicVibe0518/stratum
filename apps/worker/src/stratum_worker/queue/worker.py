@@ -330,10 +330,10 @@ def _load_factory(target: str) -> ClientFactory:
 
 
 def configure_logging() -> None:
-    """One readable line per job; silence while idle."""
-    logging.basicConfig(
-        level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S"
-    )
+    """One line per job; silence while idle. On stdout, as JSON on Railway (logs.py)."""
+    from stratum_worker.logs import configure
+
+    configure(logging.INFO)
     # httpx logs every request at INFO, which for a worker asking "any jobs?" every
     # second is a wall of identical lines that hides the ones that matter.
     logging.getLogger("httpx").setLevel(logging.WARNING)

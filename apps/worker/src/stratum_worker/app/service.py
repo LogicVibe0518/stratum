@@ -40,6 +40,7 @@ from stratum_worker.brand import (
     suggest,
 )
 from stratum_worker.design import PLACEHOLDER, Copy, decode, is_design, lay_out
+from stratum_worker.design.choose import AUTO
 from stratum_worker.draft.bindings import binding_for
 from stratum_worker.draft.capacity import measure
 from stratum_worker.draft.compose import ComposeError, build_spec
@@ -650,6 +651,11 @@ def missing_photos_error(client: dict[str, Any], roles: dict[str, str], usable: 
 
 async def draft(ctx: Context, post: dict[str, Any], client: dict[str, Any]) -> dict[str, Any]:
     """Steps 1-7, recorded as they go."""
+    if post["template_id"] == AUTO:
+        # Let Stratum choose: many designs ranked, three different ones kept (M12b).
+        from stratum_worker.app.options import draft_options
+
+        return await draft_options(ctx, post, client)
     started = time.perf_counter()
     binding = binding_for(post["template_id"])
     kit = brand_of(client)
