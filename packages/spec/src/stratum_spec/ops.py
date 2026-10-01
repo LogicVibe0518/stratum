@@ -16,6 +16,7 @@ from stratum_spec.models import (
     AssetRef,
     Box,
     ColorToken,
+    Crop,
     CutoutLayer,
     ImageLayer,
     LayerId,
@@ -28,6 +29,8 @@ from stratum_spec.models import (
 
 MIN_SCALE = 0.2
 MAX_SCALE = 5.0
+MAX_ZOOM = 3.0  # the same limit as Crop.zoom
+MAX_DIM = 0.8  # darker than this and the photo is no longer a photo
 
 
 class OpError(ValueError):
@@ -75,6 +78,35 @@ class SetVisible(BaseOp):
     visible: bool
 
 
+class Pan(BaseOp):
+    """Move a photo inside its frame, like dragging it in Lightroom's crop tool.
+
+    dx, dy are fractions of the photo: positive dx moves the picture right (showing
+    more of its left side), positive dy moves it down (showing more of its top).
+    """
+
+    op: Literal["pan"] = "pan"
+    layer: LayerId
+    dx: float = Field(ge=-1.0, le=1.0)
+    dy: float = Field(ge=-1.0, le=1.0)
+
+
+class Zoom(BaseOp):
+    """Zoom a photo inside its frame: above 1 shows less of it, larger."""
+
+    op: Literal["zoom"] = "zoom"
+    layer: LayerId
+    factor: float = Field(gt=0.0, le=MAX_ZOOM)
+
+
+class Dim(BaseOp):
+    """Darken a photo (0 = as taken), usually so the words on it read."""
+
+    op: Literal["dim"] = "dim"
+    layer: LayerId
+    amount: float = Field(ge=0.0, le=MAX_DIM)
+
+
 class NeedsHuman(BaseOp):
     """The request was understood but is not mechanical ("make it pop")."""
 
@@ -83,7 +115,7 @@ class NeedsHuman(BaseOp):
 
 
 EditOp = Annotated[
-    SetText | SetColor | Move | Scale | SwapAsset | SetVisible | NeedsHuman,
+    SetText | SetColor | Move | Scale | SwapAsset | SetVisible | Pan | Zoom | Dim | NeedsHuman,
     Field(discriminator="op"),
 ]
 
@@ -157,6 +189,34 @@ def _uncropped(override: LayoutOverride) -> LayoutOverride:
     return override if override.crop is None else override.model_copy(update={"crop": None})
 
 
+def _override_crop(change: Callable[[Crop], Crop]) -> Callable[[LayoutOverride], LayoutOverride]:
+    """The same change to every size that frames the photo its own way."""
+
+    def apply(override: LayoutOverride) -> LayoutOverride:
+        if override.crop is None:
+            return override  # this size uses the base crop, which already changed
+        return override.model_copy(update={"crop": change(override.crop)})
+
+    return apply
+
+
+def _panned(crop: Crop, dx: float, dy: float) -> Crop:
+    # The picture moves one way, so the window onto it moves the other.
+    return crop.model_copy(
+        update={"x": _clamp(crop.x - dx, 0.0, 1.0), "y": _clamp(crop.y - dy, 0.0, 1.0)}
+    )
+
+
+def _zoomed(crop: Crop, factor: float) -> Crop:
+    return crop.model_copy(update={"zoom": _clamp(crop.zoom * factor, 1.0, MAX_ZOOM)})
+
+
+def _photo(target: object, layer_id: str) -> ImageLayer:
+    if not isinstance(target, ImageLayer):
+        raise OpError(f"layer {layer_id!r} is not a photo")
+    return target
+
+
 def apply_op(spec: PosterSpec, op: EditOp) -> PosterSpec:
     """Apply one op, returning a new spec. Never mutates the input."""
     if isinstance(op, NeedsHuman):
@@ -205,6 +265,37 @@ def apply_op(spec: PosterSpec, op: EditOp) -> PosterSpec:
             # to the centre until the photo is framed again.
             return _replace(spec, op.layer, sized=_uncropped, asset=op.asset, crop=None)
         return _replace(spec, op.layer, asset=op.asset)
+
+    if isinstance(op, Pan | Zoom):
+        photo = _photo(target, op.layer)
+        if photo.fit != "cover":
+            raise OpError(f"layer {op.layer!r} shows the whole photo, so it cannot be moved in it")
+        if isinstance(op, Pan):
+            dx, dy = op.dx, op.dy
+
+            def change(crop: Crop) -> Crop:
+                return _panned(crop, dx, dy)
+        else:
+            factor = op.factor
+
+            def change(crop: Crop) -> Crop:
+                return _zoomed(crop, factor)
+
+        return _replace(
+            spec, op.layer, sized=_override_crop(change), crop=change(photo.crop or Crop())
+        )
+
+    if isinstance(op, Dim):
+        _photo(target, op.layer)
+        amount = op.amount
+
+        def dimmed(override: LayoutOverride) -> LayoutOverride:
+            # A size dimmed differently on purpose follows the explicit ask, like visible.
+            if override.dim is None:
+                return override
+            return override.model_copy(update={"dim": amount})
+
+        return _replace(spec, op.layer, sized=dimmed, dim=amount)
 
     visible = op.visible
 

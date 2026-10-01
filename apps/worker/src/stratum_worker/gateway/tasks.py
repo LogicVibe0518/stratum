@@ -109,6 +109,13 @@ class EditParseRequest(Frozen):
     message: str = Field(min_length=1, max_length=1000)
     layers: dict[str, str] = Field(max_length=64)  # layer id -> short description
     palette: list[str] = Field(default_factory=list, max_length=32)
+    # Since v4 (M10c): each brand colour by name ("palette.secondary" -> "gold
+    # #ca9b5a; used by the accent line"), the colours the message names and the
+    # nearest brand colours, the design's style settings, and the last few changes.
+    colours: dict[str, str] = Field(default_factory=dict, max_length=32)
+    asked: list[str] = Field(default_factory=list, max_length=8)
+    design: str = Field(default="", max_length=4000)
+    recent: list[str] = Field(default_factory=list, max_length=6)
 
 
 class EditParseResult(Frozen):
@@ -120,6 +127,11 @@ class EditParseResult(Frozen):
 
     ops: list[dict[str, object]] = Field(default_factory=list, max_length=12)
     needs_human: str | None = None
+    # One sentence on what was done when the request was vague ("Made the headline
+    # bigger and put the words on a cream panel"), so an inferred change is never
+    # a silent one. No length limit here: a long note must not fail the whole change;
+    # the service shortens it.
+    note: str | None = None
 
 
 # --- background.create ------------------------------------------------------
