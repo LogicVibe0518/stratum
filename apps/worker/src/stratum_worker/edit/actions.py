@@ -70,6 +70,7 @@ class Ask(_Action):
 
 class Undo(_Action):
     op: Literal["undo"] = "undo"
+    all: bool = False  # back to the first draft, not one step
 
 
 Action = Annotated[Restyle | Ask | Undo, Field(discriminator="op")]
@@ -88,10 +89,49 @@ def split(raw: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[Action]
 UNDO_WORDS = frozenset(
     {"undo", "undo that", "undo it", "go back", "revert", "revert that", "undo the last change"}
 )
+UNDO_ALL_WORDS = frozenset(
+    {
+        "undo all",
+        "undo all changes",
+        "undo everything",
+        "undo all the changes",
+        "revert all",
+        "revert everything",
+        "start over",
+        "start again",
+        "reset",
+        "reset it",
+        "back to the original",
+        "go back to the original",
+        "back to the first draft",
+        "go back to the first draft",
+    }
+)
+
+
+def undo_asked(message: str) -> Undo | None:
+    """An undo typed in so many words, needing no model: one step, or all of them."""
+    said = " ".join(message.strip().lower().rstrip(".!").split())
+    if said in UNDO_ALL_WORDS:
+        return Undo(all=True)
+    if said in UNDO_WORDS:
+        return Undo()
+    return None
 
 
 def is_undo(message: str) -> bool:
-    return message.strip().lower().rstrip(".!") in UNDO_WORDS
+    return undo_asked(message) is not None
 
 
-__all__ = ["ACTIONS", "NAMES", "Action", "Ask", "Choice", "Restyle", "Undo", "is_undo", "split"]
+__all__ = [
+    "ACTIONS",
+    "NAMES",
+    "Action",
+    "Ask",
+    "Choice",
+    "Restyle",
+    "Undo",
+    "is_undo",
+    "split",
+    "undo_asked",
+]
