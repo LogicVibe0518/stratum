@@ -32,3 +32,26 @@ def test_the_page_reads_and_saves_brand_colours() -> None:
 
 def test_new_clients_are_not_given_a_hard_coded_brand() -> None:
     assert "#ff6a00" not in PAGE.lower()
+
+
+def test_the_page_handles_best_three_options() -> None:
+    assert "best_three" in PAGE
+    assert "Best three (Stratum chooses)" in PAGE
+    assert 'if (id === "best_three") return "Best three"' in PAGE
+    assert "/options/" in PAGE
+    assert "/pick" in PAGE
+    assert "paintOptions" in PAGE
+    assert "Switching…" in PAGE
+
+
+def test_option_cards_do_not_put_server_strings_into_markup() -> None:
+    card = PAGE.split("function optionCard")[1].split("function pickOption")[0]
+    assert "innerHTML" not in card
+    assert "textContent" in card
+    assert 'setAttribute("aria-label"' in card
+
+
+def test_the_page_gained_no_new_external_asset() -> None:
+    assert PAGE.count("https://fonts.googleapis.com") == 2
+    assert PAGE.count("<script src") == 0
+    assert "cdn." not in PAGE.lower()
