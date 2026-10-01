@@ -49,6 +49,7 @@ UNIQUE: dict[str, tuple[str, ...]] = {
     "renders": ("post_version_id", "aspect"),
     "jobs": ("agency_id", "idempotency_key"),
     "brand_kits": ("client_id", "version"),
+    "post_options": ("batch", "slot"),
 }
 # Written only by the database's own triggers; a signed-in user may only read them.
 READ_ONLY = {"brand_kits"}
@@ -58,6 +59,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     "assets": {"kind": "photo", "flags": [], "quality": {}},
     "posts": {"status": "draft", "words": None, "cost_usd": 0, "occasion": "", "photo_note": ""},
     "post_versions": {"note": ""},
+    "post_options": {"explored": False, "detail": {}},
     "steps": {"provider": "", "model": "", "cached": False, "cost_usd": 0, "latency_ms": 0},
     "jobs": {
         "status": "queued",

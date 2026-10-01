@@ -177,23 +177,10 @@ def _clip_to_photo(rect: Rect) -> Rect:
 # --- choosing one crop ------------------------------------------------------------
 
 
-def choose_crop(read: PhotoRead, box_size: tuple[float, float], covers: Iterable[Cover]) -> Crop:
-    """The crop with the lowest cost for one photo in one box. See the module doc."""
-    covers = list(covers)
+def _windows(read: PhotoRead, box_size: tuple[float, float]) -> tuple[Floats, ...]:
+    """Every window tried for one photo in one box: x, y, w, h (photo fractions), zoom."""
     width, height = read.size
     box_w, box_h = box_size
-    # Squared, so the one thing that stands out most outweighs a scatter of lesser
-    # ones: keeping the rocket beats keeping every lamp on the launch pad.
-    peak = read.salience**2
-    total = float(peak.sum())
-    sal_table = _table(peak / total if total > 0 else read.salience)
-    busy_table = _table(read.busy)
-    busy_cells = read.busy.shape[0] * read.busy.shape[1]
-    heads = [
-        (_clip_to_photo(face.head()), float(np.clip(face.h / FULL_FACE, 0.25, 1.0)), face)
-        for face in read.faces
-    ]
-
     xs: list[float] = []
     ys: list[float] = []
     ws: list[float] = []
@@ -213,9 +200,32 @@ def choose_crop(read: PhotoRead, box_size: tuple[float, float], covers: Iterable
                 ws.append(share_w)
                 hs.append(share_h)
                 zooms.append(zoom)
-    x, y = np.array(xs, dtype=np.float64), np.array(ys, dtype=np.float64)
-    w, h = np.array(ws, dtype=np.float64), np.array(hs, dtype=np.float64)
-    zoom_of = np.array(zooms, dtype=np.float64)
+    return (
+        np.array(xs, dtype=np.float64),
+        np.array(ys, dtype=np.float64),
+        np.array(ws, dtype=np.float64),
+        np.array(hs, dtype=np.float64),
+        np.array(zooms, dtype=np.float64),
+    )
+
+
+def _costs(
+    read: PhotoRead,
+    covers: list[Cover],
+    x: Floats,
+    y: Floats,
+    w: Floats,
+    h: Floats,
+    zoom_of: Floats,
+) -> Floats:
+    """The cost of each window (see the module doc). Vectorised over windows."""
+    # Squared, so the one thing that stands out most outweighs a scatter of lesser
+    # ones: keeping the rocket beats keeping every lamp on the launch pad.
+    peak = read.salience**2
+    total = float(peak.sum())
+    sal_table = _table(peak / total if total > 0 else read.salience)
+    busy_table = _table(read.busy)
+    busy_cells = read.busy.shape[0] * read.busy.shape[1]
 
     cost = np.zeros_like(x)
     # What stands out: kept in the window, and not under what is drawn over it.
@@ -236,7 +246,9 @@ def choose_crop(read: PhotoRead, box_size: tuple[float, float], covers: Iterable
     )
     cost += BUSY * np.divide(busy_sum, word_area, out=np.zeros_like(x), where=word_area > 0)
 
-    for head, importance, face in heads:
+    for face in read.faces:
+        head = _clip_to_photo(face.head())
+        importance = float(np.clip(face.h / FULL_FACE, 0.25, 1.0))
         cut = 1.0 - _share_inside(head, x, y, w, h)
         hidden = np.zeros_like(x)
         for cover in covers:
@@ -252,14 +264,40 @@ def choose_crop(read: PhotoRead, box_size: tuple[float, float], covers: Iterable
         np.abs(x - slack_x / 2) / (slack_x / 2), np.abs(y - slack_y / 2) / (slack_y / 2)
     )
     moved = np.where((1.0 - w <= 1e-6) & (1.0 - h <= 1e-6), 0.0, moved)
-    cost += SHIFT * moved / np.sqrt(2.0) + ZOOM * (zoom_of - 1.0)
+    out: Floats = cost + SHIFT * moved / np.sqrt(2.0) + ZOOM * (zoom_of - 1.0)
+    return out
 
+
+def choose_crop(read: PhotoRead, box_size: tuple[float, float], covers: Iterable[Cover]) -> Crop:
+    """The crop with the lowest cost for one photo in one box. See the module doc."""
+    x, y, w, h, zoom_of = _windows(read, box_size)
+    cost = _costs(read, list(covers), x, y, w, h, zoom_of)
     best = int(np.argmin(cost))
     return Crop(
         x=round(float(x[best] + w[best] / 2), 4),
         y=round(float(y[best] + h[best] / 2), 4),
         zoom=float(zoom_of[best]),
     )
+
+
+def crop_cost(
+    read: PhotoRead, box_size: tuple[float, float], covers: Iterable[Cover], crop: Crop | None
+) -> float:
+    """The cost of one given crop (None = the centre): how well this photo sits in this
+    box under these words. The same scale `choose_crop` minimises."""
+    width, height = read.size
+    win_x, win_y, win_w, win_h = crop_window(read.size, box_size, crop)
+    one = np.array([1.0])
+    cost = _costs(
+        read,
+        list(covers),
+        one * win_x / width,
+        one * win_y / height,
+        one * win_w / width,
+        one * win_h / height,
+        one * (crop.zoom if crop is not None else 1.0),
+    )
+    return float(cost[0])
 
 
 # --- what is drawn over a photo -----------------------------------------------------
@@ -400,6 +438,27 @@ def frame_photos(
     return spec.model_copy(update={"layers": layers, "variants": variants})
 
 
+def framing_cost(
+    spec: PosterSpec, reads: Mapping[str, PhotoRead], kit: BrandKit, root: Path
+) -> float:
+    """How well the photos sit in this one-size poster as framed now: the sum of each
+    photo's crop cost. 0 for a poster with no photo. Used to rank designs (M12b):
+    a design whose words must cover a face costs more than one that leaves it clear.
+    """
+    total = 0.0
+    for index, layer in enumerate(spec.layers):
+        if not _framable(layer):
+            continue
+        assert isinstance(layer, ImageLayer) and layer.asset is not None
+        read = reads.get(layer.asset)
+        if read is None:
+            continue
+        _, _, box_w, box_h = box_px(spec, layer)
+        covers = covers_over(spec, index, kit, root)
+        total += crop_cost(read, (box_w, box_h), covers, layer.crop)
+    return total
+
+
 def face_flags(
     spec: PosterSpec, reads: Mapping[str, PhotoRead], kit: BrandKit, root: Path
 ) -> tuple[Flag, ...]:
@@ -442,4 +501,12 @@ def face_flags(
     return tuple(found[code] for code in sorted(found))
 
 
-__all__ = ["Cover", "choose_crop", "covers_over", "face_flags", "frame_photos"]
+__all__ = [
+    "Cover",
+    "choose_crop",
+    "covers_over",
+    "crop_cost",
+    "face_flags",
+    "frame_photos",
+    "framing_cost",
+]

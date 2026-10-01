@@ -22,7 +22,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel, Field, ValidationError
 from stratum_spec import SCHEMA_VERSION, BrandKit
 from stratum_spec.models import Aspect
-from stratum_worker.app import reviews, service
+from stratum_worker.app import options, reviews, service
 from stratum_worker.app.settings import Settings, settings
 from stratum_worker.app.supa import Supa, SupabaseError, close_pool
 from stratum_worker.assets.errors import (
@@ -33,6 +33,7 @@ from stratum_worker.assets.errors import (
 )
 from stratum_worker.brand import Check, Suggestion, check_palette, is_starter
 from stratum_worker.design import PRESETS, is_design
+from stratum_worker.design.choose import AUTO
 from stratum_worker.draft.bindings import BINDINGS
 from stratum_worker.draft.compose import ComposeError
 from stratum_worker.draft.pipeline import DraftError
@@ -427,7 +428,11 @@ async def list_posts(
 async def create_post(
     body: NewPost, queue: bool = False, ctx: service.Context = Depends(context)
 ) -> dict[str, Any]:
-    if body.template_id not in BINDINGS and not is_design(body.template_id):
+    if (
+        body.template_id != AUTO
+        and body.template_id not in BINDINGS
+        and not is_design(body.template_id)
+    ):
         raise HTTPException(400, f"unknown design {body.template_id!r}")
     body = await _own_slug(body, ctx)
     if queue:
@@ -564,7 +569,7 @@ async def get_job(job_id: str, ctx: service.Context = Depends(context)) -> dict[
 @app.get("/api/posts/{post_id}")
 async def get_post(post_id: str, ctx: service.Context = Depends(context)) -> dict[str, Any]:
     post, client = await _post_and_client(ctx, post_id)
-    versions, edits = await asyncio.gather(
+    versions, edits, choices = await asyncio.gather(
         ctx.supa.select(
             "post_versions",
             post_id=f"eq.{post_id}",
@@ -578,6 +583,8 @@ async def get_post(post_id: str, ctx: service.Context = Depends(context)) -> dic
             order="created_at.desc",
             limit="20",
         ),
+        # The three options of a "best three" draft (M12b); empty otherwise.
+        options.latest_options(ctx, post_id),
     )
     latest = versions[0] if versions else None
     renders: list[dict[str, Any]] = []
@@ -599,6 +606,7 @@ async def get_post(post_id: str, ctx: service.Context = Depends(context)) -> dic
         "renders": renders,
         "flags": flags,
         "edits": edits,
+        "options": choices,
     }
 
 
@@ -708,8 +716,45 @@ async def preview_image(
 
 @app.get("/api/designs")
 def designs() -> list[str]:
-    """Hand-made templates, plus named designs from the design space (M11a)."""
-    return sorted([*BINDINGS, *PRESETS])
+    """ "Best three" first - Stratum lays out many designs and keeps three different
+    ones (M12b) - then hand-made templates and named designs from the design space."""
+    return [AUTO, *sorted([*BINDINGS, *PRESETS])]
+
+
+@app.get("/api/posts/{post_id}/options")
+async def post_options(post_id: str, ctx: service.Context = Depends(context)) -> list[Any]:
+    """The three options of the post's newest draft, in the order they are shown.
+    Empty for a post drafted from one chosen design."""
+    await _post_and_client(ctx, post_id)
+    return await options.latest_options(ctx, post_id)
+
+
+@app.post("/api/posts/{post_id}/options/{option_id}/pick")
+async def pick_option(
+    post_id: str, option_id: str, ctx: service.Context = Depends(context)
+) -> dict[str, Any]:
+    """Make this option the poster (a new version), and record the choice. Picking the
+    same option again changes nothing and records nothing new."""
+    post, client = await _post_and_client(ctx, post_id)
+    return await options.pick_option(ctx, post, client, option_id)
+
+
+@app.get("/previews/options/{option_id}/{shape}.webp")
+async def option_preview(
+    option_id: str, shape: str, ctx: service.Context = Depends(context)
+) -> Response:
+    """The picture of one option. Like a version, an option never changes once
+    written, so its picture is cached for good. Row-level security scopes the lookup."""
+    rows = await ctx.supa.select("post_options", id=f"eq.{option_id}", select="id,spec,post_id")
+    if not rows:
+        raise HTTPException(404, "no such option")
+    post, client = await _post_and_client(ctx, rows[0]["post_id"])
+    data = await service.render_preview(ctx, rows[0], post, client, shape.replace("x", ":"))
+    return Response(
+        content=data,
+        media_type="image/webp",
+        headers={"Cache-Control": "public, max-age=31536000, immutable"},
+    )
 
 
 # --- client review links ----------------------------------------------------------

@@ -19,4 +19,6 @@ RUN uv sync --all-packages --frozen --no-dev \
 USER app
 
 # The API by default; the worker service overrides this (infra/railway/worker.json).
-CMD uvicorn stratum_api.main:app --host 0.0.0.0 --port ${PORT:-8000} --proxy-headers
+# Logs as JSON on stdout, so Railway files them by level (stratum_worker/logs.py).
+CMD uvicorn stratum_api.main:app --host 0.0.0.0 --port ${PORT:-8000} --proxy-headers \
+    --log-config infra/uvicorn-logging.json
