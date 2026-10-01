@@ -6,7 +6,8 @@ vocabulary allowed to change it.
 ## In scope
 - `PosterSpec`: canvas, ordered layers, template + brand-kit versions, schema version.
 - Layer kinds: image, cutout, logo, shape, text (discriminated union).
-- Edit ops: set_text, set_color, move, scale, swap_asset, set_visible, needs_human.
+- Edit ops: set_text, set_color, move, scale, swap_asset, set_visible, needs_human; pan,
+  zoom and dim (the photo inside its frame) since M10c.
 - Schema migration: `upgrade()` + `load()`, with a registry for future versions.
 - Three templates as data: offer (4:5), before/after (4:5), testimonial (1:1).
 

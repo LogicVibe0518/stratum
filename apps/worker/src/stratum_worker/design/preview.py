@@ -31,10 +31,12 @@ from stratum_worker.draft.logo_fit import LogoInk, fit_logo
 from stratum_worker.render import render_poster
 
 FAKE_SHA = {"photo_a": "a" * 64, "photo_b": "b" * 64, "bg": "a" * 64, "logo": "c" * 64}
+# Words that match the test client (a fictional plumber), so a contact sheet reads as
+# one believable post rather than another client's words in this one's colours.
 SAMPLE_COPY = Copy(
-    headline="Meditation camp for self-discovery",
-    offer="5 Nov 2026 to 1 Feb 2027. Women and under-18s get 50% off.",
-    cta="Book your place today",
+    headline="Boiler service, sorted before winter",
+    offer="20% off every boiler service booked before 31 October.",
+    cta="Call 0161 496 0000",
 )
 
 

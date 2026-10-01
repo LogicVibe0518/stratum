@@ -23,7 +23,7 @@ from stratum_spec import BrandKit, embed, load_template, load_variants, retarget
 from stratum_spec import load as load_spec
 from stratum_spec.client import ClientRules
 from stratum_spec.models import Aspect, ImageLayer, LogoLayer, PosterSpec, TextLayer
-from stratum_spec.ops import EditOp, OpError, apply_ops
+from stratum_spec.ops import EditOp, OpError, SetColor, apply_ops
 from stratum_spec.templates import Variants
 
 from stratum_worker.app.settings import Settings
@@ -39,6 +39,7 @@ from stratum_worker.brand import (
     starter_kit,
     suggest,
 )
+from stratum_worker.brand.names import WORDS, colour_name, nearest
 from stratum_worker.design import PLACEHOLDER, Copy, decode, is_design, lay_out
 from stratum_worker.design.choose import AUTO
 from stratum_worker.draft.bindings import binding_for
@@ -53,6 +54,16 @@ from stratum_worker.draft.preflight import (
     check_copy,
     check_layout,
 )
+from stratum_worker.edit.actions import Ask, Choice, Restyle, Undo, is_undo, split
+from stratum_worker.edit.context import (
+    asked_colours,
+    colour_lines,
+    describe_layers,
+    friendly,
+    recent_lines,
+    style_menu,
+)
+from stratum_worker.edit.restyle import RestyleError
 from stratum_worker.gateway.errors import (
     InvalidProviderOutput,
     NoProviderAvailable,
@@ -795,15 +806,90 @@ def why_unread(exc: NoProviderAvailable) -> str:
     )
 
 
+_OP_PROBLEMS: tuple[tuple[str, str], ...] = (
+    ("unknown layer", "This design has no {part}."),
+    ("is not a text layer", "The {part} has no words to change."),
+    ("has no colour", "The {part} has no colour of its own to change."),
+    ("is not a photo", "The {part} is not a photo, so it cannot be moved, zoomed or darkened."),
+    ("shows the whole photo", "The {part} shows the whole photo, so there is nothing to move."),
+    ("is locked", "The {part} is locked in this design."),
+    ("holds no asset", "The {part} has no picture to swap."),
+)
+_LAYER_IN_ERROR = re.compile(r"layer '([^']+)'")
+
+
+def plain_op_error(exc: OpError) -> str:
+    """An op that could not be applied, said to a designer rather than a developer."""
+    text = str(exc)
+    found = _LAYER_IN_ERROR.search(text)
+    part = friendly(found.group(1)) if found else "part of the poster"
+    for marker, sentence in _OP_PROBLEMS:
+        if marker in text:
+            return sentence.format(part=part)
+    return "That change could not be made to this design. Try saying it another way."
+
+
+def _asking(question: str, choices: list[Choice]) -> dict[str, Any]:
+    """A question back to the designer, with changes they can click (UI brief C7).
+
+    `why` says the same in one line, for a page that does not show choices yet.
+    """
+    tweaks = [choice.label for choice in choices if choice.kind == "tweak"]
+    why = question
+    if tweaks:
+        why += " You could say: " + " or ".join(f"'{label}'" for label in tweaks) + "."
+    return {
+        "outcome": "needs_human",
+        "why": why,
+        "question": question,
+        "choices": [choice.model_dump() for choice in choices],
+    }
+
+
+def off_brand_colour(
+    ops: list[EditOp], kit: BrandKit, client: dict[str, Any]
+) -> dict[str, Any] | None:
+    """A colour change to a colour the brand does not have: a question, never a crash.
+
+    The model is told the brand's colours by name and asked to ask; this is the guard
+    for when it does not. "palette.green" passes the spec's pattern, and would only
+    fail at render time, as an error no designer can act on.
+    """
+    for op in ops:
+        if not isinstance(op, SetColor):
+            continue
+        token = op.color.removeprefix("palette.")
+        if token in kit.palette:
+            continue
+        word = token.replace("_", " ")
+        names = list(dict.fromkeys(colour_name(value) for value in kit.palette.values()))
+        question = (
+            f"{word.capitalize()} isn't one of {client['name']}'s brand colours "
+            f"({', '.join(names)})."
+        )
+        near = nearest(word, kit.palette).nearest if word in WORDS else ()
+        part = friendly(op.layer)
+        choices = [Choice(label=f"Make the {part} {colour_name(kit.palette[one])}") for one in near]
+        choices.append(Choice(label=f"Add {word} to the brand colours", kind="brand"))
+        return _asking(question, choices)
+    return None
+
+
 async def tweak(
     ctx: Context, post: dict[str, Any], client: dict[str, Any], message: str
 ) -> dict[str, Any]:
     """Plain English in, a new version out - with no model touching the poster.
 
-    The model only ever returns edit ops, which are validated into real EditOp objects
-    before anything is applied. An op it invents, or a layer that does not exist, is
-    rejected here; the worst a confused or hostile instruction can do is nothing.
+    The model only ever returns ops, which are validated before anything happens:
+    spec ops into real EditOp objects, and the three the service carries out itself
+    (restyle, ask, undo) into their own models. An op it invents, a layer that does
+    not exist or a colour the brand does not have is refused here; the worst a
+    confused or hostile instruction can do is nothing.
     """
+    from stratum_worker.app import actions  # restyle and undo use this module
+
+    if is_undo(message):
+        return await actions.undo(ctx, post, client, message)
     started = time.perf_counter()
     versions = await ctx.supa.select(
         "post_versions", post_id=f"eq.{post['id']}", order="version.desc", limit="1"
@@ -816,18 +902,35 @@ async def tweak(
     # brand kit is its own decision, not a side effect of "make the logo bigger".
     kit = await kit_for(ctx, client, spec.brand_kit_version)
 
-    # Each layer is described WITH the number of characters it holds. A model asked
-    # to "shorten the headline" otherwise has no idea what short means here, and
-    # writes something that renders cut off - a tweak that creates a blocker.
+    # The model sees the poster as a designer would describe it (M10c): each layer
+    # with where it is, its colour by name and, for text, how many characters it
+    # holds - a model asked to "shorten the headline" otherwise has no idea what
+    # short means here. Plus the brand's colours by name, the nearest brand colours
+    # to any colour the message names, this design's style settings, and the last
+    # few changes.
     fits = measure(spec, kit, root=ctx.settings.repo_root)
-    described = {}
-    for layer in spec.layers:
-        content = getattr(layer, "content", "")
-        room = f", fits {fits[layer.id]} characters" if layer.id in fits else ""
-        # Said, because "show both images" otherwise gets set_visible(true) on layers
-        # that were never hidden - a change that changes nothing (live, 29 Sep).
-        hidden = ", hidden" if not layer.visible else ""
-        described[layer.id] = f"{layer.type}{room}{hidden}: {content or layer.type}"[:120]
+    bound = {getattr(layer, "asset", None) for layer in spec.layers}
+    asset_paths = {sha: await local_path(ctx, sha) for sha in bound if isinstance(sha, str)}
+    sizes, photos, recent = await asyncio.gather(
+        actions.photo_sizes(asset_paths),
+        actions.client_photos(ctx, client),
+        ctx.supa.select(
+            "edits",
+            post_id=f"eq.{post['id']}",
+            select="message,outcome",
+            order="created_at.desc",
+            limit="5",
+        ),
+    )
+    request = EditParseRequest(
+        message=message,
+        layers=describe_layers(spec, kit, fits, sizes),
+        palette=[f"palette.{name}" for name in kit.palette],
+        colours=colour_lines(spec, kit),
+        asked=asked_colours(message, kit),
+        design=style_menu(post["template_id"], kit, len(photos)),
+        recent=recent_lines(list(reversed(recent))),
+    )
     tracer = CollectingTracer(inner=ctx.gateway.tracer)
     gateway = Gateway(router=ctx.gateway.router, budget=ctx.gateway.budget, tracer=tracer)
 
@@ -848,15 +951,7 @@ async def tweak(
         )
 
     try:
-        result = await gateway.run(
-            TaskName.EDIT_PARSE,
-            EditParseRequest(
-                message=message,
-                layers=described,
-                palette=[f"palette.{name}" for name in kit.palette],
-            ),
-            agency_id=ctx.agency_id,
-        )
+        result = await gateway.run(TaskName.EDIT_PARSE, request, agency_id=ctx.agency_id)
     except NoProviderAvailable as exc:
         # The poster is untouched and the designer is told what to try, in a
         # sentence - not "edit.parse: every provider failed" and a 503.
@@ -864,33 +959,74 @@ async def tweak(
         return {"outcome": "failed", "why": why_unread(exc)}
     assert isinstance(result, EditParseResult)
     step = tracer.step("edit_parse", TaskName.EDIT_PARSE)
+    raw = [dict(one) for one in result.ops]
 
-    if not result.ops:
-        await record("needs_human", list(result.ops), step.cost_usd)
+    try:
+        raw_ops, service_ops = split(raw)
+        ops = OPS.validate_python(raw_ops)
+    except ValidationError:
+        await record("failed", raw, step.cost_usd)
+        return {
+            "outcome": "failed",
+            "why": "I could not turn that into a change. Try saying it another way.",
+        }
+    asks = [one for one in service_ops if isinstance(one, Ask)]
+    if asks:
+        await record("needs_human", raw, step.cost_usd)
+        return _asking(asks[0].question, asks[0].choices)
+    restyles = [one for one in service_ops if isinstance(one, Restyle)]
+    if any(isinstance(one, Undo) for one in service_ops) and not ops and not restyles:
+        return await actions.undo(ctx, post, client, message)
+    if not ops and not restyles:
+        await record("needs_human", raw, step.cost_usd)
         return {
             "outcome": "needs_human",
             "why": result.needs_human or "I could not tell what to change.",
         }
+    off_brand = off_brand_colour(ops, kit, client)
+    if off_brand is not None:
+        await record("needs_human", raw, step.cost_usd)
+        return off_brand
+
+    notes = [result.note[:300]] if result.note else []
+    unable = [result.needs_human[:300]] if result.needs_human else []
+    base, template_id = spec, post["template_id"]
+    restyled = None
+    if restyles:
+        changes: dict[str, str] = {}
+        for one in restyles:
+            changes.update(one.changes)
+        try:
+            restyled = await actions.restyle(ctx, post, client, spec, kit, changes, photos)
+        except RestyleError as exc:
+            if not ops:
+                await record("needs_human", raw, step.cost_usd)
+                return {"outcome": "needs_human", "why": str(exc)}
+            unable.append(str(exc))
+        else:
+            base, template_id = restyled.spec, restyled.design_id
+            if not result.note:
+                notes.append(restyled.note)
+            if restyled.added_photo:
+                notes.append(f"Added another of {client['name']}'s photos for the second space.")
 
     try:
-        ops = OPS.validate_python(result.ops)
-        changed = apply_ops(spec, ops)
-    except (ValidationError, OpError) as exc:
-        await record("failed", list(result.ops), step.cost_usd)
-        return {"outcome": "failed", "why": str(exc)[:300]}
+        changed = apply_ops(base, ops)
+    except OpError as exc:
+        await record("failed", raw, step.cost_usd)
+        return {"outcome": "failed", "why": plain_op_error(exc)}
     if changed.model_dump() == spec.model_dump():
         # Nothing moved, so there is no new version and it is not called "applied":
         # a designer who asked for a second photo was told it was done, and it wasn't.
-        await record("needs_human", list(result.ops), step.cost_usd)
+        await record("needs_human", raw, step.cost_usd)
         return {"outcome": "needs_human", "why": result.needs_human or NOTHING_CHANGED}
 
-    variants = file_variants(ctx, post["template_id"])
-    shas = {
-        getattr(layer, "asset", None) for layer in changed.layers if getattr(layer, "asset", None)
-    }
+    shaped = {**post, "template_id": template_id}
+    variants = file_variants(ctx, template_id)
+    shas = {getattr(layer, "asset", None) for layer in changed.layers}
     asset_paths = {sha: await local_path(ctx, sha) for sha in shas if isinstance(sha, str)}
-    changed = await reframe(ctx, spec, changed, asset_paths, kit, post["aspects"])
-    renders, flags = await render_versions(ctx, post, changed, variants, asset_paths, kit)
+    changed = await reframe(ctx, base, changed, asset_paths, kit, post["aspects"])
+    renders, flags = await render_versions(ctx, shaped, changed, variants, asset_paths, kit)
 
     # An edit can change the words on the poster, so the claims are checked again -
     # against everything a HUMAN has written about this post. A designer asking for
@@ -905,22 +1041,56 @@ async def tweak(
     )
     on_poster = "\n".join(one.content for one in changed.layers if isinstance(one, TextLayer))
     flags = list(flags) + list(check_claims(on_poster, rules_of(client), authorised))
-    flags += brief_flags(post, changed)
+    flags += brief_flags(shaped, changed)
 
     saved, _ = await asyncio.gather(
         save_version(
             ctx, post, changed, renders, flags, note=message[:200], after=latest["version"]
         ),
-        record("applied", list(result.ops), step.cost_usd),
+        record("applied", raw, step.cost_usd),
     )
     version: dict[str, Any] = saved
-    await ctx.supa.insert(
-        "steps", {"agency_id": ctx.agency_id, "post_id": post["id"], **step.model_dump()}
-    )
+    writes = [
+        ctx.supa.insert(
+            "steps", {"agency_id": ctx.agency_id, "post_id": post["id"], **step.model_dump()}
+        )
+    ]
+    if restyled is not None:
+        # From here on the post IS the new design: quick changes, the brief check and
+        # the next tweak's style settings read it. And a designer choosing a style is
+        # a taste label, like a pick (M15).
+        writes.append(
+            ctx.supa.update(
+                "posts", {"template_id": template_id, "updated_at": "now()"}, id=f"eq.{post['id']}"
+            )
+        )
+        writes.append(
+            ctx.supa.insert(
+                "decision_log",
+                {
+                    "agency_id": ctx.agency_id,
+                    "client_id": client["id"],
+                    "post_id": post["id"],
+                    "version_id": saved["id"],
+                    "kind": "edit_request",
+                    "actor": ctx.user_id,
+                    "detail": {
+                        "what": "restyle",
+                        "from": post["template_id"],
+                        "to": template_id,
+                        "changes": changes,
+                    },
+                },
+            )
+        )
+    await asyncio.gather(*writes)
     version["outcome"] = "applied"
-    # Honest partial success: what worked is live, and what the model could not do is
-    # said out loud rather than silently dropped.
-    version["why"] = result.needs_human or ""
+    # What was done when the request had to be read into, and what could not be done:
+    # an inferred change is never a silent one, and a partial one says what is left.
+    # `why` carries both in one line for a page that shows only that (until C7).
+    version["note"] = " ".join(notes)
+    version["unable"] = " ".join(unable)
+    version["why"] = " ".join([*notes, *unable])
     version["seconds"] = round(time.perf_counter() - started, 2)
     return version
 

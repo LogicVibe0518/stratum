@@ -30,7 +30,7 @@ from stratum_worker.gateway.tasks import (
 VERSION: dict[TaskName, int] = {
     TaskName.POST_COPY: 1,
     TaskName.CAPTION_GENERATE: 1,
-    TaskName.EDIT_PARSE: 3,
+    TaskName.EDIT_PARSE: 4,
     TaskName.BACKGROUND_CREATE: 1,
 }
 
@@ -123,9 +123,14 @@ def _values(task: TaskName, request: BaseModel) -> dict[str, str]:
             "brief": request.brief,
         }
     if task is TaskName.EDIT_PARSE and isinstance(request, EditParseRequest):
+        colours = request.colours or {token: token for token in request.palette}
         return {
             "layers": json.dumps(request.layers, ensure_ascii=False, indent=2),
-            "palette": ", ".join(request.palette) or "(none)",
+            "colours": "\n".join(f"{token}: {about}" for token, about in colours.items())
+            or "(none)",
+            "asked": "\n".join(request.asked) or "(no colour named)",
+            "design": request.design or "(no style settings)",
+            "recent": "\n".join(request.recent) or "(none)",
             "message": request.message,
         }
     if task is TaskName.BACKGROUND_CREATE and isinstance(request, BackgroundRequest):
