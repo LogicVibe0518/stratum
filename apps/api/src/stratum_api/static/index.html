@@ -158,6 +158,80 @@ button.card:hover:not(:disabled) { border-color: var(--line-strong); background:
 .why:empty { display: none; }
 .why.bad { color: var(--bad); }
 .why.warn { color: var(--warn); }
+#tweakchoices { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+#tweakchoices:empty { display: none; }
+#tweakchoices button { height: auto; min-height: 36px; white-space: normal; text-align: left; }
+#history .nowrap { white-space: nowrap; }
+#editorfields { border: 0; margin: 0; padding: 0; min-width: 0; }
+#editorfields:disabled { opacity: 0.65; }
+#editorstatus:empty { display: none; }
+#editor .segment.fill { margin: 0; }
+#editorbody { margin-top: 12px; display: flex; flex-direction: column; gap: 10px; }
+.layer-list { display: flex; flex-direction: column; gap: 4px; }
+.layer-row { display: flex; gap: 4px; align-items: stretch; }
+.layer-pick {
+  flex: 1;
+  height: auto;
+  min-height: 36px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  padding: 8px 10px;
+  text-align: left;
+  font-weight: 400;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-left: 2px solid transparent;
+  border-radius: var(--radius-sm);
+}
+.layer-pick[aria-pressed="true"] { border-left-color: var(--focus); }
+.layer-eye { width: 36px; padding: 0; flex: none; height: auto; }
+.editor-tools { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.nudge-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.nudge-row button { min-width: 36px; }
+#layertext { width: 100%; min-height: 72px; }
+.over-fit { color: var(--bad); }
+.editor-ok { color: var(--good); }
+.editor-bad { color: var(--bad); }
+.swatch-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.swatch {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--line-strong);
+  background: var(--raised);
+}
+.swatch[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--text); }
+.design-choice { display: flex; flex-direction: column; gap: 4px; }
+.design-choice button { height: auto; min-height: 36px; text-align: left; white-space: normal; }
+.editor-setting { display: flex; flex-direction: column; gap: 4px; }
+.measure-list { display: flex; flex-direction: column; gap: 6px; }
+.measure-list p { margin: 0; font-size: 13px; }
+.hero .render-hit { position: relative; }
+.measure-overlay {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  width: calc(100% - 24px);
+  height: calc(100% - 24px);
+  pointer-events: none;
+}
+#tweakpalette { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.tweak-swatches { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; }
+.tweak-swatch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: auto;
+  padding: 2px 0;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
+}
+.tweak-dot { width: 14px; height: 14px; flex: none; pointer-events: none; }
 .hide { display: none !important; }
 header.top {
   height: 56px;
@@ -1015,6 +1089,18 @@ button, input, select, textarea, .card, .badge, .drop, .switch-ui, .toast {
         </section>
       </div>
       <aside class="side">
+        <section class="card" id="editor">
+          <h2>Editor</h2>
+          <p class="muted" id="editorstatus" role="status"></p>
+          <fieldset id="editorfields">
+            <div class="segment fill" id="editortabs" role="radiogroup" aria-label="Editor">
+              <button type="button" role="radio" data-tab="layers" aria-checked="true">Layers</button>
+              <button type="button" role="radio" data-tab="style" aria-checked="false">Style</button>
+              <button type="button" role="radio" data-tab="measure" aria-checked="false">Measure</button>
+            </div>
+            <div id="editorbody"></div>
+          </fieldset>
+        </section>
         <section>
           <h2>To check</h2>
           <div id="flaglist"></div>
@@ -1033,15 +1119,18 @@ button, input, select, textarea, .card, .badge, .drop, .switch-ui, .toast {
               <input id="tweak" aria-label="What should change" placeholder="make the logo bigger">
               <button type="submit" class="primary" id="dotweak">Apply</button>
             </div>
+            <div id="tweakpalette" class="hide"></div>
             <p class="hint">⌘/Ctrl+Enter applies</p>
             <p class="why" id="tweakwhy" role="status"></p>
+            <p class="why warn" id="tweakunable"></p>
+            <div id="tweakchoices"></div>
           </form>
         </section>
         <section>
           <h2>History</h2>
           <p class="muted hide" id="historyempty">No changes yet.</p>
           <table class="hide" id="history">
-            <thead><tr><th>Change</th><th>Result</th><th class="mono">Time</th></tr></thead>
+            <thead><tr><th>Change</th><th class="nowrap">Result</th><th class="mono nowrap">Time</th></tr></thead>
             <tbody id="historybody"></tbody>
           </table>
         </section>
@@ -1118,6 +1207,12 @@ function show(id) {
 
 let CONF = null, SESSION = null, CLIENT = null, POST = null;
 let POSTDATA = null;
+let INSPECT = null;
+let inspecting = null;
+let inspectGen = 0;
+let selectedLayer = null;
+let editorTab = "layers";
+let showMeasure = false;
 let upAction = null;
 let viewToken = 0;
 let making = false;
@@ -2513,6 +2608,13 @@ function paintFlags(flags) {
   }).join("");
 }
 
+function historyResult(outcome) {
+  if (outcome === "applied") return "Done";
+  if (outcome === "needs_human") return "Asked you";
+  if (outcome === "failed") return "Didn't work";
+  return outcome || "";
+}
+
 function paintHistory(edits) {
   if (!edits.length) {
     $("historybody").replaceChildren();
@@ -2523,7 +2625,7 @@ function paintHistory(edits) {
   $("historyempty").classList.add("hide");
   $("history").classList.remove("hide");
   $("historybody").innerHTML = edits.map((edit) =>
-    `<tr><td>${esc(edit.message)}</td><td>${esc(edit.outcome)}</td><td class="mono">${esc(taken(edit.latency_ms))}</td></tr>`
+    `<tr><td>${esc(edit.message)}</td><td class="nowrap">${esc(historyResult(edit.outcome))}</td><td class="mono nowrap">${esc(taken(edit.latency_ms))}</td></tr>`
   ).join("");
 }
 
@@ -2795,6 +2897,7 @@ function syncPreview(fade) {
   else if (previewKind === "grid") paintGrid();
   else paintStage((POSTDATA && POSTDATA.renders) || [], fade);
   paintOptions(POSTDATA);
+  drawMeasureOverlay();
 }
 
 function paintPost(data, options) {
@@ -2813,6 +2916,626 @@ function paintPost(data, options) {
     { label: client.name || "Client", action: () => { openClient(CLIENT && CLIENT.id === client.id ? CLIENT : client); } },
     { label: post.slug || "Post" },
   ]);
+  loadInspect();
+}
+
+function safeHex(hex) {
+  const value = String(hex ?? "");
+  return /^#[0-9a-f]{6}$/i.test(value) ? value : "";
+}
+
+function firstAspect() {
+  const aspects = (POSTDATA && POSTDATA.post && POSTDATA.post.aspects) || [];
+  if (aspects[0]) return aspects[0];
+  const renders = (POSTDATA && POSTDATA.renders) || [];
+  const hero = renders.find((render) => render.aspect === "4:5") || renders[0];
+  return (hero && hero.aspect) || "4:5";
+}
+
+function setEditorBusy(on) {
+  $("editorfields").disabled = Boolean(on);
+}
+
+function layerById(id) {
+  return ((INSPECT && INSPECT.layers) || []).find((layer) => layer.id === id) || null;
+}
+
+function prettyName(name) {
+  const text = String(name || "");
+  return text ? text.charAt(0).toUpperCase() + text.slice(1) : "";
+}
+
+function pxLabel(value) {
+  return String(Math.round(Number(value) || 0));
+}
+
+async function loadInspect() {
+  if (!POST) return;
+  const gen = ++inspectGen;
+  const post = POST;
+  setEditorBusy(true);
+  inspecting = (async () => {
+    try {
+      const aspect = firstAspect();
+      const data = await api(`/posts/${post}/inspect?aspect=${encodeURIComponent(aspect)}`);
+      if (gen !== inspectGen || POST !== post) return;
+      INSPECT = data;
+      $("editorstatus").textContent = "";
+      paintEditor();
+    } catch (err) {
+      if (gen !== inspectGen || POST !== post) return;
+      $("editorstatus").textContent = sentence(err);
+      setEditorBusy(false);
+    }
+  })();
+  return inspecting;
+}
+
+async function sendEdit(body) {
+  if (!POST || !INSPECT || changing) return;
+  changing = true;
+  setEditorBusy(true);
+  $("editorstatus").textContent = "Saving…";
+  const started = performance.now();
+  try {
+    await api(`/posts/${POST}/edit`, {
+      method: "POST",
+      json: { ops: [], restyle: null, ...body, version: INSPECT.version },
+    });
+    const seconds = (performance.now() - started) / 1000;
+    await refreshPost({ fade: true, keepScroll: true, lastChange: seconds });
+    if (inspecting) await inspecting;
+    if (POSTDATA && POSTDATA.latest) toast(`v${POSTDATA.latest.version} · ${seconds.toFixed(1)}s`);
+  } catch (err) {
+    const text = sentence(err);
+    $("editorstatus").textContent = text;
+    if (err.status === 409) {
+      await refreshPost({ fade: true, keepScroll: true });
+      if (inspecting) await inspecting;
+      $("editorstatus").textContent = text;
+    } else {
+      setEditorBusy(false);
+    }
+  } finally {
+    changing = false;
+  }
+}
+
+function paintEditor() {
+  const root = $("editorbody");
+  root.replaceChildren();
+  if (!INSPECT) return;
+  setEditorBusy(false);
+  for (const button of $("editortabs").querySelectorAll("button")) {
+    button.setAttribute("aria-checked", button.dataset.tab === editorTab ? "true" : "false");
+  }
+  if (editorTab === "style") paintStyle(root);
+  else if (editorTab === "measure") paintMeasure(root);
+  else {
+    const list = document.createElement("div");
+    list.className = "layer-list";
+    for (const layer of [...(INSPECT.layers || [])].reverse()) list.append(layerRow(layer));
+    root.append(list);
+    const inspector = document.createElement("div");
+    inspector.id = "inspector";
+    root.append(inspector);
+    paintInspector();
+  }
+  drawMeasureOverlay();
+  paintTweakPalette();
+}
+
+function paintTweakPalette() {
+  const root = $("tweakpalette");
+  root.replaceChildren();
+  const palette = (INSPECT && INSPECT.palette) || [];
+  if (!palette.length) {
+    root.classList.add("hide");
+    return;
+  }
+  root.classList.remove("hide");
+  const heading = document.createElement("p");
+  heading.className = "muted";
+  heading.textContent = "Brand colours:";
+  const row = document.createElement("div");
+  row.className = "tweak-swatches";
+  for (const swatch of palette) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "tweak-swatch ghost";
+    const dot = document.createElement("span");
+    dot.className = "swatch tweak-dot";
+    const hex = safeHex(swatch.hex);
+    if (hex) dot.style.background = hex;
+    const name = document.createElement("span");
+    name.textContent = swatch.name || "";
+    button.setAttribute("aria-label", swatch.name || "");
+    button.append(dot, name);
+    button.addEventListener("click", () => insertAtCursor($("tweak"), swatch.name || ""));
+    row.append(button);
+  }
+  root.append(heading, row);
+}
+
+function insertAtCursor(input, word) {
+  if (!input || !word) return;
+  const start = input.selectionStart ?? input.value.length;
+  const end = input.selectionEnd ?? start;
+  const before = input.value.slice(0, start);
+  const after = input.value.slice(end);
+  const lead = before && !/\s$/.test(before) ? " " : "";
+  const piece = `${lead}${word}`;
+  input.value = before + piece + after;
+  const pos = start + piece.length;
+  input.focus();
+  input.setSelectionRange(pos, pos);
+}
+
+function layerRow(layer) {
+  const row = document.createElement("div");
+  row.className = "layer-row";
+  const pick = document.createElement("button");
+  pick.type = "button";
+  pick.className = "layer-pick";
+  pick.setAttribute("aria-pressed", selectedLayer === layer.id ? "true" : "false");
+  const name = document.createElement("span");
+  name.textContent = layer.name || layer.id || "";
+  const kind = document.createElement("span");
+  kind.className = "muted";
+  kind.textContent = layer.kind || "";
+  pick.append(name, kind);
+  if (!layer.visible) {
+    const hidden = document.createElement("span");
+    hidden.className = "muted";
+    hidden.textContent = "hidden";
+    pick.append(hidden);
+  }
+  pick.addEventListener("click", () => {
+    selectedLayer = layer.id;
+    paintEditor();
+  });
+  const eye = document.createElement("button");
+  eye.type = "button";
+  eye.className = "layer-eye ghost";
+  eye.setAttribute("aria-label", layer.visible ? `Hide the ${layer.name}` : `Show the ${layer.name}`);
+  eye.textContent = layer.visible ? "●" : "○";
+  eye.disabled = Boolean(layer.locked);
+  eye.addEventListener("click", () => {
+    sendEdit({ ops: [{ op: "set_visible", layer: layer.id, visible: !layer.visible }] });
+  });
+  row.append(pick, eye);
+  return row;
+}
+
+function paintInspector() {
+  const root = $("inspector");
+  if (!root) return;
+  root.replaceChildren();
+  const layer = layerById(selectedLayer);
+  if (!layer) {
+    const note = document.createElement("p");
+    note.className = "muted";
+    note.textContent = "Pick a layer to change it.";
+    root.append(note);
+    return;
+  }
+  const px = layer.px || {};
+  const geom = document.createElement("p");
+  geom.className = "mono";
+  geom.textContent = `x ${pxLabel(px.x)} · y ${pxLabel(px.y)} · ${pxLabel(px.w)} × ${pxLabel(px.h)} px`;
+  const where = document.createElement("p");
+  where.className = "muted";
+  where.textContent = layer.where || "";
+  root.append(geom, where);
+  root.append(nudgeGroup("Position", [
+    { label: "←", dx: -1, dy: 0 },
+    { label: "↑", dx: 0, dy: -1 },
+    { label: "↓", dx: 0, dy: 1 },
+    { label: "→", dx: 1, dy: 0 },
+  ], (item, event) => {
+    const step = event.shiftKey ? 0.05 : 0.01;
+    sendEdit({ ops: [{ op: "move", layer: layer.id, dx: item.dx * step, dy: item.dy * step }] });
+  }));
+  root.append(nudgeGroup("Size", [
+    { label: "−", factor: 0.95 },
+    { label: "+", factor: 1.05 },
+  ], (item) => {
+    sendEdit({ ops: [{ op: "scale", layer: layer.id, factor: item.factor }] });
+  }));
+  if (layer.kind === "text") paintTextInspector(root, layer);
+  else if (layer.kind === "shape") paintSwatches(root, layer);
+  else if (layer.kind === "photo") paintPhotoInspector(root, layer);
+}
+
+function nudgeGroup(title, items, onPick) {
+  const wrap = document.createElement("div");
+  wrap.className = "editor-tools";
+  const heading = document.createElement("p");
+  heading.textContent = title;
+  const row = document.createElement("div");
+  row.className = "nudge-row";
+  for (const item of items) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "secondary";
+    button.textContent = item.label;
+    if (item.disabled) button.disabled = true;
+    if (item.title) button.setAttribute("title", item.title);
+    button.addEventListener("click", (event) => onPick(item, event));
+    row.append(button);
+  }
+  wrap.append(heading, row);
+  return wrap;
+}
+
+function paintTextInspector(root, layer) {
+  const area = document.createElement("textarea");
+  area.id = "layertext";
+  area.value = layer.text || "";
+  const counter = document.createElement("p");
+  counter.className = "muted";
+  const save = document.createElement("button");
+  save.type = "button";
+  save.className = "secondary";
+  save.textContent = "Save words";
+  const syncCount = () => {
+    const fits = Number(layer.fits);
+    const count = area.value.length;
+    counter.textContent = Number.isFinite(fits) ? `${count} / ${fits} characters` : `${count} characters`;
+    const over = Number.isFinite(fits) && count > fits;
+    counter.className = over ? "over-fit" : "muted";
+    save.disabled = over;
+  };
+  syncCount();
+  area.addEventListener("input", syncCount);
+  save.addEventListener("click", () => {
+    sendEdit({ ops: [{ op: "set_text", layer: layer.id, text: area.value }] });
+  });
+  root.append(area, counter, save);
+  paintSwatches(root, layer);
+  const contrast = layer.contrast || {};
+  if (contrast.ratio != null) {
+    const line = document.createElement("p");
+    line.textContent = `Contrast ${contrast.ratio} : 1 · needs ${contrast.needed}`;
+    const word = document.createElement("span");
+    word.className = contrast.ok ? "editor-ok" : "editor-bad";
+    word.textContent = contrast.ok ? " Readable" : " Hard to read";
+    line.append(word);
+    root.append(line);
+  }
+  const lines = Array.isArray(layer.lines) ? layer.lines.length : 0;
+  const size = document.createElement("p");
+  size.className = "muted";
+  size.textContent = `${pxLabel(layer.size_px)} px · ${lines} ${lines === 1 ? "line" : "lines"}`;
+  root.append(size);
+}
+
+function paintSwatches(root, layer) {
+  const row = document.createElement("div");
+  row.className = "swatch-row";
+  const current = layer.colour && layer.colour.token;
+  for (const swatch of (INSPECT && INSPECT.palette) || []) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "swatch";
+    const hex = safeHex(swatch.hex);
+    if (hex) button.style.background = hex;
+    button.setAttribute("aria-label", swatch.name || swatch.token || "");
+    const used = (swatch.used_by || []).join(", ");
+    button.setAttribute("title", used ? `${swatch.name || ""} · ${used}` : (swatch.name || ""));
+    button.setAttribute("aria-pressed", swatch.token === current ? "true" : "false");
+    button.addEventListener("click", () => {
+      if (swatch.token === current) return;
+      sendEdit({ ops: [{ op: "set_color", layer: layer.id, color: swatch.token }] });
+    });
+    row.append(button);
+  }
+  root.append(row);
+}
+
+function paintPhotoInspector(root, layer) {
+  const move = layer.can_move || {};
+  const locked = "Zoom in first";
+  root.append(nudgeGroup("Move in frame", [
+    { label: "←", dx: -0.05, dy: 0, disabled: move.x === false, title: move.x === false ? locked : "" },
+    { label: "↑", dx: 0, dy: 0.05, disabled: move.y === false, title: move.y === false ? locked : "" },
+    { label: "↓", dx: 0, dy: -0.05, disabled: move.y === false, title: move.y === false ? locked : "" },
+    { label: "→", dx: 0.05, dy: 0, disabled: move.x === false, title: move.x === false ? locked : "" },
+  ], (item) => {
+    sendEdit({ ops: [{ op: "pan", layer: layer.id, dx: item.dx, dy: item.dy }] });
+  }));
+  const zoom = (layer.crop && layer.crop.zoom) || 1;
+  const zoomWrap = nudgeGroup("Zoom", [
+    { label: "−", factor: 0.9 },
+    { label: "+", factor: 1.1 },
+  ], (item) => {
+    sendEdit({ ops: [{ op: "zoom", layer: layer.id, factor: item.factor }] });
+  });
+  const zoomRead = document.createElement("p");
+  zoomRead.className = "muted";
+  zoomRead.textContent = `${(Number(zoom) || 1).toFixed(2).replace(/\.?0+$/, "")}×`;
+  zoomWrap.append(zoomRead);
+  root.append(zoomWrap);
+  const dim = Number(layer.dim) || 0;
+  const dark = document.createElement("div");
+  dark.className = "editor-tools";
+  const darkLabel = document.createElement("p");
+  darkLabel.textContent = "Darkness";
+  const range = document.createElement("input");
+  range.type = "range";
+  range.min = "0";
+  range.max = "80";
+  range.step = "5";
+  range.value = String(Math.round(dim * 100));
+  const darkRead = document.createElement("p");
+  darkRead.className = "muted";
+  darkRead.textContent = `${range.value}%`;
+  range.addEventListener("input", () => { darkRead.textContent = `${range.value}%`; });
+  range.addEventListener("change", () => {
+    sendEdit({ ops: [{ op: "dim", layer: layer.id, amount: Number(range.value) / 100 }] });
+  });
+  dark.append(darkLabel, range, darkRead);
+  root.append(dark);
+}
+
+function paintStyle(root) {
+  const style = INSPECT && INSPECT.style;
+  if (!style) {
+    const note = document.createElement("p");
+    note.className = "muted";
+    note.textContent = "This poster was made from a fixed template, so it has no style settings.";
+    root.append(note);
+    return;
+  }
+  const title = document.createElement("p");
+  title.textContent = style.title || "";
+  root.append(title);
+  for (const setting of style.settings || []) {
+    const label = document.createElement("label");
+    label.className = "editor-setting";
+    const caption = document.createElement("span");
+    caption.textContent = setting.label || setting.name || "";
+    const select = document.createElement("select");
+    for (const option of setting.options || []) {
+      const item = document.createElement("option");
+      item.value = option.value;
+      item.textContent = option.label || option.value || "";
+      if (option.value === setting.value) item.selected = true;
+      select.append(item);
+    }
+    select.addEventListener("change", () => {
+      sendEdit({ restyle: { [setting.name]: select.value } });
+    });
+    label.append(caption, select);
+    root.append(label);
+  }
+  for (const design of style.designs || []) {
+    const wrap = document.createElement("div");
+    wrap.className = "design-choice";
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "secondary";
+    button.textContent = design.title || design.family || "";
+    if (design.current) {
+      button.disabled = true;
+      const mark = document.createElement("span");
+      mark.className = "muted";
+      mark.textContent = " Current";
+      button.append(mark);
+    } else if (!design.available) {
+      button.disabled = true;
+    } else {
+      button.addEventListener("click", () => {
+        sendEdit({ restyle: { family: design.family } });
+      });
+    }
+    wrap.append(button);
+    if (!design.available && design.why) {
+      const why = document.createElement("p");
+      why.className = "muted";
+      why.textContent = design.why;
+      wrap.append(why);
+    }
+    root.append(wrap);
+  }
+  const keep = document.createElement("p");
+  keep.className = "muted";
+  keep.textContent = "A style change keeps your colours, darker photos, hidden parts and logo size.";
+  root.append(keep);
+}
+
+function paintMeasure(root) {
+  const toggle = document.createElement("label");
+  const box = document.createElement("input");
+  box.type = "checkbox";
+  box.checked = showMeasure;
+  box.addEventListener("change", () => {
+    showMeasure = box.checked;
+    drawMeasureOverlay();
+  });
+  const caption = document.createElement("span");
+  caption.textContent = " Show on the poster";
+  toggle.append(box, caption);
+  root.append(toggle);
+  const list = document.createElement("div");
+  list.className = "measure-list";
+  const measure = (INSPECT && INSPECT.measure) || {};
+  const names = Object.fromEntries(((INSPECT && INSPECT.layers) || []).map((layer) => [layer.id, layer.name || layer.id]));
+  for (const layer of (INSPECT && INSPECT.layers) || []) {
+    if (layer.kind !== "text" && layer.kind !== "logo") continue;
+    const edges = (measure.margins || {})[layer.id];
+    if (!edges) continue;
+    const pair = [
+      { words: "from the left", px: edges.left },
+      { words: "from the top", px: edges.top },
+      { words: "from the right", px: edges.right },
+      { words: "from the bottom", px: edges.bottom },
+    ].sort((a, b) => a.px - b.px).slice(0, 2);
+    const line = document.createElement("p");
+    line.textContent = `${prettyName(names[layer.id])}: ${pxLabel(pair[0].px)} px ${pair[0].words}, ${pxLabel(pair[1].px)} px ${pair[1].words}`;
+    list.append(line);
+  }
+  for (const gap of measure.gaps || []) {
+    const line = document.createElement("p");
+    line.textContent = `${prettyName(names[gap.above] || gap.above)} → ${names[gap.below] || gap.below}: ${pxLabel(gap.px)} px`;
+    list.append(line);
+  }
+  for (const group of measure.aligned_left || []) {
+    if (!group.length) continue;
+    const line = document.createElement("p");
+    line.textContent = `Lined up on the left: ${group.map((id) => names[id] || id).join(", ")}`;
+    list.append(line);
+  }
+  if (measure.story_safe) {
+    const line = document.createElement("p");
+    const outside = measure.story_safe.outside || [];
+    line.textContent = outside.length
+      ? `Outside the story's safe area: ${outside.map((id) => names[id] || id).join(", ")}`
+      : "Inside the story's safe area";
+    list.append(line);
+  }
+  root.append(list);
+}
+
+function svgNode(name) {
+  return document.createElementNS("http://www.w3.org/2000/svg", name);
+}
+
+function overlayStroke(svg, make) {
+  for (const [width, color] of [[3, "rgba(0,0,0,.55)"], [1, "#fff"]]) {
+    const node = make();
+    node.setAttribute("fill", "none");
+    node.setAttribute("stroke", color);
+    node.setAttribute("stroke-width", String(width));
+    svg.append(node);
+  }
+}
+
+function overlayLine(svg, x1, y1, x2, y2) {
+  overlayStroke(svg, () => {
+    const line = svgNode("line");
+    line.setAttribute("x1", String(x1));
+    line.setAttribute("y1", String(y1));
+    line.setAttribute("x2", String(x2));
+    line.setAttribute("y2", String(y2));
+    return line;
+  });
+}
+
+function overlayBox(svg, box) {
+  if (!box) return;
+  overlayStroke(svg, () => {
+    const rect = svgNode("rect");
+    rect.setAttribute("x", String(box.x));
+    rect.setAttribute("y", String(box.y));
+    rect.setAttribute("width", String(box.w));
+    rect.setAttribute("height", String(box.h));
+    return rect;
+  });
+}
+
+function overlayLabel(svg, x, y, text) {
+  const label = String(text);
+  const width = Math.max(18, label.length * 7);
+  const rect = svgNode("rect");
+  rect.setAttribute("x", String(x));
+  rect.setAttribute("y", String(y - 12));
+  rect.setAttribute("width", String(width));
+  rect.setAttribute("height", "16");
+  rect.setAttribute("fill", "rgba(0,0,0,.6)");
+  const node = svgNode("text");
+  node.setAttribute("x", String(x + 3));
+  node.setAttribute("y", String(y));
+  node.setAttribute("fill", "#fff");
+  node.setAttribute("font-size", "11");
+  node.setAttribute("font-family", "ui-monospace, SFMono-Regular, Menlo, monospace");
+  node.textContent = label;
+  svg.append(rect, node);
+}
+
+function measureOverlay(data) {
+  const svg = svgNode("svg");
+  svg.setAttribute("class", "measure-overlay");
+  const canvas = (data && data.canvas) || { width: 1, height: 1 };
+  svg.setAttribute("viewBox", `0 0 ${canvas.width} ${canvas.height}`);
+  svg.setAttribute("preserveAspectRatio", "none");
+  svg.style.pointerEvents = "none";
+  const measure = (data && data.measure) || {};
+  const layers = (data && data.layers) || [];
+  const rects = {};
+  for (const layer of layers) {
+    if (!layer.visible) continue;
+    if (layer.kind === "text" && layer.ink) {
+      overlayBox(svg, layer.ink);
+      rects[layer.id] = layer.ink;
+    } else if (layer.kind === "logo") {
+      overlayBox(svg, layer.px);
+      rects[layer.id] = layer.px;
+    }
+  }
+  const limit = 0.25 * (measure.short_side_px || 0);
+  for (const [id, edges] of Object.entries(measure.margins || {})) {
+    const box = rects[id];
+    if (!box) continue;
+    const midY = box.y + box.h / 2;
+    const midX = box.x + box.w / 2;
+    if (edges.left < limit) {
+      overlayLine(svg, box.x, midY, 0, midY);
+      overlayLabel(svg, 4, midY - 4, pxLabel(edges.left));
+    }
+    if (edges.right < limit) {
+      overlayLine(svg, box.x + box.w, midY, canvas.width, midY);
+      overlayLabel(svg, canvas.width - 36, midY - 4, pxLabel(edges.right));
+    }
+    if (edges.top < limit) {
+      overlayLine(svg, midX, box.y, midX, 0);
+      overlayLabel(svg, midX + 4, 14, pxLabel(edges.top));
+    }
+    if (edges.bottom < limit) {
+      overlayLine(svg, midX, box.y + box.h, midX, canvas.height);
+      overlayLabel(svg, midX + 4, canvas.height - 6, pxLabel(edges.bottom));
+    }
+  }
+  for (const gap of measure.gaps || []) {
+    const above = rects[gap.above];
+    const below = rects[gap.below];
+    if (!above || !below) continue;
+    const x = (above.x + above.w / 2 + below.x + below.w / 2) / 2;
+    const y1 = above.y + above.h;
+    const y2 = below.y;
+    overlayLine(svg, x, y1, x, y2);
+    overlayLabel(svg, x + 6, (y1 + y2) / 2 + 4, pxLabel(gap.px));
+  }
+  for (const group of measure.aligned_left || []) {
+    const first = rects[group[0]];
+    if (!first) continue;
+    overlayLine(svg, first.x, 0, first.x, canvas.height);
+  }
+  const safe = measure.story_safe;
+  if (safe) {
+    const top = svgNode("rect");
+    top.setAttribute("x", "0");
+    top.setAttribute("y", "0");
+    top.setAttribute("width", String(canvas.width));
+    top.setAttribute("height", String(safe.top_px));
+    top.setAttribute("fill", "rgba(0,0,0,.35)");
+    const bottom = svgNode("rect");
+    bottom.setAttribute("x", "0");
+    bottom.setAttribute("y", String(safe.bottom_px));
+    bottom.setAttribute("width", String(canvas.width));
+    bottom.setAttribute("height", String(canvas.height - safe.bottom_px));
+    bottom.setAttribute("fill", "rgba(0,0,0,.35)");
+    svg.append(top, bottom);
+  }
+  return svg;
+}
+
+function drawMeasureOverlay() {
+  for (const node of document.querySelectorAll(".measure-overlay")) node.remove();
+  if (!showMeasure || previewKind !== "canvas" || !INSPECT) return;
+  const host = document.querySelector("#stage figure.hero .render-hit");
+  if (!host) return;
+  host.append(measureOverlay(INSPECT));
 }
 
 function optionPreviewUrl(option) {
@@ -2903,12 +3626,14 @@ async function ensureQuick() {
 async function openPost(id, options) {
   const token = ++viewToken;
   POST = id;
+  INSPECT = null;
+  selectedLayer = null;
+  paintTweakPalette();
   stickScroll = null;
   show("post");
   window.scrollTo(0, 0);
   $("quickerr").textContent = "";
-  $("tweakwhy").textContent = "";
-  $("tweakwhy").className = "why";
+  clearTweakAnswer();
   try {
     const data = await api(`/posts/${id}`);
     if (token !== viewToken) return;
@@ -2988,29 +3713,81 @@ async function runQuick(key, button) {
   }
 }
 
+function clearTweakAnswer() {
+  $("tweakwhy").textContent = "";
+  $("tweakwhy").className = "why";
+  $("tweakunable").textContent = "";
+  $("tweakchoices").replaceChildren();
+}
+
+function showAppliedTweak(out) {
+  if (out.note || out.unable) {
+    if (out.note) {
+      $("tweakwhy").textContent = out.note;
+      $("tweakwhy").className = "why muted";
+    }
+    if (out.unable) $("tweakunable").textContent = out.unable;
+    return;
+  }
+  if (out.why) {
+    $("tweakwhy").textContent = out.why;
+    $("tweakwhy").className = "why muted";
+  }
+}
+
+function choiceButtons(choices) {
+  const root = $("tweakchoices");
+  root.replaceChildren();
+  for (const choice of choices || []) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "secondary";
+    button.textContent = choice.label || "";
+    if (choice.kind === "brand") {
+      button.addEventListener("click", () => openBrandFromTweak());
+    } else {
+      button.addEventListener("click", () => {
+        $("tweak").value = choice.label || "";
+        applyTweak();
+      });
+    }
+    root.append(button);
+  }
+}
+
+function openBrandFromTweak() {
+  const client = (POSTDATA && POSTDATA.client) || {};
+  const opened = openClient(CLIENT && CLIENT.id === client.id ? CLIENT : client);
+  Promise.resolve(opened).then(() => {
+    $("brandpanel").scrollIntoView();
+  });
+}
+
 async function applyTweak() {
   if (changing || !POST) return;
   const message = $("tweak").value.trim();
   if (!message) return;
   changing = true;
-  $("tweakwhy").textContent = "";
-  $("tweakwhy").className = "why";
+  clearTweakAnswer();
   busy($("dotweak"), true);
   const started = performance.now();
   try {
     const out = await api(`/posts/${POST}/tweak`, { method: "POST", json: { message } });
     const seconds = (performance.now() - started) / 1000;
+    const asking = Array.isArray(out.choices) && out.choices.length;
     const declined = out.outcome && out.outcome !== "applied";
-    if (declined) {
+    if (asking) {
+      $("tweakwhy").textContent = out.question || out.why || "";
+      $("tweakwhy").className = "why";
+      choiceButtons(out.choices);
+      await refreshPost({ fade: false, keepScroll: true, lastChange: seconds });
+    } else if (declined) {
       $("tweakwhy").textContent = out.why || out.outcome;
       $("tweakwhy").className = "why bad";
       await refreshPost({ fade: false, keepScroll: true, lastChange: seconds });
     } else {
       $("tweak").value = "";
-      if (out.why) {
-        $("tweakwhy").textContent = out.why;
-        $("tweakwhy").className = "why warn";
-      }
+      showAppliedTweak(out);
       await refreshPost({ fade: true, keepScroll: true, lastChange: seconds });
       if (POSTDATA && POSTDATA.latest) toast(`v${POSTDATA.latest.version} · ${seconds.toFixed(1)}s`);
     }
@@ -3023,6 +3800,12 @@ async function applyTweak() {
   }
 }
 
+$("editortabs").addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-tab]");
+  if (!button) return;
+  editorTab = button.dataset.tab;
+  paintEditor();
+});
 $("tweakform").addEventListener("submit", (event) => {
   event.preventDefault();
   applyTweak();
