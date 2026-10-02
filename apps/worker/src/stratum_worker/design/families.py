@@ -424,6 +424,93 @@ def _type(
     ]
 
 
+# --- 5. cover: the headline across the top, the details at the foot -------------------
+
+# The two bands together leave at least this share of the page to the photo.
+COVER_PHOTO = 0.35
+
+
+def _cover(
+    frame: Frame, choice: Choice, copy: Copy, kit: BrandKit, root: Path, logo_aspect: float
+) -> Layers | None:
+    """Like a magazine cover: the headline on a band across the top, the offer, the
+    call to action and the logo on a band at the foot, the photo between them.
+
+    The headline's band is drawn before the headline and the foot's band after it, so
+    when a person's head rises into the headline it can come in front of it (depth,
+    M10g) without touching the details at the foot.
+    """
+    page, safe, short = frame.page, frame.safe, frame.short
+    fill, opacity, ink = TREATMENT[choice["treatment"]]
+    pad = PAD * short
+    logo_w, logo_h = _logo_rect(frame, logo_aspect)
+    gap = 0.04 * short
+    scale = _scale(choice)
+    # The headline across the full width; the details beside the logo.
+    wide = stack(
+        copy,
+        frame,
+        kit,
+        root,
+        width=safe.w,
+        max_height=safe.h * 0.5,
+        scale=scale,
+        rule=False,
+    )
+    narrow = stack(
+        copy,
+        frame,
+        kit,
+        root,
+        width=safe.w - logo_w - gap,
+        max_height=safe.h * 0.5,
+        scale=scale,
+        rule=False,
+    )
+    if wide is None or narrow is None:
+        return None
+    on_top = place(
+        wide, Rect(safe.x, safe.y, safe.w, wide.height_px), "top", rule_w=0.0, align=choice["align"]
+    )
+    words_x = safe.x + (logo_w + gap if choice["logo"] == "start" else 0.0)
+    below = place(
+        narrow,
+        Rect(words_x, 0.0, safe.w - logo_w - gap, narrow.height_px),
+        "top",
+        rule_w=0.0,
+        align="left",
+    )
+    head = on_top.boxes["headline"]
+    offer, cta = below.boxes["offer"], below.boxes["cta"]
+    details_h = max(cta.bottom - offer.y, logo_h)
+    up = safe.bottom - details_h - offer.y
+    boxes = {
+        "headline": head,
+        "offer": Rect(offer.x, offer.y + up, offer.w, offer.h),
+        "cta": Rect(cta.x, cta.y + up, cta.w, cta.h),
+    }
+    top_band = Rect(0.0, 0.0, page.w, head.bottom + pad)
+    foot_y = safe.bottom - details_h - pad
+    foot_band = Rect(0.0, foot_y, page.w, page.h - foot_y)
+    if top_band.h + foot_band.h > (1 - COVER_PHOTO) * page.h:
+        return None  # too little of the photo would show
+    sizes = {"headline": on_top.sizes["headline"], **{k: below.sizes[k] for k in ("offer", "cta")}}
+    lines = {"headline": on_top.lines["headline"], **{k: below.lines[k] for k in ("offer", "cta")}}
+    placed = Placed(None, boxes, sizes, lines, top_band.y, foot_band.bottom)
+    headline = _texts(frame, placed, ink, choice["align"])[0]
+    details = _texts(frame, placed, ink, "left")[1:]
+    logo_x = safe.x if choice["logo"] == "start" else safe.right - logo_w
+    return [
+        _image("bg", frame, page, source="client", fit="cover"),
+        _shape("band", frame, top_band, fill, opacity=opacity),
+        _rule(frame, placed),
+        headline,
+        _shape("backing", frame, foot_band, fill, opacity=opacity),
+        *details,
+        _logo(frame, logo_x, safe.bottom - details_h + (details_h - logo_h) / 2, logo_aspect),
+    ]
+
+
 FAMILIES: dict[str, Family] = {
     family.name: family
     for family in (
@@ -484,6 +571,18 @@ FAMILIES: dict[str, Family] = {
             ),
             photos={},
             build=_type,
+        ),
+        Family(
+            name="cover",
+            title="Headline across the top",
+            params=(
+                ("treatment", ("band", "scrim")),
+                ("align", ("center", "left")),
+                ("logo", ("start", "end")),
+                ("scale", ("bold", "calm")),
+            ),
+            photos={"bg": "background"},
+            build=_cover,
         ),
     )
 }

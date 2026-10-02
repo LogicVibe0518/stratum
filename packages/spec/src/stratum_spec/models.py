@@ -21,7 +21,9 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 # 4: ImageLayer.crop (M10b). Which part of a photo shows; none = the centre, as before.
 # 5: TextLayer.wrap (M10e). New text breaks where the meaning breaks; older posters keep
 #    the greedy wrap they were approved with.
-SCHEMA_VERSION = 5
+# 6: ImageLayer.subject and TextLayer.behind (M10g). Words can go behind the photo's
+#    subject. Older posters have neither and upgrade unchanged.
+SCHEMA_VERSION = 6
 
 # A coordinate may sit slightly outside the canvas (full-bleed art, deliberate crops).
 Coord = Annotated[float, Field(ge=-1.0, le=2.0)]
@@ -89,6 +91,10 @@ class ImageLayer(BaseLayer):
     dim: float = Field(default=0.0, ge=0.0, le=1.0)
     # Only for fit="cover". None = the centre of the photo.
     crop: Crop | None = None
+    # The photo's subject as a mask (schema 6): a grey image with the photo's shape,
+    # white where the subject is. Made from this photo only; swapping the photo drops
+    # it. Used by text layers drawn `behind` this photo's subject.
+    subject: AssetRef | None = None
 
 
 class CutoutLayer(BaseLayer):
@@ -150,6 +156,10 @@ class TextLayer(BaseLayer):
     # but evens them out and breaks between phrases (render/text.py). Posters made
     # before schema 5 are upgraded to "greedy", so they render exactly as approved.
     wrap: Literal["greedy", "balanced"] = "balanced"
+    # Depth (schema 6): the id of a photo drawn below this text whose subject comes in
+    # front of the letters, as on a magazine cover. Where the photo has no subject
+    # mask, or is hidden, the text is drawn in front as usual.
+    behind: LayerId | None = None
 
     @model_validator(mode="after")
     def _size_range_ordered(self) -> Self:
@@ -231,6 +241,29 @@ class PosterSpec(Frozen):
                     f"{', '.join(sorted(unknown))}"
                 )
         return self
+
+    @model_validator(mode="after")
+    def _behind_a_photo_below(self) -> Self:
+        below: set[str] = set()
+        for layer in self.layers:
+            if isinstance(layer, TextLayer) and layer.behind not in (None, *below):
+                raise ValueError(
+                    f"text {layer.id!r} goes behind {layer.behind!r}, which is not a "
+                    f"photo drawn below it"
+                )
+            if isinstance(layer, ImageLayer):
+                below.add(layer.id)
+        return self
+
+    def assets(self) -> set[str]:
+        """Every asset this poster draws: photos, logos, cutouts and subject masks."""
+        found: set[str] = set()
+        for layer in self.layers:
+            if isinstance(layer, ImageLayer | CutoutLayer | LogoLayer) and layer.asset:
+                found.add(layer.asset)
+            if isinstance(layer, ImageLayer) and layer.subject:
+                found.add(layer.subject)
+        return found
 
     def layer(self, layer_id: str) -> Layer:
         for candidate in self.layers:

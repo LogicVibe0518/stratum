@@ -127,6 +127,17 @@ def _clamp(value: float, low: float, high: float) -> float:
     return max(low, min(high, value))
 
 
+def _in_front_of(spec: PosterSpec, photo_id: str) -> PosterSpec:
+    """Every text that went behind this photo's subject, back in front."""
+    layers = [
+        layer.model_copy(update={"behind": None})
+        if isinstance(layer, TextLayer) and layer.behind == photo_id
+        else layer
+        for layer in spec.layers
+    ]
+    return spec.model_copy(update={"layers": layers})
+
+
 def _replace(
     spec: PosterSpec,
     layer_id: str,
@@ -262,8 +273,12 @@ def apply_op(spec: PosterSpec, op: EditOp) -> PosterSpec:
         if isinstance(target, ImageLayer):
             # A crop was chosen for the old photo's subject. Kept, it would frame
             # the new photo by where someone else stood, so every size goes back
-            # to the centre until the photo is framed again.
-            return _replace(spec, op.layer, sized=_uncropped, asset=op.asset, crop=None)
+            # to the centre until the photo is framed again. The subject mask is the
+            # old photo's too: it goes, and so do the words behind it (schema 6).
+            swapped = _replace(
+                spec, op.layer, sized=_uncropped, asset=op.asset, crop=None, subject=None
+            )
+            return _in_front_of(swapped, op.layer)
         return _replace(spec, op.layer, asset=op.asset)
 
     if isinstance(op, Pan | Zoom):

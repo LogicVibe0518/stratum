@@ -36,6 +36,7 @@ FRIENDLY: dict[str, str] = {
     "logo_chip": "panel behind the logo",
     "panel": "colour panel",
     "backing": "band behind the words",
+    "band": "band behind the headline",
     "base": "background colour",
     "rule": "accent line",
     "bg": "photo",

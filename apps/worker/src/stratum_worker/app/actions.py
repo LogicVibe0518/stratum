@@ -185,7 +185,7 @@ async def undo(
             "post_versions", post_id=f"eq.{post['id']}", order="version.asc", limit="1"
         )
     spec = load_spec(previous["spec"])
-    bound = {getattr(one, "asset", None) for one in spec.layers}
+    bound = spec.assets()
     asset_paths = {s: await service.local_path(ctx, s) for s in bound if isinstance(s, str)}
     kit = await service.kit_for(ctx, client, spec.brand_kit_version)
     template_id = spec.template_id if is_design(spec.template_id) else post["template_id"]

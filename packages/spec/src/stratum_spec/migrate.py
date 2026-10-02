@@ -42,8 +42,20 @@ def _v4_to_v5(data: dict[str, Any]) -> dict[str, Any]:
     return {**data, "schema_version": 5, "layers": layers}
 
 
+def _v5_to_v6(data: dict[str, Any]) -> dict[str, Any]:
+    """Schema 6 added ImageLayer.subject and TextLayer.behind. A version-5 poster has
+    no words behind a subject: unchanged."""
+    return {**data, "schema_version": 6}
+
+
 # version N -> function producing version N+1.
-UPGRADERS: dict[int, Upgrader] = {1: _v1_to_v2, 2: _v2_to_v3, 3: _v3_to_v4, 4: _v4_to_v5}
+UPGRADERS: dict[int, Upgrader] = {
+    1: _v1_to_v2,
+    2: _v2_to_v3,
+    3: _v3_to_v4,
+    4: _v4_to_v5,
+    5: _v5_to_v6,
+}
 
 
 class UnknownSchemaVersion(ValueError):
