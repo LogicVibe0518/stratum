@@ -80,6 +80,11 @@ class PostCopyResult(Frozen):
     caption: str = Field(min_length=1, max_length=2200)
     hashtags: tuple[str, ...] = Field(default=(), max_length=30)
     alt_text: str = Field(default="", max_length=1000)
+    # Since post.copy v2 (M10e): the same headline shorter and fuller, so each design
+    # can set the one that fits it best instead of shrinking or cutting one string.
+    # Empty when the model has nothing better than the main headline.
+    headline_short: str = Field(default="", max_length=120)
+    headline_long: str = Field(default="", max_length=180)
 
 
 # --- caption.generate -------------------------------------------------------

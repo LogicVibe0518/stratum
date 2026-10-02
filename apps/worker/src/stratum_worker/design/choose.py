@@ -48,7 +48,8 @@ from stratum_spec.models import Aspect
 
 from stratum_worker.critic.features import measure
 from stratum_worker.critic.ranker import score
-from stratum_worker.design.space import everything, lay_out
+from stratum_worker.design.copyfit import best_copy, versions
+from stratum_worker.design.space import everything
 from stratum_worker.design.typeset import Copy
 from stratum_worker.draft.bindings import binding_for
 from stratum_worker.draft.compose import build_spec
@@ -158,16 +159,18 @@ def fill(
     design_id: str, material: Material, aspects: Sequence[Aspect], root: Path
 ) -> PosterSpec | None:
     """The design laid out around the words and filled with this post's material, or
-    None if the words do not fit it at a readable size."""
-    laid = lay_out(
-        design_id, material.kit, root, copy=material.copy, logo_aspect=material.logo_aspect
-    )
-    if laid is None:
+    None if the words do not fit it at a readable size.
+
+    When the copy has headlines of several lengths, the design gets the one it sets
+    best (design/copyfit.py)."""
+    options = versions(dict(material.words)) or [(material.copy, True)]
+    found = best_copy(design_id, options, material.kit, root, logo_aspect=material.logo_aspect)
+    if found is None:
         return None
+    chosen, laid = found
+    words = {**material.words, "headline": chosen.headline}
     binding = binding_for(design_id)
-    texts = {
-        layer: material.words.get(field_name, "") for layer, field_name in binding.texts.items()
-    }
+    texts = {layer: words.get(field_name, "") for layer, field_name in binding.texts.items()}
     texts.update(binding.fixed or {})
     photos = list(material.photos)
     assets: dict[str, str] = {}
