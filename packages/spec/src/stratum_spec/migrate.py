@@ -31,8 +31,19 @@ def _v3_to_v4(data: dict[str, Any]) -> dict[str, Any]:
     return {**data, "schema_version": 4}
 
 
+def _v4_to_v5(data: dict[str, Any]) -> dict[str, Any]:
+    """Schema 5 added TextLayer.wrap, "balanced" for new text. A version-4 poster was
+    approved with greedy wrapping, so every text layer keeps it: same lines, same
+    picture, whatever the default is now."""
+    layers = [
+        {**layer, "wrap": layer.get("wrap", "greedy")} if layer.get("type") == "text" else layer
+        for layer in data.get("layers", [])
+    ]
+    return {**data, "schema_version": 5, "layers": layers}
+
+
 # version N -> function producing version N+1.
-UPGRADERS: dict[int, Upgrader] = {1: _v1_to_v2, 2: _v2_to_v3, 3: _v3_to_v4}
+UPGRADERS: dict[int, Upgrader] = {1: _v1_to_v2, 2: _v2_to_v3, 3: _v3_to_v4, 4: _v4_to_v5}
 
 
 class UnknownSchemaVersion(ValueError):

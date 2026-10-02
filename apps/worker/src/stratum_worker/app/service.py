@@ -43,6 +43,7 @@ from stratum_worker.brand import (
 from stratum_worker.brand.names import WORDS, colour_name, nearest
 from stratum_worker.design import PLACEHOLDER, Copy, decode, is_design, lay_out
 from stratum_worker.design.choose import AUTO
+from stratum_worker.design.copyfit import best_copy, versions
 from stratum_worker.draft.bindings import binding_for
 from stratum_worker.draft.capacity import measure
 from stratum_worker.draft.compose import ComposeError, build_spec
@@ -352,6 +353,13 @@ async def write_copy(
         caption=result.caption,
         hashtags=result.hashtags,
         alt_text=result.alt_text,
+        # A "short" headline no shorter, or a "long" one no longer, adds nothing.
+        headline_short=result.headline_short
+        if 0 < len(result.headline_short) < len(result.headline)
+        else "",
+        headline_long=result.headline_long
+        if len(result.headline_long) > len(result.headline)
+        else "",
     )
     step = tracer.step("write_copy", TaskName.POST_COPY)
     return words, [step.model_dump()]
@@ -715,19 +723,27 @@ async def draft(ctx: Context, post: dict[str, Any], client: dict[str, Any]) -> d
             )
         assets[binding.logo] = logos[0]["sha256"]
 
+    printed = words
     if is_design(post["template_id"]):
         # Laid out again around the real words, and the logo's real shape, so the
         # offer sits one gap under the headline's last line and the logo's box is
-        # the logo.
+        # the logo - with the headline version this design sets best (M10e).
         width, height = (logos[0].get("width"), logos[0].get("height")) if logos else (0, 0)
-        template = template_for(
-            ctx,
+        found = best_copy(
             post["template_id"],
+            versions(words.model_dump(mode="json")),
             kit,
-            copy=Copy(headline=words.headline, offer=words.offer_detail, cta=words.cta),
+            ctx.settings.repo_root,
             logo_aspect=(width / height) if width and height else 0.0,
         )
-    texts = {layer: getattr(words, field) for layer, field in binding.texts.items()}
+        if found is None:
+            raise DraftError(
+                f"These words do not fit the {decode(post['template_id']).title} design in "
+                f"every size. Shorten the headline or the offer, or pick another design."
+            )
+        chosen, template = found
+        printed = words.model_copy(update={"headline": chosen.headline})
+    texts = {layer: getattr(printed, field) for layer, field in binding.texts.items()}
     texts.update(binding.fixed or {})
     spec = build_spec(template, kit, texts, assets)
     variants: Variants = {}  # the spec carries its own sizes now

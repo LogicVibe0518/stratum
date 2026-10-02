@@ -2,11 +2,20 @@
 
 The renderer draws every character itself, so it must answer one question exactly:
 "at what size does this headline fill its box without overflowing?" We measure with
-the real font metrics (fontTools), wrap greedily, then binary-search the size.
+the real font metrics (fontTools), wrap, then binary-search the size.
+
+Two ways to wrap, chosen per text layer (TextLayer.wrap, spec schema 5):
+- greedy: as many words as fit on each line. What every poster before schema 5 used,
+  kept for them so an approved poster never re-renders differently.
+- balanced: the same number of lines as greedy (so every height and every layout is
+  unchanged), but the words shared out evenly and the breaks put where the meaning
+  breaks: "A LITTLE PEACE / FOR YOUR MIND", never "A LITTLE PEACE FOR YOUR / MIND";
+  "50% off" and "5 Nov" kept together; no line ending on "the", "for" or "your".
 """
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -58,6 +67,194 @@ def wrap(text: str, metrics: Metrics, size_px: float, max_width_px: float) -> li
     return lines or [""]
 
 
+# A line should not end on these: they lean on the word after them.
+LEANS_FORWARD = frozenset(
+    [
+        "a",
+        "an",
+        "the",
+        "of",
+        "for",
+        "to",
+        "with",
+        "and",
+        "or",
+        "in",
+        "on",
+        "at",
+        "by",
+        "from",
+        "into",
+        "onto",
+        "your",
+        "our",
+        "my",
+        "their",
+        "his",
+        "her",
+        "its",
+        "this",
+        "that",
+        "these",
+        "those",
+        "every",
+        "each",
+        "no",
+        "&",
+        "+",
+    ]
+)
+# A line may well start with these: each opens a phrase.
+OPENS = frozenset(
+    [
+        "for",
+        "with",
+        "from",
+        "and",
+        "or",
+        "to",
+        "in",
+        "on",
+        "at",
+        "by",
+        "when",
+        "while",
+        "because",
+        "so",
+        "but",
+        "until",
+        "till",
+        "then",
+        "plus",
+        "only",
+        "every",
+        "all",
+    ]
+)
+# Words that belong to the number before them: "20% off", "5 Nov", "3 days".
+UNITS = frozenset(
+    [
+        "off",
+        "%",
+        "am",
+        "pm",
+        "years",
+        "year",
+        "yrs",
+        "mins",
+        "minutes",
+        "hours",
+        "hrs",
+        "days",
+        "day",
+        "nights",
+        "weeks",
+        "months",
+        "miles",
+        "km",
+        "people",
+        "per",
+        "x",
+        "jan",
+        "feb",
+        "mar",
+        "apr",
+        "may",
+        "jun",
+        "jul",
+        "aug",
+        "sep",
+        "sept",
+        "oct",
+        "nov",
+        "dec",
+        "january",
+        "february",
+        "march",
+        "april",
+        "june",
+        "july",
+        "august",
+        "september",
+        "october",
+        "november",
+        "december",
+    ]
+)
+NUMBER = re.compile(r"^[£$€#]?\d")
+CLOSES = (",", ";", ":", ".", "!", "?", "\u2014", "\u2013", "-", "/")  # \u2014/\u2013: dashes
+QUOTES = "\"'\u2018\u2019\u201c\u201d()"
+WEIGHT = 0.25  # one unit of break penalty is worth this much of a line's squared slack
+WIDOW = 0.5  # a last line of one word, when there is more than one line
+
+
+def break_cost(words: list[str], index: int) -> float:
+    """What breaking the line after words[index] costs: negative where the meaning
+    breaks, positive where it would split a phrase."""
+    word, following = words[index], words[index + 1]
+    plain = word.lower().strip(QUOTES)
+    nxt = following.lower().strip(QUOTES + ",.;:!?")
+    cost = 0.0
+    if word.endswith(CLOSES):
+        cost -= 0.6
+    if plain.rstrip(",.;:!?") in LEANS_FORWARD:
+        cost += 1.0
+    if nxt in OPENS:
+        cost -= 0.3
+    if NUMBER.match(plain) and (nxt in UNITS or nxt.startswith("%") or NUMBER.match(nxt)):
+        cost += 1.0  # "20% off", "5 Nov", and a phone number in one piece
+    if NUMBER.match(nxt) and plain in {"under", "over", "from", "to", "until", "by", "at", "on"}:
+        cost += 0.5
+    return cost
+
+
+def wrap_balanced(text: str, metrics: Metrics, size_px: float, max_width_px: float) -> list[str]:
+    """The greedy number of lines, with the words shared out evenly and broken where
+    the meaning breaks. Every line fits whenever greedy's do."""
+    greedy = wrap(text, metrics, size_px, max_width_px)
+    words = text.split()
+    count = len(greedy)
+    if count < 2 or len(words) <= count:
+        return greedy
+    space = metrics.width(" ", size_px)
+    widths = [metrics.width(word, size_px) for word in words]
+    total = len(words)
+
+    def width(start: int, end: int) -> float:
+        return sum(widths[start:end]) + space * (end - start - 1)
+
+    # best[k][j]: the cheapest way to set words[:j] on k lines.
+    inf = float("inf")
+    best = [[inf] * (total + 1) for _ in range(count + 1)]
+    back = [[0] * (total + 1) for _ in range(count + 1)]
+    best[0][0] = 0.0
+    for lines in range(1, count + 1):
+        for end in range(lines, total + 1):
+            for start in range(lines - 1, end):
+                if best[lines - 1][start] == inf:
+                    continue
+                used = width(start, end)
+                if used > max_width_px and end - start > 1:
+                    continue
+                slack = max(0.0, (max_width_px - used) / max_width_px)
+                cost = best[lines - 1][start] + slack * slack
+                if end < total:
+                    cost += WEIGHT * break_cost(words, end - 1)
+                if lines == count and end == total and end - start == 1:
+                    cost += WIDOW
+                if cost < best[lines][end]:
+                    best[lines][end], back[lines][end] = cost, start
+    if best[count][total] == inf:
+        return greedy
+    out: list[str] = []
+    end = total
+    for lines in range(count, 0, -1):
+        start = back[lines][end]
+        out.append(" ".join(words[start:end]))
+        end = start
+    return out[::-1]
+
+
 @dataclass(frozen=True)
 class FittedText:
     size_px: float
@@ -79,12 +276,15 @@ def fit(
     max_px: float,
     max_lines: int,
     line_height: float,
+    balanced: bool = False,
 ) -> FittedText:
     """Largest size that fits the box within max_lines. Never overflows: at the
-    minimum size we truncate with an ellipsis rather than spill over the design."""
+    minimum size we truncate with an ellipsis rather than spill over the design.
+    `balanced` changes which words share a line, never how many lines there are."""
+    wrapper = wrap_balanced if balanced else wrap
 
     def layout(size: float) -> tuple[list[str], bool]:
-        lines = wrap(text, metrics, size, box_w_px)
+        lines = wrapper(text, metrics, size, box_w_px)
         fits = (
             len(lines) <= max_lines
             and size * line_height * len(lines) <= box_h_px

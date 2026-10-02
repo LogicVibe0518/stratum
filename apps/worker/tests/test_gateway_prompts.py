@@ -16,7 +16,7 @@ from stratum_worker.gateway.prompts import VERSION, load, read_text, render
 # sha256 of each prompt file at its current VERSION. Editing a prompt means bumping
 # VERSION[task] in prompts/__init__.py AND updating this table - never just one.
 PINNED: dict[tuple[TaskName, int], str] = {
-    (TaskName.POST_COPY, 1): "405fa711bbc466dd1fc494cbd3d0ca1510f62bec5621d546d59ea645420b8215",
+    (TaskName.POST_COPY, 2): "6b5bb87294046691fb08c5edf54280472d5467e19c9202f07b6f08db2807cbaf",
     (
         TaskName.CAPTION_GENERATE,
         1,

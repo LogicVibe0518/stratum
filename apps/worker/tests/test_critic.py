@@ -83,16 +83,29 @@ def test_busyness_is_measured_from_the_photo_under_the_words() -> None:
 
 
 def test_a_lonely_last_headline_line_is_an_orphan() -> None:
-    def orphan(headline: str) -> float:
+    def orphan(headline: str, wrap: str = "greedy") -> float:
         copy = Copy(headline, SAMPLE_COPY.offer, SAMPLE_COPY.cta)
         laid = lay_out("ds.panel.1.0000000", KIT, REPO, copy=copy)
         assert laid is not None
-        return f(retarget(bind(laid, KIT, copy), "16:9"), "orphan")
+        spec = bind(laid, KIT, copy)
+        spec = spec.model_copy(
+            update={
+                "layers": [
+                    one.model_copy(update={"wrap": wrap}) if one.type == "text" else one
+                    for one in spec.layers
+                ]
+            }
+        )
+        return f(retarget(spec, "16:9"), "orphan")
 
-    # MEDITATION / CAMP FOR / SELF-DISCOVERY ends on its longest line;
+    # Greedy: MEDITATION / CAMP FOR / SELF-DISCOVERY ends on its longest line;
     # WINTER-PROOF / YOUR ROOF IN / A DAY ends on two short words.
     assert orphan("Meditation camp for self-discovery") == 1.0
     assert orphan("Winter-proof your roof in a day") < 0.5
+    # Breaking by meaning (schema 5) evens the lines out, so the orphan goes.
+    assert orphan("Winter-proof your roof in a day", "balanced") > orphan(
+        "Winter-proof your roof in a day"
+    )
 
 
 def test_measurements_come_in_the_published_order() -> None:

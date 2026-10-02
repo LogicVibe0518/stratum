@@ -19,7 +19,9 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 # 2: LogoLayer.plate (M9b). Version-1 specs have no plate and upgrade unchanged.
 # 3: PosterSpec.variants (M11a). A poster carries its own layout for every size.
 # 4: ImageLayer.crop (M10b). Which part of a photo shows; none = the centre, as before.
-SCHEMA_VERSION = 4
+# 5: TextLayer.wrap (M10e). New text breaks where the meaning breaks; older posters keep
+#    the greedy wrap they were approved with.
+SCHEMA_VERSION = 5
 
 # A coordinate may sit slightly outside the canvas (full-bleed art, deliberate crops).
 Coord = Annotated[float, Field(ge=-1.0, le=2.0)]
@@ -144,6 +146,10 @@ class TextLayer(BaseLayer):
     min_size: Unit = 0.02
     max_size: Unit = 0.12
     uppercase: bool = False
+    # How words share lines. "balanced" keeps the same number of lines as "greedy"
+    # but evens them out and breaks between phrases (render/text.py). Posters made
+    # before schema 5 are upgraded to "greedy", so they render exactly as approved.
+    wrap: Literal["greedy", "balanced"] = "balanced"
 
     @model_validator(mode="after")
     def _size_range_ordered(self) -> Self:

@@ -440,6 +440,7 @@ def check_layout(
                 max_px=layer.max_size * height,
                 max_lines=layer.max_lines,
                 line_height=face.line_height,
+                balanced=layer.wrap == "balanced",
             )
             if fitted.lines and fitted.lines[-1].endswith(ELLIPSIS):
                 flags.append(
