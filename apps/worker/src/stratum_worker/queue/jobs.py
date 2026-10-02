@@ -15,6 +15,7 @@ from pydantic import BaseModel, ConfigDict
 from stratum_worker.app.supa import Supa
 
 DRAFT_POST = "draft_post"
+LAB_SCREENS = "lab_screens"
 Status = Literal["queued", "running", "done", "failed"]
 
 BACKOFF_BASE_S = 5.0
