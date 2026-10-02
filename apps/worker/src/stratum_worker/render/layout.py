@@ -147,6 +147,7 @@ def place_text(layer: TextLayer, spec: PosterSpec, kit: BrandKit, root: Path) ->
         max_px=layer.max_size * canvas_h,
         max_lines=layer.max_lines,
         line_height=face.line_height,
+        balanced=layer.wrap == "balanced",
     )
     return PlacedText(
         family=face.family,

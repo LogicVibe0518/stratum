@@ -36,6 +36,10 @@ class PostCopy(Frozen):
     # Accessibility, and a clean text signal for search. Describes the IMAGE, not
     # the offer. Empty when nobody told us what the photo shows.
     alt_text: str = Field(default="", max_length=1000)
+    # The same headline shorter and fuller (post.copy v2): a design sets whichever
+    # fits it best (design/copyfit.py). Empty when there is none.
+    headline_short: str = Field(default="", max_length=120)
+    headline_long: str = Field(default="", max_length=180)
 
     @property
     def printed(self) -> str:
@@ -44,7 +48,13 @@ class PostCopy(Frozen):
 
     @property
     def everything(self) -> str:
-        return f"{self.printed}\n{self.caption}\n{' '.join(self.hashtags)}\n{self.alt_text}"
+        """Every word, including the headlines that may be printed instead of the main
+        one, so the checks for invented facts read all of them."""
+        variants = "\n".join(one for one in (self.headline_short, self.headline_long) if one)
+        return (
+            f"{self.printed}\n{variants}\n{self.caption}\n{' '.join(self.hashtags)}"
+            f"\n{self.alt_text}"
+        )
 
 
 class PostBrief(Frozen):

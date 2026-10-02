@@ -28,7 +28,7 @@ from stratum_worker.gateway.tasks import (
 )
 
 VERSION: dict[TaskName, int] = {
-    TaskName.POST_COPY: 1,
+    TaskName.POST_COPY: 2,
     TaskName.CAPTION_GENERATE: 1,
     TaskName.EDIT_PARSE: 5,
     TaskName.BACKGROUND_CREATE: 1,
@@ -108,6 +108,8 @@ def _values(task: TaskName, request: BaseModel) -> dict[str, str]:
             "banned_claims": _list(request.banned_claims),
             "photo_description": request.photo_description or "(no photo description)",
             "headline_max_chars": str(request.headline_max_chars),
+            "headline_short_max_chars": str(max(10, round(request.headline_max_chars * 0.6))),
+            "headline_long_max_chars": str(min(180, round(request.headline_max_chars * 1.5))),
             "offer_max_chars": str(request.offer_max_chars),
             "cta_max_chars": str(request.cta_max_chars),
             "brief": request.brief,
