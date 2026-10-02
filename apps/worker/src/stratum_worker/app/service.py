@@ -14,6 +14,7 @@ import io
 import re
 import time
 import zipfile
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
@@ -990,24 +991,83 @@ async def tweak(
         await record("needs_human", raw, step.cost_usd)
         return off_brand
 
-    notes = [result.note[:300]] if result.note else []
-    unable = [result.needs_human[:300]] if result.needs_human else []
+    return await commit_change(
+        ctx,
+        post,
+        client,
+        latest=latest,
+        spec=spec,
+        kit=kit,
+        ops=ops,
+        changes=_merged(restyles),
+        photos=photos,
+        message=message,
+        record=lambda outcome: record(outcome, raw, step.cost_usd),
+        notes=[result.note[:300]] if result.note else [],
+        unable=[result.needs_human[:300]] if result.needs_human else [],
+        unchanged=result.needs_human or NOTHING_CHANGED,
+        started=started,
+        step=step,
+    )
+
+
+def _merged(restyles: list[Restyle]) -> dict[str, str] | None:
+    if not restyles:
+        return None
+    changes: dict[str, str] = {}
+    for one in restyles:
+        changes.update(one.changes)
+    return changes
+
+
+Record = Callable[[str], Awaitable[None]]
+
+
+async def commit_change(
+    ctx: Context,
+    post: dict[str, Any],
+    client: dict[str, Any],
+    *,
+    latest: dict[str, Any],
+    spec: PosterSpec,
+    kit: BrandKit,
+    ops: list[EditOp],
+    changes: dict[str, str] | None,
+    photos: list[str],
+    message: str,
+    record: Record,
+    notes: list[str],
+    unable: list[str],
+    unchanged: str = NOTHING_CHANGED,
+    started: float,
+    step: Any = None,
+    authorised: str = "",
+) -> dict[str, Any]:
+    """Make a change the next version: a typed tweak's ops, or a control panel's.
+
+    Restyles first (the neighbouring design, with the person's earlier changes kept),
+    then the ops, then the usual: frame swapped photos, render every size, check the
+    layout, the claims and the brief, save, and record. `record(outcome)` writes the
+    edits row; `step` is the model's trace step, None when no model was asked.
+    `authorised` is extra human-written text the claims check may trust (words typed
+    into the panel).
+    """
+    from stratum_worker.app import actions  # restyle uses this module
+
+    notes, unable = list(notes), list(unable)
     base, template_id = spec, post["template_id"]
     restyled = None
-    if restyles:
-        changes: dict[str, str] = {}
-        for one in restyles:
-            changes.update(one.changes)
+    if changes:
         try:
             restyled = await actions.restyle(ctx, post, client, spec, kit, changes, photos)
         except RestyleError as exc:
             if not ops:
-                await record("needs_human", raw, step.cost_usd)
+                await record("needs_human")
                 return {"outcome": "needs_human", "why": str(exc)}
             unable.append(str(exc))
         else:
             base, template_id = restyled.spec, restyled.design_id
-            if not result.note:
+            if not notes:
                 notes.append(restyled.note)
             if restyled.added_photo:
                 notes.append(f"Added another of {client['name']}'s photos for the second space.")
@@ -1015,13 +1075,13 @@ async def tweak(
     try:
         changed = apply_ops(base, ops)
     except OpError as exc:
-        await record("failed", raw, step.cost_usd)
+        await record("failed")
         return {"outcome": "failed", "why": plain_op_error(exc)}
     if changed.model_dump() == spec.model_dump():
         # Nothing moved, so there is no new version and it is not called "applied":
         # a designer who asked for a second photo was told it was done, and it wasn't.
-        await record("needs_human", raw, step.cost_usd)
-        return {"outcome": "needs_human", "why": result.needs_human or NOTHING_CHANGED}
+        await record("needs_human")
+        return {"outcome": "needs_human", "why": unchanged}
 
     shaped = {**post, "template_id": template_id}
     variants = file_variants(ctx, template_id)
@@ -1038,25 +1098,28 @@ async def tweak(
     history = await ctx.supa.select(
         "edits", post_id=f"eq.{post['id']}", select="message", order="created_at"
     )
-    authorised = " ".join(
-        [post["brief"], post.get("occasion", ""), message] + [row["message"] for row in history]
+    trusted = " ".join(
+        [post["brief"], post.get("occasion", ""), message, authorised]
+        + [row["message"] for row in history]
     )
     on_poster = "\n".join(one.content for one in changed.layers if isinstance(one, TextLayer))
-    flags = list(flags) + list(check_claims(on_poster, rules_of(client), authorised))
+    flags = list(flags) + list(check_claims(on_poster, rules_of(client), trusted))
     flags += brief_flags(shaped, changed)
 
     saved, _ = await asyncio.gather(
         save_version(
             ctx, post, changed, renders, flags, note=message[:200], after=latest["version"]
         ),
-        record("applied", raw, step.cost_usd),
+        record("applied"),
     )
     version: dict[str, Any] = saved
-    writes = [
-        ctx.supa.insert(
-            "steps", {"agency_id": ctx.agency_id, "post_id": post["id"], **step.model_dump()}
+    writes = []
+    if step is not None:
+        writes.append(
+            ctx.supa.insert(
+                "steps", {"agency_id": ctx.agency_id, "post_id": post["id"], **step.model_dump()}
+            )
         )
-    ]
     if restyled is not None:
         # From here on the post IS the new design: quick changes, the brief check and
         # the next tweak's style settings read it. And a designer choosing a style is
@@ -1085,7 +1148,8 @@ async def tweak(
                 },
             )
         )
-    await asyncio.gather(*writes)
+    if writes:
+        await asyncio.gather(*writes)
     version["outcome"] = "applied"
     # What was done when the request had to be read into, and what could not be done:
     # an inferred change is never a silent one, and a partial one says what is left.
@@ -1095,6 +1159,166 @@ async def tweak(
     version["why"] = " ".join([*notes, *unable])
     version["seconds"] = round(time.perf_counter() - started, 2)
     return version
+
+
+# --- the control panel (M10d): by hand, no model ---------------------------------------
+
+
+class PosterChanged(Exception):
+    """The poster has a newer version than the one the change was made on."""
+
+
+EDITOR_OPS = frozenset(
+    {"set_text", "set_color", "move", "scale", "set_visible", "pan", "zoom", "dim"}
+)
+
+
+def editor_note(ops: list[EditOp], changes: dict[str, str] | None, kit: BrandKit) -> str:
+    """What a change made in the control panel did, for History: "Headline gold; photo
+    darker". Made here from the ops, not taken from the page."""
+    from stratum_spec.ops import Dim, Move, Pan, Scale, SetColor, SetText, SetVisible, Zoom
+
+    said: list[str] = ["new style"] if changes else []
+    for op in ops:
+        part = friendly(op.layer) if hasattr(op, "layer") else ""
+        if isinstance(op, SetText):
+            said.append(f"new {part} words")
+        elif isinstance(op, SetColor):
+            value = kit.palette.get(op.color.removeprefix("palette."), "")
+            said.append(f"{part} {colour_name(value) if value else 'colour'}")
+        elif isinstance(op, Move):
+            said.append(f"moved the {part}")
+        elif isinstance(op, Scale):
+            said.append(f"{'bigger' if op.factor > 1 else 'smaller'} {part}")
+        elif isinstance(op, SetVisible):
+            said.append(f"{'showed' if op.visible else 'hid'} the {part}")
+        elif isinstance(op, Pan):
+            said.append(f"moved the {part} in its frame")
+        elif isinstance(op, Zoom):
+            said.append(f"zoomed the {part} {'in' if op.factor > 1 else 'out'}")
+        elif isinstance(op, Dim):
+            said.append(f"{part} darkness {round(op.amount * 100)}%")
+    text = "; ".join(dict.fromkeys(said)) or "no change"
+    return f"Editor: {text}"[:200]
+
+
+async def edit(
+    ctx: Context,
+    post: dict[str, Any],
+    client: dict[str, Any],
+    *,
+    version: int,
+    raw_ops: list[dict[str, Any]],
+    restyle: dict[str, str] | None,
+) -> dict[str, Any]:
+    """A change made by hand in the control panel: instant, free, no model.
+
+    The same validation and the same commit as a typed tweak; only the source of the
+    ops differs. `version` is the version the person was looking at: if the poster
+    has moved on (another tab, another person), nothing is changed and they are told,
+    which also makes a double click one change.
+    """
+    from stratum_worker.app import actions
+
+    started = time.perf_counter()
+    versions = await ctx.supa.select(
+        "post_versions", post_id=f"eq.{post['id']}", order="version.desc", limit="1"
+    )
+    if not versions:
+        raise DraftError("this post has no draft yet")
+    latest = versions[0]
+    if latest["version"] != version:
+        raise PosterChanged(
+            f"The poster is on version {latest['version']} now, not {version}. Reload to "
+            f"see it, then make the change again."
+        )
+    unknown = sorted({str(one.get("op")) for one in raw_ops} - EDITOR_OPS)
+    if unknown:
+        raise DraftError(f"The editor cannot make that change ({', '.join(unknown)}).")
+    if not raw_ops and not restyle:
+        raise DraftError("Nothing to change.")
+    try:
+        ops = OPS.validate_python(raw_ops)
+        changes = Restyle(changes=restyle).changes if restyle else None
+    except ValidationError as exc:
+        raise DraftError("That change is outside what the editor allows.") from exc
+    spec = load_spec(latest["spec"])
+    kit = await kit_for(ctx, client, spec.brand_kit_version)
+    off_brand = off_brand_colour(ops, kit, client)
+    if off_brand is not None:
+        raise DraftError(off_brand["question"])
+    photos = await actions.client_photos(ctx, client) if changes else []
+    message = editor_note(ops, changes, kit)
+    logged = [*raw_ops, *([{"op": "restyle", "changes": changes}] if changes else [])]
+    typed = " ".join(str(one.get("text", "")) for one in raw_ops if one.get("op") == "set_text")
+
+    async def record(outcome: str) -> None:
+        await ctx.supa.insert(
+            "edits",
+            {
+                "agency_id": ctx.agency_id,
+                "post_id": post["id"],
+                "from_version": latest["version"],
+                "message": message,
+                "ops": logged,
+                "outcome": outcome,
+                "latency_ms": int((time.perf_counter() - started) * 1000),
+                "cost_usd": 0,
+                "created_by": ctx.user_id,
+            },
+        )
+
+    return await commit_change(
+        ctx,
+        post,
+        client,
+        latest=latest,
+        spec=spec,
+        kit=kit,
+        ops=ops,
+        changes=changes,
+        photos=photos,
+        message=message,
+        record=record,
+        notes=[],
+        unable=[],
+        started=started,
+        authorised=typed,
+    )
+
+
+async def inspect_post(
+    ctx: Context, post: dict[str, Any], client: dict[str, Any], aspect: str
+) -> dict[str, Any]:
+    """Everything the control panel draws for one size of the latest version."""
+    from stratum_worker.app import actions
+    from stratum_worker.edit.inspect import inspect, style_options
+
+    if aspect not in post["aspects"]:
+        raise DraftError(f"This post has no {aspect} size.")
+    versions = await ctx.supa.select(
+        "post_versions", post_id=f"eq.{post['id']}", order="version.desc", limit="1"
+    )
+    if not versions:
+        raise DraftError("this post has no draft yet")
+    latest = versions[0]
+    spec = load_spec(latest["spec"])
+    kit = await kit_for(ctx, client, spec.brand_kit_version)
+    one = retarget(spec, aspect, file_variants(ctx, post["template_id"]))
+    bound = {getattr(layer, "asset", None) for layer in one.layers}
+    asset_paths = {sha: await local_path(ctx, sha) for sha in bound if isinstance(sha, str)}
+    sizes, photos = await asyncio.gather(
+        actions.photo_sizes(asset_paths), actions.client_photos(ctx, client)
+    )
+    root = ctx.settings.repo_root
+    fits = measure(one, kit, root=root)
+    panel = await asyncio.to_thread(inspect, one, kit, root, fits=fits, photo_sizes=sizes)
+    return {
+        "version": latest["version"],
+        "version_id": latest["id"],
+        **panel,
+        "style": style_options(post["template_id"], kit, len(photos)),
+    }
 
 
 OPEN_IN_CANVA = """How to finish these posts in Canva
@@ -1209,10 +1433,13 @@ __all__ = [
     "ComposeError",
     "Context",
     "DraftError",
+    "PosterChanged",
     "brand_suggestion",
     "bundle",
     "draft",
+    "edit",
     "export_deck",
+    "inspect_post",
     "kit_for",
     "save_brand",
     "starter_kit",
