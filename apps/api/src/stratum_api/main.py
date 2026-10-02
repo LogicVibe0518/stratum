@@ -153,6 +153,11 @@ async def _brand_conflict(_: Any, exc: service.BrandConflict) -> Response:
     return Response(content=str(exc)[:300], status_code=409, media_type="text/plain")
 
 
+@app.exception_handler(service.PosterChanged)
+async def _poster_changed(_: Any, exc: service.PosterChanged) -> Response:
+    return Response(content=str(exc)[:300], status_code=409, media_type="text/plain")
+
+
 @app.exception_handler(NoProviderAvailable)
 async def _no_provider(_: Any, exc: NoProviderAvailable) -> Response:
     """503, not 500: the server is fine, its configuration is not."""
@@ -616,6 +621,36 @@ async def tweak_post(
 ) -> dict[str, Any]:
     post, client = await _post_and_client(ctx, post_id)
     return await service.tweak(ctx, post, client, body.message)
+
+
+class PanelEdit(BaseModel):
+    """A change made by hand in the control panel (M10d)."""
+
+    version: int = Field(ge=1)  # the version the person was looking at
+    ops: list[dict[str, Any]] = Field(default_factory=list, max_length=12)
+    restyle: dict[str, str] | None = None
+
+
+@app.get("/api/posts/{post_id}/inspect")
+async def inspect_post(
+    post_id: str, aspect: str = "4:5", ctx: service.Context = Depends(context)
+) -> dict[str, Any]:
+    """Every layer of one size of the latest version, measured: for the control panel.
+    `aspect` is "4:5" or "4x5"."""
+    post, client = await _post_and_client(ctx, post_id)
+    return await service.inspect_post(ctx, post, client, aspect.replace("x", ":"))
+
+
+@app.post("/api/posts/{post_id}/edit")
+async def edit_post(
+    post_id: str, body: PanelEdit, ctx: service.Context = Depends(context)
+) -> dict[str, Any]:
+    """Apply a change made in the control panel: no model, no cost. 409 if the poster
+    has a newer version than `version`."""
+    post, client = await _post_and_client(ctx, post_id)
+    return await service.edit(
+        ctx, post, client, version=body.version, raw_ops=body.ops, restyle=body.restyle
+    )
 
 
 @app.get("/api/quick")
