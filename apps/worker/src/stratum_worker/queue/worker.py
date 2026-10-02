@@ -23,7 +23,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, Field, ValidationError
 
 from stratum_worker.app import service
 from stratum_worker.app.settings import Settings
@@ -34,6 +34,7 @@ from stratum_worker.gateway.errors import BudgetExceeded
 from stratum_worker.gateway.gateway import Gateway
 from stratum_worker.queue.jobs import (
     DRAFT_POST,
+    LAB_SCREENS,
     ClientFactory,
     Job,
     describe_error,
@@ -144,7 +145,35 @@ async def draft_post(job: Job, client: Supa, deps: Deps) -> dict[str, Any]:
     return {"post_id": post["id"], "version_id": version["id"], "version": version["version"]}
 
 
-HANDLERS: Mapping[str, Handler] = {DRAFT_POST: draft_post}
+class LabPayload(BaseModel):
+    """How many Taste Lab screens to make (app/lab.py), all within sensible bounds."""
+
+    posts: int = Field(default=20, ge=1, le=60)
+    per_post: int = Field(default=6, ge=1, le=20)
+    shared_per_post: int = Field(default=3, ge=0, le=20)
+
+
+async def lab_screens(job: Job, client: Supa, deps: Deps) -> dict[str, Any]:
+    """Make Taste Lab screens from the agency's posts, as the person who asked."""
+    from stratum_worker.app import lab
+
+    payload = LabPayload.model_validate(job.payload)
+    ctx = service.Context(
+        supa=client,
+        settings=deps.settings,
+        gateway=deps.gateway,
+        agency_id=job.agency_id,
+        user_id=job.requested_by,
+    )
+    return await lab.make_screens(
+        ctx,
+        posts=payload.posts,
+        per_post=payload.per_post,
+        shared_per_post=payload.shared_per_post,
+    )
+
+
+HANDLERS: Mapping[str, Handler] = {DRAFT_POST: draft_post, LAB_SCREENS: lab_screens}
 
 
 def work_timeout(lease_seconds: int) -> float:
