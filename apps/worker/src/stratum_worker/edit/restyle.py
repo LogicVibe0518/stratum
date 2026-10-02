@@ -151,6 +151,64 @@ def _setting(family: str, name: str, value: str, before: str | None, kit: BrandK
     return f"{name} {value}"
 
 
+# Short labels for a control panel: one dropdown per setting (C7).
+SETTING_LABEL: dict[str, str] = {
+    "side": "Words",
+    "share": "Panel size",
+    "fill": "Background",
+    "align": "Alignment",
+    "accent": "Accent line",
+    "logo": "Logo",
+    "scale": "Headline",
+    "zone": "Words position",
+    "treatment": "Words sit on",
+    "gutter": "Between photos",
+}
+
+
+def setting_label(family: str, name: str) -> str:
+    if name == "share" and family == "pair":
+        return "Photo height"
+    return SETTING_LABEL.get(name, name.capitalize())
+
+
+def option_label(family: str, name: str, value: str, kit: BrandKit) -> str:
+    """One choice of one setting, as a dropdown shows it: "Cream", "Below the photo"."""
+    if name == "side":
+        return "Below the photo" if value == "end" else "Above the photo"
+    if name == "share":
+        return f"{round(float(value) * 100)}%"
+    if name == "fill":
+        return _colour(kit, FILL[value][0]).capitalize()
+    if name == "align":
+        return "Left" if value == "left" else "Centred"
+    if name == "accent":
+        return f"{_colour(kit, ACCENT).capitalize()} line" if value == "rule" else "None"
+    if name == "logo":
+        return {
+            "photo": "On the photo",
+            "panel": "With the words",
+            "text": "With the words",
+            "start": "Left",
+            "end": "Right",
+            "top": "Top",
+            "bottom": "Bottom",
+        }.get(value, value.capitalize())
+    if name == "scale":
+        return "Bold" if value == "bold" else "Calm"
+    if name == "zone":
+        return {"top": "Top", "bottom": "Bottom"}.get(value, "Middle")
+    if name == "treatment":
+        return {
+            "scrim": "Dark fade",
+            "band": f"{_colour(kit, 'palette.primary').capitalize()} band",
+            "card": f"{_colour(kit, 'palette.surface').capitalize()} card",
+        }[value]
+    if name == "gutter":
+        return "Thin line" if value == "thin" else "None"
+    return value
+
+
 def said(before_id: str, after_id: str, changes: Mapping[str, str], kit: BrandKit) -> str:
     """What a restyle changed, in a designer's words.
 
@@ -190,7 +248,7 @@ class Kept:
     dropped: list[str] = field(default_factory=list)  # sentences: what was not, and why
 
 
-def _behind(spec: PosterSpec, layer_id: str) -> ShapeLayer | None:
+def behind(spec: PosterSpec, layer_id: str) -> ShapeLayer | None:
     """The visible shape a layer sits on: the last one before it that covers it."""
     index = next(i for i, one in enumerate(spec.layers) if one.id == layer_id)
     target = spec.layers[index]
@@ -201,12 +259,12 @@ def _behind(spec: PosterSpec, layer_id: str) -> ShapeLayer | None:
 
 
 def _readable(spec: PosterSpec, layer_id: str, token: str, kit: BrandKit) -> bool:
-    backing = _behind(spec, layer_id)
+    backing = behind(spec, layer_id)
     if backing is None:
         return False  # straight on a photo: the design's own colour is the safe one
-    behind = blend(kit.color(backing.fill), ASSUMED_BACKDROP, backing.opacity)
+    shown = blend(kit.color(backing.fill), ASSUMED_BACKDROP, backing.opacity)
     floor = MIN_CONTRAST_LARGE if layer_id == "headline" else MIN_CONTRAST_NORMAL
-    return contrast_ratio(kit.color(token), behind) >= floor
+    return contrast_ratio(kit.color(token), shown) >= floor
 
 
 def _name(layer_id: str) -> str:
@@ -282,4 +340,16 @@ def carry_over(
     return Kept(apply_ops(after, ops) if ops else after, kept, dropped)
 
 
-__all__ = ["FAMILY", "Kept", "RestyleError", "carry_over", "described", "said", "targets"]
+__all__ = [
+    "FAMILY",
+    "SETTING_LABEL",
+    "Kept",
+    "RestyleError",
+    "behind",
+    "carry_over",
+    "described",
+    "option_label",
+    "said",
+    "setting_label",
+    "targets",
+]
