@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
@@ -22,7 +23,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel, Field, ValidationError
 from stratum_spec import SCHEMA_VERSION, BrandKit
 from stratum_spec.models import Aspect
-from stratum_worker.app import options, reviews, service
+from stratum_worker.app import lab, options, reviews, service
 from stratum_worker.app.settings import Settings, settings
 from stratum_worker.app.supa import Supa, SupabaseError, close_pool
 from stratum_worker.assets.errors import (
@@ -785,6 +786,88 @@ async def option_preview(
         raise HTTPException(404, "no such option")
     post, client = await _post_and_client(ctx, rows[0]["post_id"])
     data = await service.render_preview(ctx, rows[0], post, client, shape.replace("x", ":"))
+    return Response(
+        content=data,
+        media_type="image/webp",
+        headers={"Cache-Control": "public, max-age=31536000, immutable"},
+    )
+
+
+# --- the Taste Lab ---------------------------------------------------------------------
+
+
+class LabRequest(BaseModel):
+    posts: int = Field(default=20, ge=1, le=60)
+    per_post: int = Field(default=6, ge=1, le=20)
+    shared_per_post: int = Field(default=3, ge=0, le=20)
+
+
+class LabAnswer(BaseModel):
+    served: str = Field(min_length=1, max_length=64)
+    picked: int | None = None  # None: none of these
+    never: list[int] = Field(default_factory=list, max_length=6)
+    reasons: list[str] = Field(default_factory=list, max_length=8)
+    ms: int = Field(ge=0)
+    repeat: bool = False
+
+
+@app.post("/api/lab/screens")
+async def lab_make(body: LabRequest, ctx: service.Context = Depends(context)) -> dict[str, Any]:
+    """Queue a job that makes Taste Lab screens from the agency's posts."""
+    job = await jobs.enqueue(
+        ctx.supa,
+        agency_id=ctx.agency_id,
+        kind=jobs.LAB_SCREENS,
+        payload=body.model_dump(),
+        key=f"lab-{uuid.uuid4()}",
+    )
+    return {"job_id": job["id"]}
+
+
+@app.get("/api/lab/next")
+async def lab_next(ctx: service.Context = Depends(context)) -> dict[str, Any]:
+    """The next screen for the signed-in rater, or done."""
+    return await lab.next_screen(ctx)
+
+
+@app.post("/api/lab/screens/{screen_id}/answer")
+async def lab_answer(
+    screen_id: str, body: LabAnswer, ctx: service.Context = Depends(context)
+) -> dict[str, Any]:
+    return await lab.answer(
+        ctx,
+        screen_id,
+        served=body.served,
+        picked=body.picked,
+        never=body.never,
+        reasons=body.reasons,
+        ms=body.ms,
+        repeat=body.repeat,
+    )
+
+
+@app.get("/api/lab/progress")
+async def lab_progress(ctx: service.Context = Depends(context)) -> dict[str, Any]:
+    return await lab.progress(ctx)
+
+
+@app.get("/api/lab/export")
+async def lab_export(ctx: service.Context = Depends(context)) -> Response:
+    """Every answer with its designs, one JSON object per line, for the critic v2
+    walkthrough."""
+    return Response(
+        content=await lab.export(ctx),
+        media_type="application/x-ndjson",
+        headers={"Content-Disposition": 'attachment; filename="taste-lab.jsonl"'},
+    )
+
+
+@app.get("/previews/lab/{screen_id}/{index}/{shape}.webp")
+async def lab_preview(
+    screen_id: str, index: int, shape: str, ctx: service.Context = Depends(context)
+) -> Response:
+    """One design on one lab screen. A screen never changes, so this is cached for good."""
+    data = await lab.preview(ctx, screen_id, index, shape.replace("x", ":"))
     return Response(
         content=data,
         media_type="image/webp",

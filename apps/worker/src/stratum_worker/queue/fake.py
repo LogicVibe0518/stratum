@@ -60,6 +60,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     "posts": {"status": "draft", "words": None, "cost_usd": 0, "occasion": "", "photo_note": ""},
     "post_versions": {"note": ""},
     "post_options": {"explored": False, "detail": {}},
+    "lab_screens": {"shared": False, "detail": {}},
     "steps": {"provider": "", "model": "", "cached": False, "cost_usd": 0, "latency_ms": 0},
     "jobs": {
         "status": "queued",

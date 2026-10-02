@@ -47,6 +47,50 @@ def _edges(path: str) -> np.ndarray:
         return edge_map(np.asarray(image.convert("RGB"), dtype=np.uint8))
 
 
+async def material_for(
+    ctx: service.Context,
+    client: dict[str, Any],
+    words: dict[str, Any],
+    kit: Any,
+    photos: tuple[str, ...],
+    background: str | None,
+) -> tuple[Material, dict[str, str]]:
+    """Everything a design is filled with, read once: the newest logo, each photo
+    measured (faces, salience, busyness), local files. Shared by the top three and the
+    Taste Lab, so both lay designs out around exactly the same material."""
+    logos = await ctx.supa.select(
+        "assets",
+        client_id=f"eq.{client['id']}",
+        kind="eq.logo",
+        select="sha256,width,height",
+        order="created_at.desc",
+        limit="1",
+    )
+    if not logos:
+        raise DraftError(
+            f"{client['name']} has no logo yet. Upload one - we will not invent branding."
+        )
+    logo = str(logos[0]["sha256"])
+    width, height = logos[0].get("width"), logos[0].get("height")
+
+    shown = [*photos, *([background] if background else [])]
+    asset_paths = {sha: await service.local_path(ctx, sha) for sha in {*shown, logo}}
+    reads = {sha: await asyncio.to_thread(read_photo, asset_paths[sha]) for sha in shown}
+    edges = {sha: await asyncio.to_thread(_edges, asset_paths[sha]) for sha in shown}
+    material = Material(
+        words={key: str(value) for key, value in words.items() if isinstance(value, str)},
+        kit=kit,
+        photos=photos,
+        background=background,
+        logo=logo,
+        logo_aspect=(width / height) if width and height else 0.0,
+        ink=await service.logo_ink(ctx, logo),
+        reads=reads,
+        edges=edges,
+    )
+    return material, asset_paths
+
+
 async def draft_options(
     ctx: service.Context, post: dict[str, Any], client: dict[str, Any]
 ) -> dict[str, Any]:
@@ -74,35 +118,8 @@ async def draft_options(
             )
         )
 
-    logos = await ctx.supa.select(
-        "assets",
-        client_id=f"eq.{client['id']}",
-        kind="eq.logo",
-        select="sha256,width,height",
-        order="created_at.desc",
-        limit="1",
-    )
-    if not logos:
-        raise DraftError(
-            f"{client['name']} has no logo yet. Upload one - we will not invent branding."
-        )
-    logo = str(logos[0]["sha256"])
-    width, height = logos[0].get("width"), logos[0].get("height")
-
-    shown = [*photos, *([background] if background else [])]
-    asset_paths = {sha: await service.local_path(ctx, sha) for sha in {*shown, logo}}
-    reads = {sha: await asyncio.to_thread(read_photo, asset_paths[sha]) for sha in shown}
-    edges = {sha: await asyncio.to_thread(_edges, asset_paths[sha]) for sha in shown}
-    material = Material(
-        words=words.model_dump(mode="json"),
-        kit=kit,
-        photos=photos,
-        background=background,
-        logo=logo,
-        logo_aspect=(width / height) if width and height else 0.0,
-        ink=await service.logo_ink(ctx, logo),
-        reads=reads,
-        edges=edges,
+    material, asset_paths = await material_for(
+        ctx, client, words.model_dump(mode="json"), kit, photos, background
     )
     seed = seed_for(str(post["id"]))
     try:
@@ -281,4 +298,12 @@ async def pick_option(
     return version
 
 
-__all__ = ["AUTO", "REFERENCE", "draft_options", "latest_options", "pick_option", "summary"]
+__all__ = [
+    "AUTO",
+    "REFERENCE",
+    "draft_options",
+    "latest_options",
+    "material_for",
+    "pick_option",
+    "summary",
+]
