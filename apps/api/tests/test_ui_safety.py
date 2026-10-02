@@ -55,3 +55,47 @@ def test_the_page_gained_no_new_external_asset() -> None:
     assert PAGE.count("https://fonts.googleapis.com") == 2
     assert PAGE.count("<script src") == 0
     assert "cdn." not in PAGE.lower()
+
+
+def _function_body(name: str) -> str:
+    start = PAGE.split(f"function {name}")[1]
+    return start.split("\nfunction ")[0]
+
+
+def test_history_results_are_in_words() -> None:
+    assert "Asked you" in PAGE
+    assert "Didn't work" in PAGE
+    assert '"Done"' in PAGE
+
+
+def test_choice_buttons_do_not_put_server_strings_into_markup() -> None:
+    body = _function_body("choiceButtons")
+    assert "innerHTML" not in body
+    assert "textContent" in body
+
+
+def test_the_page_has_the_control_panel() -> None:
+    assert "/inspect" in PAGE
+    assert "/edit" in PAGE
+    assert "function sendEdit" in PAGE
+    assert "function safeHex" in PAGE
+    assert "Asked you" in PAGE
+    assert "Didn't work" in PAGE
+
+
+def test_safe_hex_only_accepts_six_digit_hex() -> None:
+    assert "^#[0-9a-f]{6}$" in PAGE
+
+
+def test_editor_builders_do_not_put_server_strings_into_markup() -> None:
+    for name in (
+        "paintEditor",
+        "layerRow",
+        "paintInspector",
+        "paintStyle",
+        "paintMeasure",
+        "measureOverlay",
+        "choiceButtons",
+    ):
+        body = _function_body(name)
+        assert "innerHTML" not in body, name
