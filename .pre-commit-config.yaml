@@ -9,6 +9,9 @@ repos:
       - id: check-yaml
       - id: check-added-large-files
         args: ["--maxkb=800"]
+        # The subject model (4.6 MB, M10f) is committed on purpose, like the face model:
+        # a draft never waits on a third-party download. Its SHA-256 is checked in code.
+        exclude: ^apps/worker/src/stratum_worker/photo/model/u2netp\.onnx$
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.16.8
     hooks:

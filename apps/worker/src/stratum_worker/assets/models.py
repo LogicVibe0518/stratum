@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_serializer
 from stratum_spec.models import AssetRef
 
 Source = Literal["client", "stock", "generated"]
-Flag = Literal["too_blurry", "too_small", "too_dark", "colour_profile_ignored"]
+Flag = Literal["too_blurry", "too_small", "too_dark", "colour_profile_ignored", "subject_cut_off"]
 Variant = Literal["full", "web", "thumb"]
 
 VARIANTS: tuple[Variant, ...] = ("full", "web", "thumb")

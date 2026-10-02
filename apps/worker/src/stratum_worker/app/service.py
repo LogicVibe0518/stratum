@@ -30,6 +30,7 @@ from stratum_spec.templates import Variants
 from stratum_worker.app.settings import Settings
 from stratum_worker.app.supa import Supa
 from stratum_worker.assets import AssetNotFound, AssetStore
+from stratum_worker.assets.models import Flag as AssetFlag
 from stratum_worker.brand import (
     Check,
     LogoError,
@@ -82,6 +83,7 @@ from stratum_worker.gateway.tasks import (
     PostCopyResult,
     TaskName,
 )
+from stratum_worker.photo.check import fitness, upload_check
 from stratum_worker.photo.frame import face_flags, frame_photos
 from stratum_worker.photo.read import PhotoRead, read_photo
 
@@ -251,10 +253,11 @@ async def pick_photos(
 ) -> tuple[dict[str, str], list[Flag]]:
     """Best photo first, by role. Only a background may be invented.
 
-    Good photos are used first, sharpest first. If there are not enough, photos that
-    are small, soft or dark are used next, and the draft says so. A real photo of
-    the client's own business beats a generated one even when it is imperfect, and
-    a designer can swap it in one click once the client sends a better one. Only
+    Good photos are used first, best first: sharp enough, a clear subject, room for
+    words (`photo.check.fitness`, M10f). If there are not enough, photos that are
+    small, soft or dark are used next, and the draft says so. A real photo of the
+    client's own business beats a generated one even when it is imperfect, and a
+    designer can swap it in one click once the client sends a better one. Only
     thumbnails too small to fill a poster at all are never used.
     """
     rows = await ctx.supa.select(
@@ -265,15 +268,16 @@ async def pick_photos(
         order="created_at.desc",
     )
 
-    def sharpness(row: dict[str, Any]) -> float:
-        return float((row.get("quality") or {}).get("sharpness", 0.0))
+    def best(row: dict[str, Any]) -> tuple[float, float]:
+        quality = row.get("quality") or {}
+        return fitness(quality), float(quality.get("sharpness", 0.0))
 
     def shorter_side(row: dict[str, Any]) -> float:
         return float((row.get("quality") or {}).get("min_dimension", PHOTO_FLOOR_PX))
 
     good = sorted(
         (r for r in rows if not (UNUSABLE & set(r.get("flags") or []))),
-        key=sharpness,
+        key=best,
         reverse=True,
     )
     weak = sorted(
@@ -282,7 +286,7 @@ async def pick_photos(
             for r in rows
             if UNUSABLE & set(r.get("flags") or []) and shorter_side(r) >= PHOTO_FLOOR_PX
         ),
-        key=sharpness,
+        key=best,
         reverse=True,
     )
     chosen = list(zip(needed, good + weak, strict=False))
@@ -403,8 +407,19 @@ async def make_background(
     return sha, [tracer.step("make_background", TaskName.BACKGROUND_CREATE).model_dump()]
 
 
+def _checked(web: Path) -> tuple[dict[str, float], list[AssetFlag]]:
+    from PIL import Image
+
+    with Image.open(web) as image:
+        return upload_check(image)
+
+
 async def store_image(ctx: Context, client_id: str | None, data: bytes, *, kind: str) -> str:
-    """Normalise, hash, keep locally, push to storage, record the row."""
+    """Normalise, hash, keep locally, push to storage, record the row.
+
+    A photo is also checked for its subject (M10f): the numbers the photo picker ranks
+    by, and a flag when the subject runs off the top of the photo.
+    """
     import tempfile
 
     with tempfile.NamedTemporaryFile(suffix=".bin", delete=False) as handle:
@@ -414,6 +429,11 @@ async def store_image(ctx: Context, client_id: str | None, data: bytes, *, kind:
         meta = ctx.store.put(temp, source="generated" if kind == "generated" else "client")
     finally:
         temp.unlink(missing_ok=True)
+    quality, flags = dict(meta.quality), list(meta.flags)
+    if kind == "photo":
+        numbers, found = await asyncio.to_thread(_checked, ctx.store.path_for(meta.sha256, "web"))
+        quality |= numbers
+        flags += [flag for flag in found if flag not in flags]
     path = f"{ctx.agency_id}/assets/{meta.sha256}.png"
     await ctx.supa.upload(path, ctx.store.path_for(meta.sha256, "full").read_bytes(), "image/png")
     await ctx.supa.insert(
@@ -425,8 +445,8 @@ async def store_image(ctx: Context, client_id: str | None, data: bytes, *, kind:
             "kind": kind,
             "width": meta.width,
             "height": meta.height,
-            "flags": list(meta.flags),
-            "quality": meta.quality,
+            "flags": flags,
+            "quality": quality,
             "storage_path": path,
         },
         upsert=True,

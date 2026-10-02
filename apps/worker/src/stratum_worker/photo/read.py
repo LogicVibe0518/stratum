@@ -20,6 +20,12 @@ or one evenly busy all over, has no subject to protect: its crop is chosen by th
 words and the busyness alone. Two things must both hold for a strong subject: it
 differs from the photo's edges by a colour difference people notice, and the
 salience is gathered in one area rather than scattered.
+
+The subject (M10f): U^2-Net outlines the thing the photo is of (`subject.py`). When
+it finds one clear subject, the salience is mostly that outline (SUBJECT_SHARE),
+and the strength is at least as sure as the outline is. So the crop, and the
+ranking of designs that uses the crop's cost, keep the plumber clear of the words
+even in front of a busy street. With no clear subject, nothing changes.
 """
 
 from __future__ import annotations
@@ -34,6 +40,7 @@ from PIL import Image
 
 from stratum_worker.brand.oklab import rgb_to_oklab
 from stratum_worker.photo.faces import Face, find_faces
+from stratum_worker.photo.subject import Subject, find_subject
 
 Grid = npt.NDArray[np.float64]
 
@@ -51,6 +58,9 @@ TEXTURE_SIDE = 512
 # ... and a mean luminance gradient of this much per pixel counts as fully busy:
 # fine brickwork or leaves score about 0.1-0.2, a clear sky under 0.01.
 FULLY_BUSY = 0.08
+# With one clear subject, this much of the salience is the subject's outline; the
+# rest is the colour-and-detail salience, so a bright sign beside it still counts.
+SUBJECT_SHARE = 0.75
 
 
 @dataclass(frozen=True)
@@ -62,6 +72,7 @@ class PhotoRead:
     salience: Grid = field(repr=False)
     busy: Grid = field(repr=False)
     strength: float
+    subject: Subject | None = field(default=None, repr=False)
 
 
 def edge_map(image: npt.NDArray[np.uint8], *, size: int = 96) -> Grid:
@@ -198,18 +209,33 @@ def strength(sal: Grid, difference: float) -> float:
     return float(np.clip(gathered, 0.0, 1.0) * np.clip(different, 0.0, 1.0))
 
 
+def with_subject(sal: Grid, sure: float, subject: Subject) -> tuple[Grid, float]:
+    """Salience and strength once the subject's outline is known (see the module doc)."""
+    if not subject.clear:
+        return sal, sure
+    outline = subject.on(sal.shape)
+    total = float(outline.sum())
+    if total <= 0:
+        return sal, sure
+    mixed: Grid = SUBJECT_SHARE * outline / total + (1.0 - SUBJECT_SHARE) * sal
+    return mixed, max(sure, float(np.clip(subject.separation, 0.0, 1.0)))
+
+
 def read_image(image: Image.Image) -> PhotoRead:
     """Measure one photo. Pure: the same pixels always give the same read."""
     rgb = image.convert("RGB")
     raw, difference = _distinctness(rgb)
     sal = _weighted(raw)
+    subject = find_subject(rgb)
+    sal, sure = with_subject(sal, strength(sal, difference), subject)
     busy = texture(rgb, sal.shape)
     return PhotoRead(
         size=rgb.size,
         faces=find_faces(rgb),
         salience=sal,
         busy=busy,
-        strength=strength(sal, difference),
+        strength=sure,
+        subject=subject,
     )
 
 
@@ -235,4 +261,5 @@ __all__ = [
     "salience",
     "spread",
     "texture",
+    "with_subject",
 ]
