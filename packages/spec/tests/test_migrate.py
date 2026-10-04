@@ -49,7 +49,7 @@ def test_a_version_1_poster_upgrades_to_the_current_schema_unchanged(spec: Poste
         layer.pop("crop", None)
         layer.pop("wrap", None)
     upgraded = load(data)
-    assert upgraded.schema_version == SCHEMA_VERSION == 5
+    assert upgraded.schema_version == SCHEMA_VERSION == 6
     assert upgraded.model_dump(exclude={"schema_version"}) == as_approved(spec).model_dump(
         exclude={"schema_version"}
     )
@@ -97,7 +97,7 @@ def test_a_version_4_poster_keeps_the_wrapping_it_was_approved_with(spec: Poster
     for layer in data["layers"]:
         layer.pop("wrap", None)
     upgraded = load(data)
-    assert upgraded.schema_version == 5
+    assert upgraded.schema_version == SCHEMA_VERSION
     headline = upgraded.layer("headline")
     assert isinstance(headline, TextLayer) and headline.wrap == "greedy"
     assert upgraded.layer("bg") == spec.layer("bg")  # nothing else changes

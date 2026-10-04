@@ -58,6 +58,16 @@ DECISIVE = 0.5
 MASK_SIDE = 160
 # Answers kept in memory: 64 photos is about 6.5 MB.
 KEPT = 64
+# The matte drawn through (depth, M10g): at most this many pixels on the longer side,
+# its edges snapped to the photo's own edges by a guided filter over this radius
+# (a share of the longer side) with this smoothing.
+MATTE_SIDE = 1600
+GUIDE_RADIUS = 0.006
+GUIDE_EPS = 1e-3
+# Then hardened: below LOW is background, above HIGH subject, a smooth step between.
+# A faint "maybe" (a lamp behind the person at 0.2) drawn again over a band shows as
+# a ghost; a soft edge as a halo.
+LOW, HIGH = 0.2, 0.8
 
 Mask = npt.NDArray[np.float32]
 
@@ -181,6 +191,56 @@ def subject_of(mask: Mask) -> Subject:
     return Subject(mask=mask, cover=cover, separation=separation, box=box, top=top)
 
 
+def _box(grid: npt.NDArray[np.float64], radius: int) -> npt.NDArray[np.float64]:
+    """Mean over a (2r+1)^2 square, edges repeated."""
+    size = 2 * radius + 1
+    padded = np.pad(grid, radius, mode="edge")
+    table = np.pad(np.cumsum(np.cumsum(padded, 0), 1), ((1, 0), (1, 0)))
+    rows, cols = grid.shape
+    out: npt.NDArray[np.float64] = (
+        table[size : size + rows, size : size + cols]
+        - table[:rows, size : size + cols]
+        - table[size : size + rows, :cols]
+        + table[:rows, :cols]
+    ) / (size * size)
+    return out
+
+
+def guided(
+    guide: npt.NDArray[np.float64], source: npt.NDArray[np.float64], radius: int, eps: float
+) -> npt.NDArray[np.float64]:
+    """The guided filter (He, Sun and Tang, 2010) with a grey guide: `source` smoothed,
+    except across the guide's own edges. A mask upscaled from 320 pixels is soft
+    everywhere; filtered with the photo as the guide, its edge follows the photo's."""
+    mean_i, mean_p = _box(guide, radius), _box(source, radius)
+    var_i = _box(guide * guide, radius) - mean_i * mean_i
+    cov_ip = _box(guide * source, radius) - mean_i * mean_p
+    a = cov_ip / (var_i + eps)
+    b = mean_p - a * mean_i
+    out: npt.NDArray[np.float64] = _box(a, radius) * guide + _box(b, radius)
+    return out
+
+
+def matte(image: Image.Image) -> Image.Image:
+    """The subject as a grey image with the photo's shape: 255 is the subject.
+
+    What depth draws through (M10g): the model's answer at the photo's own size (at
+    most MATTE_SIDE on the longer side), edges snapped to the photo's edges.
+    """
+    rgb = image.convert("RGB")
+    scale = min(1.0, MATTE_SIDE / max(rgb.size))
+    size = (max(1, round(rgb.width * scale)), max(1, round(rgb.height * scale)))
+    shown = rgb.resize(size, Image.Resampling.LANCZOS) if scale < 1.0 else rgb
+    square = Image.fromarray(probability(rgb), mode="F")
+    soft = np.asarray(square.resize(size, Image.Resampling.BILINEAR), dtype=np.float64)
+    guide = np.asarray(shown.convert("L"), dtype=np.float64) / 255.0
+    radius = max(2, round(GUIDE_RADIUS * max(size)))
+    edged = np.clip(guided(guide, np.clip(soft, 0.0, 1.0), radius, GUIDE_EPS), 0.0, 1.0)
+    step = np.clip((edged - LOW) / (HIGH - LOW), 0.0, 1.0)
+    hard = step * step * (3.0 - 2.0 * step)
+    return Image.fromarray(np.round(hard * 255).astype(np.uint8), mode="L")
+
+
 def find_subject(image: Image.Image) -> Subject:
     """The subject of the photo. Deterministic: the same photo, the same subject."""
     width, height = image.size
@@ -197,7 +257,9 @@ __all__ = [
     "Subject",
     "SubjectModelError",
     "find_subject",
+    "guided",
     "is_clear",
+    "matte",
     "probability",
     "subject_of",
 ]

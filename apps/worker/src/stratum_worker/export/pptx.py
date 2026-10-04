@@ -253,6 +253,45 @@ def _shape_layer(slide: Any, layer: ShapeLayer, kit: BrandKit, geom: Geom) -> An
     return shape
 
 
+def _in_front(slide: Any, text: TextLayer, spec: PosterSpec, assets: Mapping[str, str]) -> Any:
+    """Depth (schema 6): the photo's subject, cut out, placed exactly over its own photo
+    and above these words, so the words sit behind it as on the poster.
+
+    A text box cannot be masked in PowerPoint, so instead of hiding letters the subject
+    is drawn again on top: the photo's pixels with the subject matte as transparency,
+    dimmed and blurred as the photo is, trimmed by the same crop. A designer can move
+    or delete it like any picture. None when the words are simply in front.
+    """
+    if text.behind is None:
+        return None
+    photo = next((one for one in spec.layers if one.id == text.behind), None)
+    if not isinstance(photo, ImageLayer) or not photo.visible or photo.fit != "cover":
+        return None
+    picture = assets.get(photo.asset) if photo.asset else None
+    matte = assets.get(photo.subject) if photo.subject else None
+    if picture is None or matte is None:
+        return None
+    with Image.open(picture) as source:
+        image = source.convert("RGB")
+    with Image.open(matte) as source:
+        alpha = source.convert("L").resize(image.size, Image.Resampling.BILINEAR)
+    geom = box_px(spec, photo)
+    _, _, w, h = geom
+    if photo.blur > 0:
+        window = crop_window(image.size, (w, h), photo.crop) if photo.crop is not None else None
+        scale = max(w / image.width, h / image.height) if window is None else w / window[2]
+        sigma = photo.blur * BLUR_SCALE * min(spec.canvas.size) / scale
+        image = image.filter(ImageFilter.GaussianBlur(sigma))
+    if photo.dim > 0:
+        image = Image.eval(image, lambda value: round(value * (1.0 - photo.dim)))
+    if photo.opacity < 1.0:
+        alpha = Image.eval(alpha, lambda value: round(value * photo.opacity))
+    image.putalpha(alpha)
+    front = _cover(slide, photo.model_copy(update={"blur": 0.0}), spec, image, geom)
+    front.name = f"{text.id} behind: subject of {photo.id}"
+    return front
+
+
 def _text_layer(slide: Any, layer: TextLayer, spec: PosterSpec, kit: BrandKit, root: Path) -> Any:
     placed = place_text(layer, spec, kit, root)
     x, y, w, h = placed.box
@@ -319,6 +358,8 @@ def export_pptx(
             raise ExportError(f"no PowerPoint mapping for layer type {layer.type!r}")
         for shape in made:
             shape.rotation = layer.box.rotation
+        if isinstance(layer, TextLayer):
+            _in_front(slide, layer, spec, assets)
     if notes:
         slide.notes_slide.notes_text_frame.text = notes
     buffer = io.BytesIO()

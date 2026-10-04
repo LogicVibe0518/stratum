@@ -68,21 +68,75 @@ def _blurred(layer: ImageLayer, spec: PosterSpec, geom: tuple[float, ...], image
     )
 
 
+def _href(path: str) -> str:
+    return escape(path, {chr(34): "&quot;"})
+
+
+def _framing(
+    layer: ImageLayer, geom: tuple[float, ...], size: tuple[int, int]
+) -> tuple[float, float, float, float]:
+    """Where the whole photo is drawn so that its crop window fills the box exactly."""
+    x, y, w, h = geom
+    win_x, win_y, win_w, _ = crop_window(size, (w, h), layer.crop)
+    scale = w / win_w
+    return x - win_x * scale, y - win_y * scale, size[0] * scale, size[1] * scale
+
+
 def _framed_image(layer: ImageLayer, geom: tuple[float, ...], href: str) -> str:
     """The photo scaled and shifted so its crop window fills the box exactly.
 
     Drawn whole and clipped by the caller, so the part outside the window is simply
     not visible - the same picture "xMidYMid slice" draws when the crop is the centre.
     """
-    x, y, w, h = geom
     with Image.open(href) as image:
         size = image.size
-    win_x, win_y, win_w, _ = crop_window(size, (w, h), layer.crop)
-    scale = w / win_w
+    ix, iy, iw, ih = _framing(layer, geom, size)
     return (
-        f'<image x="{x - win_x * scale:.2f}" y="{y - win_y * scale:.2f}" '
-        f'width="{size[0] * scale:.2f}" height="{size[1] * scale:.2f}" '
-        f'href="{escape(href, {chr(34): "&quot;"})}" preserveAspectRatio="none"/>'
+        f'<image x="{ix:.2f}" y="{iy:.2f}" width="{iw:.2f}" height="{ih:.2f}" '
+        f'href="{_href(href)}" preserveAspectRatio="none"/>'
+    )
+
+
+def _in_front(text: TextLayer, spec: PosterSpec, assets: Mapping[str, str], kit: BrandKit) -> str:
+    """Depth (schema 6): the photo's subject drawn again over these words, so they sit
+    behind it, as on a magazine cover. Empty when the words are simply in front.
+
+    The photo is drawn a second time exactly as it was (same box, crop, blur, dimming,
+    opacity, rotation), through its subject matte framed the same way. Outside the
+    subject the matte is black, so nothing changes there; on the subject, the subject
+    covers the words and whatever panel was drawn between them, so the person stands
+    in front of the band as well as the letters.
+    """
+    if text.behind is None:
+        return ""
+    photo = next((one for one in spec.layers if one.id == text.behind), None)
+    if not isinstance(photo, ImageLayer) or not photo.visible or photo.fit != "cover":
+        return ""
+    picture = assets.get(photo.asset) if photo.asset else None
+    matte = assets.get(photo.subject) if photo.subject else None
+    if picture is None or matte is None:
+        return ""
+    with Image.open(picture) as image:
+        size = image.size
+    geom = box_px(spec, photo)
+    x, y, w, h = geom
+    ix, iy, iw, ih = _framing(photo, geom, size)
+    # A hyphen never appears in a layer id, so these ids never meet the photo's own.
+    again = photo.model_copy(update={"id": f"{photo.id}-{text.id}"})
+    mask_id = f"subject-{photo.id}-{text.id}"
+    attrs = [f'mask="url(#{mask_id})"']
+    if photo.opacity < 1.0:
+        attrs.append(f'opacity="{photo.opacity:.4f}"')
+    if photo.box.rotation:
+        attrs.append(
+            f'transform="rotate({photo.box.rotation:.3f} {x + w / 2:.2f} {y + h / 2:.2f})"'
+        )
+    return (
+        f'<defs><mask id="{mask_id}" maskUnits="userSpaceOnUse" x="{x:.2f}" y="{y:.2f}" '
+        f'width="{w:.2f}" height="{h:.2f}"><image x="{ix:.2f}" y="{iy:.2f}" '
+        f'width="{iw:.2f}" height="{ih:.2f}" href="{_href(matte)}" '
+        f'preserveAspectRatio="none"/></mask></defs>'
+        f"<g {' '.join(attrs)}>{_image_svg(again, spec, geom, picture, kit)}</g>"
     )
 
 
@@ -128,7 +182,7 @@ def _image_svg(
         else:
             body = (
                 f'<image x="{x:.2f}" y="{y:.2f}" width="{w:.2f}" height="{h:.2f}" '
-                f'href="{escape(href, {chr(34): "&quot;"})}" preserveAspectRatio="{preserve}"/>'
+                f'href="{_href(href)}" preserveAspectRatio="{preserve}"/>'
             )
         if isinstance(layer, ImageLayer) and layer.blur > 0:
             body = _blurred(layer, spec, geom, body)
@@ -205,5 +259,7 @@ def build_svg(
             href = assets.get(layer.asset) if layer.asset else None
             body.append(_image_svg(layer, spec, geom, href, kit))
         body.append("</g>")
+        if isinstance(layer, TextLayer):
+            body.append(_in_front(layer, spec, assets, kit))
     body.append("</svg>")
     return "".join(body)

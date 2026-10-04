@@ -51,6 +51,7 @@ from stratum_spec.models import Aspect
 
 from stratum_worker.draft.models import Flag
 from stratum_worker.draft.preflight import STORY_SAFE_BOTTOM, STORY_SAFE_TOP
+from stratum_worker.photo.depth import decide_depth
 from stratum_worker.photo.read import PhotoRead
 from stratum_worker.render.layout import box_px, crop_window, place_text
 from stratum_worker.render.text import load_metrics
@@ -324,11 +325,21 @@ def _inside(inner: Rect, outer: Rect) -> bool:
 
 
 def covers_over(
-    spec: PosterSpec, index: int, kit: BrandKit, root: Path, *, furniture: bool = True
+    spec: PosterSpec,
+    index: int,
+    kit: BrandKit,
+    root: Path,
+    *,
+    furniture: bool = True,
+    depth: bool = False,
 ) -> list[Cover]:
     """Everything drawn over the photo at `index` in this one-size spec, in its box.
 
     `furniture` adds the bands a story's profile row and buttons sit on (9:16).
+    `depth` counts words behind this photo's subject (schema 6), and everything drawn
+    between the photo and those words, as hiding none of the subject: the subject is
+    drawn again in front of them. Crops are chosen without it (depth never steers a
+    crop); the cost of a framed poster and its face check use it.
     """
     photo = spec.layers[index]
     px, py, pw, ph = box_px(spec, photo)
@@ -344,9 +355,19 @@ def covers_over(
                 Cover((x0 - px) / pw, (y0 - py) / ph, (x1 - x0) / pw, (y1 - y0) / ph, weight, words)
             )
 
+    # With depth, the subject is drawn again just above the last words behind it.
+    redrawn = max(
+        (
+            above
+            for above, layer in enumerate(spec.layers)
+            if depth and isinstance(layer, TextLayer) and layer.behind == photo.id
+        ),
+        default=-1,
+    )
     for above, layer in enumerate(spec.layers[index + 1 :], start=index + 1):
         if not layer.visible:
             continue
+        hides = 1.0 if above > redrawn else 0.0
         if isinstance(layer, TextLayer):
             ink = _ink(layer, spec, kit, root)
             # The panels between the photo and these letters already hide the photo
@@ -359,9 +380,9 @@ def covers_over(
                     and _inside(ink, box_px(spec, between))
                 ):
                     backing = backing + (1 - backing) * between.opacity
-            add(ink, 1.0 - backing, words=1.0 - backing)
+            add(ink, (1.0 - backing) * hides, words=1.0 - backing)
         else:  # a panel, the logo, a cutout, another photo
-            add(box_px(spec, layer), layer.opacity)
+            add(box_px(spec, layer), layer.opacity * hides)
 
     # A photo that runs off the canvas: the part outside is never seen.
     far = 10.0 * max(width, height)
@@ -390,24 +411,16 @@ def _framable(layer: object) -> bool:
     )
 
 
-def frame_photos(
+def _framed(
     spec: PosterSpec,
     reads: Mapping[str, PhotoRead],
     kit: BrandKit,
     root: Path,
-    aspects: Iterable[Aspect],
-    *,
-    only: set[str] | None = None,
+    sizes: list[Aspect],
+    only: set[str] | None,
 ) -> PosterSpec:
-    """The poster with a crop chosen for every photo, in its own size and each of
-    `aspects`. `reads` maps an asset id to its photo read; a photo without one keeps
-    whatever crop it had. `only` limits the work to those layer ids (a swapped photo).
-
-    A poster that carries no sizes of its own (made before schema 3, laid out from
-    its template file) gets a crop in its own size only; the others inherit it.
-    """
+    """`spec` with a crop chosen for each photo in each size (see `frame_photos`)."""
     base = spec.canvas.aspect
-    sizes: list[Aspect] = [base] if not spec.variants else list(dict.fromkeys([base, *aspects]))
     chosen: dict[Aspect, dict[str, Crop]] = {}
     for aspect in sizes:
         one = retarget(spec, aspect) if aspect != base else spec
@@ -438,6 +451,32 @@ def frame_photos(
     return spec.model_copy(update={"layers": layers, "variants": variants})
 
 
+def frame_photos(
+    spec: PosterSpec,
+    reads: Mapping[str, PhotoRead],
+    kit: BrandKit,
+    root: Path,
+    aspects: Iterable[Aspect],
+    *,
+    only: set[str] | None = None,
+) -> PosterSpec:
+    """The poster with a crop chosen for every photo, in its own size and each of
+    `aspects`. `reads` maps an asset id to its photo read; a photo without one keeps
+    whatever crop it had. `only` limits the work to those layer ids (a swapped photo).
+
+    A poster that carries no sizes of its own (made before schema 3, laid out from
+    its template file) gets a crop in its own size only; the others inherit it.
+
+    Depth (M10g): crops are chosen with every word in front, then the headline goes
+    behind the subject only where that framing already puts a head into it and the
+    words can still be read (`depth.decide_depth`).
+    """
+    base = spec.canvas.aspect
+    sizes: list[Aspect] = [base] if not spec.variants else list(dict.fromkeys([base, *aspects]))
+    framed = _framed(spec, reads, kit, root, sizes, only)
+    return decide_depth(framed, reads, kit, root, sizes)
+
+
 def framing_cost(
     spec: PosterSpec, reads: Mapping[str, PhotoRead], kit: BrandKit, root: Path
 ) -> float:
@@ -454,7 +493,7 @@ def framing_cost(
         if read is None:
             continue
         _, _, box_w, box_h = box_px(spec, layer)
-        covers = covers_over(spec, index, kit, root)
+        covers = covers_over(spec, index, kit, root, depth=True)
         total += crop_cost(read, (box_w, box_h), covers, layer.crop)
     return total
 
@@ -479,7 +518,7 @@ def face_flags(
         win_x, win_y, win_w, win_h = crop_window(read.size, (box_w, box_h), layer.crop)
         x, y = np.array([win_x / width]), np.array([win_y / height])
         w, h = np.array([win_w / width]), np.array([win_h / height])
-        covers = covers_over(spec, index, kit, root, furniture=False)
+        covers = covers_over(spec, index, kit, root, furniture=False, depth=True)
         for face in read.faces:
             if face.h < FLAG_FACE:
                 continue

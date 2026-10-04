@@ -86,6 +86,7 @@ from stratum_worker.gateway.tasks import (
 from stratum_worker.photo.check import fitness, upload_check
 from stratum_worker.photo.frame import face_flags, frame_photos
 from stratum_worker.photo.read import PhotoRead, read_photo
+from stratum_worker.photo.subject import matte
 
 OPS = TypeAdapter(list[EditOp])
 HEX = re.compile(r"#[0-9a-f]{6}")
@@ -120,7 +121,7 @@ async def render_preview(
     if path.is_file():
         return path.read_bytes()
     spec = load_spec(version["spec"])
-    bound = {getattr(one, "asset", None) for one in spec.layers if getattr(one, "asset", None)}
+    bound = spec.assets()
     asset_paths = {s: await local_path(ctx, s) for s in bound if isinstance(s, str)}
     one = retarget(spec, aspect, file_variants(ctx, post["template_id"]))
     kit = await kit_for(ctx, client, spec.brand_kit_version)
@@ -475,6 +476,69 @@ async def photo_reads(spec: PosterSpec, asset_paths: dict[str, str]) -> dict[str
     return dict(zip(shas, reads, strict=True))
 
 
+# A matte depends only on the photo's pixels and is stored by content, so one per
+# photo per agency is made in a process's lifetime: (agency, photo) -> matte.
+_MATTES: dict[tuple[str, str], str] = {}
+
+
+def _matte_png(path: str) -> bytes:
+    from PIL import Image
+
+    with Image.open(path) as image:
+        made = matte(image)
+    out = io.BytesIO()
+    made.save(out, "PNG")
+    return out.getvalue()
+
+
+async def matte_for(ctx: Context, photo: str) -> str:
+    """The subject matte of one photo as an asset of its own (M10g): kept on this
+    machine and in storage beside the photo, so any machine can draw it. No asset
+    row: it is not a photo anyone chose, and it is never offered as one."""
+    import tempfile
+
+    key = (ctx.agency_id, photo)
+    if key in _MATTES:
+        return _MATTES[key]
+    data = await asyncio.to_thread(_matte_png, await local_path(ctx, photo))
+    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as handle:
+        handle.write(data)
+        temp = Path(handle.name)
+    try:
+        meta = ctx.store.put(temp, source="generated")
+    finally:
+        temp.unlink(missing_ok=True)
+    await ctx.supa.upload(
+        f"{ctx.agency_id}/assets/{meta.sha256}.png",
+        ctx.store.path_for(meta.sha256, "full").read_bytes(),
+        "image/png",
+    )
+    _MATTES[key] = meta.sha256
+    return meta.sha256
+
+
+async def with_mattes(ctx: Context, spec: PosterSpec, asset_paths: dict[str, str]) -> PosterSpec:
+    """Every photo with words behind its subject gets the subject's matte (schema 6),
+    and `asset_paths` learns where it is. Before a poster is drawn or kept: a poster
+    saying "behind" without a matte is drawn with the words in front."""
+    wanted = {
+        layer.behind for layer in spec.layers if isinstance(layer, TextLayer) and layer.behind
+    }
+    layers = []
+    for layer in spec.layers:
+        if (
+            isinstance(layer, ImageLayer)
+            and layer.id in wanted
+            and layer.asset is not None
+            and layer.subject is None
+        ):
+            layer = layer.model_copy(update={"subject": await matte_for(ctx, layer.asset)})
+        if isinstance(layer, ImageLayer) and layer.subject and layer.subject not in asset_paths:
+            asset_paths[layer.subject] = await local_path(ctx, layer.subject)
+        layers.append(layer)
+    return spec.model_copy(update={"layers": layers}) if wanted else spec
+
+
 def swapped_photos(before: PosterSpec, after: PosterSpec) -> set[str]:
     """Photo layers whose photo an edit replaced."""
     old = {layer.id: getattr(layer, "asset", None) for layer in before.layers}
@@ -779,6 +843,7 @@ async def draft(ctx: Context, post: dict[str, Any], client: dict[str, Any]) -> d
     # the words over the calmest part. Chosen once, here, and stored in the poster.
     reads = await photo_reads(spec, asset_paths)
     spec = frame_photos(spec, reads, kit, ctx.settings.repo_root, post["aspects"])
+    spec = await with_mattes(ctx, spec, asset_paths)
     renders, layout_flags = await render_versions(ctx, post, spec, variants, asset_paths, kit)
     flags.extend(layout_flags)
     flags.extend(check_copy(words, rules_of(client), post["brief"]))
@@ -947,7 +1012,7 @@ async def tweak(
     # to any colour the message names, this design's style settings, and the last
     # few changes.
     fits = measure(spec, kit, root=ctx.settings.repo_root)
-    bound = {getattr(layer, "asset", None) for layer in spec.layers}
+    bound = spec.assets()
     asset_paths = {sha: await local_path(ctx, sha) for sha in bound if isinstance(sha, str)}
     sizes, photos, recent = await asyncio.gather(
         actions.photo_sizes(asset_paths),
@@ -1124,6 +1189,7 @@ async def commit_change(
     shas = {getattr(layer, "asset", None) for layer in changed.layers}
     asset_paths = {sha: await local_path(ctx, sha) for sha in shas if isinstance(sha, str)}
     changed = await reframe(ctx, base, changed, asset_paths, kit, post["aspects"])
+    changed = await with_mattes(ctx, changed, asset_paths)
     renders, flags = await render_versions(ctx, shaped, changed, variants, asset_paths, kit)
 
     # An edit can change the words on the poster, so the claims are checked again -
@@ -1341,7 +1407,7 @@ async def inspect_post(
     spec = load_spec(latest["spec"])
     kit = await kit_for(ctx, client, spec.brand_kit_version)
     one = retarget(spec, aspect, file_variants(ctx, post["template_id"]))
-    bound = {getattr(layer, "asset", None) for layer in one.layers}
+    bound = one.assets()
     asset_paths = {sha: await local_path(ctx, sha) for sha in bound if isinstance(sha, str)}
     sizes, photos = await asyncio.gather(
         actions.photo_sizes(asset_paths), actions.client_photos(ctx, client)
@@ -1387,7 +1453,7 @@ async def _prepare(
         raise DraftError("that version is gone")
     spec = load_spec(versions[0]["spec"])
     variants = file_variants(ctx, post["template_id"])
-    bound = {getattr(one, "asset", None) for one in spec.layers if getattr(one, "asset", None)}
+    bound = spec.assets()
     assets = {s: await local_path(ctx, s) for s in bound if isinstance(s, str)}
     kit = await kit_for(ctx, client, spec.brand_kit_version)
     return _Prepared(spec, variants, kit, assets)
@@ -1555,10 +1621,11 @@ async def quick(
         raise DraftError("that design has nothing to change that way")
 
     changed = apply_ops(spec, ops)
-    bound = {getattr(one, "asset", None) for one in changed.layers if getattr(one, "asset", None)}
+    bound = changed.assets()
     asset_paths = {s: await local_path(ctx, s) for s in bound if isinstance(s, str)}
     kit = await kit_for(ctx, client, changed.brand_kit_version)
     changed = await reframe(ctx, spec, changed, asset_paths, kit, post["aspects"])
+    changed = await with_mattes(ctx, changed, asset_paths)
     renders, flags = await render_versions(
         ctx, post, changed, file_variants(ctx, post["template_id"]), asset_paths, kit
     )
