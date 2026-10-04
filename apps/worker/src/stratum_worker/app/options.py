@@ -127,6 +127,7 @@ async def draft_options(
     except NothingFits as exc:
         raise DraftError(str(exc)) from exc
     options = choose(ranked, seed=seed)
+    specs = [await service.with_mattes(ctx, o.candidate.spec, asset_paths) for o in options]
 
     batch = str(uuid.uuid4())
     rows = await ctx.supa.insert(
@@ -139,7 +140,7 @@ async def draft_options(
                 "slot": option.slot,
                 "position": option.position,
                 "design_id": option.candidate.design_id,
-                "spec": option.candidate.spec.model_dump(mode="json"),
+                "spec": spec.model_dump(mode="json"),
                 "score": round(option.candidate.score, 6),
                 "propensity": option.propensity,
                 "explored": option.explored,
@@ -149,12 +150,11 @@ async def draft_options(
                     "candidates": len(ranked),
                 },
             }
-            for option in options
+            for option, spec in zip(options, specs, strict=True)
         ],
     )
 
-    best = next(option for option in options if option.slot == 1)
-    spec = best.candidate.spec
+    best, spec = next((o, one) for o, one in zip(options, specs, strict=True) if o.slot == 1)
     chosen = {**post, "template_id": best.candidate.design_id}
     renders, layout_flags = await service.render_versions(ctx, chosen, spec, {}, asset_paths, kit)
     flags.extend(layout_flags)
@@ -243,7 +243,7 @@ async def pick_option(
         # it is not a new version.
         version = versions[0]
     else:
-        bound = {getattr(one, "asset", None) for one in spec.layers}
+        bound = spec.assets()
         asset_paths = {s: await service.local_path(ctx, s) for s in bound if isinstance(s, str)}
         kit = await service.kit_for(ctx, client, spec.brand_kit_version)
         chosen = {**post, "template_id": option["design_id"]}

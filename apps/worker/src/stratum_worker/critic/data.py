@@ -24,6 +24,7 @@ from stratum_spec.models import Aspect, PosterSpec
 
 from stratum_worker.critic.damage import DAMAGES, LEVELS
 from stratum_worker.critic.features import FEATURES, edge_map, measure
+from stratum_worker.design.families import FAMILIES
 from stratum_worker.design.preview import FAKE_SHA, scene
 from stratum_worker.design.space import SIZES, everything, lay_out
 from stratum_worker.design.typeset import Copy
@@ -201,7 +202,7 @@ def groups(
             if templates:
                 candidates += list(_templates(root, copy, kit))
             for family, spec in candidates:
-                family = family if family in ("panel", "overlay", "pair", "type") else "template"
+                family = family if family in FAMILIES else "template"
                 if exclude_family and family == exclude_family:
                     continue
                 if only_family and family != only_family:

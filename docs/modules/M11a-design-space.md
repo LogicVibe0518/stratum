@@ -20,7 +20,7 @@ the more good options there are to choose from, the more a good chooser gains.
 
 ## What it is
 
-**Four families**, each one layout idea with a few honest choices:
+**Five families** (four from M11a, `cover` from M10g), each one layout idea with a few honest choices:
 
 | family | the idea | choices | designs |
 |---|---|---|---|
@@ -28,8 +28,9 @@ the more good options there are to choose from, the more a good chooser gains.
 | `overlay` | a full-bleed photo with the words on a scrim, band or card | top or bottom, treatment, alignment, rule, logo corner, scale | 96 |
 | `pair` (**Two photos**) | two of the client's own photos, then the words | split, gutter, colour, alignment, rule, logo place, scale | 192 |
 | `type` | no photo; the words are the design | colour, alignment, rule, centred or low, logo top or bottom, scale | 72 valid of 96 |
+| `cover` (**Headline across the top**, added in M10g) | a full-bleed photo; the headline on a band at the top, the details and logo on a band at the foot | band or dark fade, alignment, logo side, scale | 16, where the bands leave 35% of the page to the photo |
 
-That is 648 designs per post. With every fictional brand kit and a real brief, all
+That is 648 designs per post, plus the covers that fit the words. With every fictional brand kit and a real brief, all
 648 lay out in all four sizes with no preflight flag of any kind. That is 12,960
 layouts checked.
 

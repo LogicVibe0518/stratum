@@ -95,7 +95,7 @@ async def make_screens(
             skipped.append(post["slug"])
             continue
         try:
-            material, _ = await material_for(
+            material, asset_paths = await material_for(
                 ctx, client, words, service.brand_of(client), photos, None
             )
             ranked = await asyncio.to_thread(
@@ -121,7 +121,9 @@ async def make_screens(
                             "bucket": one.bucket,
                             "rank": one.rank,
                             "score": round(one.candidate.score, 6),
-                            "spec": one.candidate.spec.model_dump(mode="json"),
+                            "spec": (
+                                await service.with_mattes(ctx, one.candidate.spec, asset_paths)
+                            ).model_dump(mode="json"),
                         }
                         for one in chosen
                     ],
