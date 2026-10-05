@@ -125,3 +125,19 @@ def test_lab_functions_do_not_read_ranking_fields() -> None:
         body = _function_body(name)
         for word in ("bucket", "rank", "score", "family"):
             assert word not in body, f"{name} reads {word}"
+
+
+def test_brief_gaps_do_not_put_server_strings_into_markup() -> None:
+    body = _function_body("paintBriefGaps")
+    assert "innerHTML" not in body
+    assert "textContent" in body
+
+
+def test_the_brief_box_checks_while_you_type() -> None:
+    assert "/brief/check" in PAGE
+    assert "AbortController" in PAGE
+
+
+def test_the_post_shows_questions_for_the_client() -> None:
+    assert "words.missing" in PAGE
+    assert "Ask the client" in PAGE
