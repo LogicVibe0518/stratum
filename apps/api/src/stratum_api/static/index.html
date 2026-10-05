@@ -232,6 +232,46 @@ button.card:hover:not(:disabled) { border-color: var(--line-strong); background:
   color: var(--muted);
 }
 .tweak-dot { width: 14px; height: 14px; flex: none; pointer-events: none; }
+.lab-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  width: min(720px, 100%);
+}
+.lab-card { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.lab-pick {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  width: 100%;
+  height: auto;
+  padding: 8px;
+  text-align: left;
+  font-weight: 400;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.lab-pick.picked { border: 2px solid var(--focus); }
+.lab-pick img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 5;
+  object-fit: cover;
+  background: var(--raised);
+}
+.lab-picked-mark { font-size: 13px; min-height: 1.2em; }
+.lab-never { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.lab-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.lab-chips button { height: auto; min-height: 36px; }
+.lab-chips button[aria-pressed="true"] { background: var(--text); color: var(--bg); border-color: var(--text); }
+#labfields { border: 0; margin: 0; padding: 0; min-width: 0; }
+#labfields:disabled { opacity: 0.65; }
+.lab-actions { margin-top: 12px; }
+#labstatus:empty { display: none; }
+#labexport { margin-top: 16px; padding: 0; height: auto; font-size: 13px; color: var(--muted); }
 .hide { display: none !important; }
 header.top {
   height: 56px;
@@ -899,6 +939,8 @@ button, input, select, textarea, .card, .badge, .drop, .switch-ui, .toast {
     gap: 10px;
   }
   .options-card { flex: 0 0 40%; width: 40%; }
+  .lab-grid { gap: 8px; }
+  .lab-pick { padding: 6px; }
 }
 @media (max-width: 600px) {
   .brand-chip { flex: 1 1 calc(25% - 12px); min-width: calc(25% - 12px); }
@@ -921,6 +963,7 @@ button, input, select, textarea, .card, .badge, .drop, .switch-ui, .toast {
   <nav id="crumbs" class="crumbs" aria-label="Breadcrumb"></nav>
   <div class="bar-right">
     <span id="who" class="muted who hide"></span>
+    <button type="button" class="ghost hide" id="labbtn">Taste Lab</button>
     <div class="menu">
       <button type="button" class="secondary" id="themebtn" aria-haspopup="menu" aria-expanded="false" aria-controls="thememenu">Theme</button>
       <div id="thememenu" class="menu-pop" role="menu" hidden>
@@ -1137,6 +1180,29 @@ button, input, select, textarea, .card, .badge, .drop, .switch-ui, .toast {
       </aside>
     </div>
   </section>
+
+  <section id="lab" class="hide">
+    <div class="section-head">
+      <h1>Which would you send the client?</h1>
+    </div>
+    <p class="muted" id="labmeta"></p>
+    <fieldset id="labfields">
+      <div class="lab-grid" id="labgrid"></div>
+      <p class="muted" id="labkeys">1–4 pick a design · 0 none of these · Shift+1–4 never send · Enter next</p>
+      <div id="labreasonbox"></div>
+      <div class="actions lab-actions">
+        <button type="button" class="secondary" id="labnone">None of these</button>
+        <button type="button" class="primary" id="labnext" disabled>Next</button>
+      </div>
+    </fieldset>
+    <div id="labdone" class="hide">
+      <p>You have rated every screen.</p>
+      <button type="button" class="secondary hide" id="labmake">Make more screens</button>
+    </div>
+    <p class="muted" id="labprogress"></p>
+    <p id="labstatus" role="status"></p>
+    <button type="button" class="ghost" id="labexport">Download labels</button>
+  </section>
 </main>
 
 <dialog id="clientdialog" aria-labelledby="clientdialogtitle">
@@ -1194,18 +1260,19 @@ button, input, select, textarea, .card, .badge, .drop, .switch-ui, .toast {
 const $ = (id) => document.getElementById(id);
 
 function show(id) {
-  ["auth", "join", "clients", "client", "post"].forEach((section) => {
+  ["auth", "join", "clients", "client", "post", "lab"].forEach((section) => {
     $(section).classList.toggle("hide", section !== id);
   });
   document.body.classList.toggle("gate", id === "auth" || id === "join");
   $("signout").classList.toggle("hide", id === "auth");
+  $("labbtn").classList.toggle("hide", id === "auth" || id === "join");
   $("who").classList.toggle("hide", id === "auth" || id === "join");
   $("crumbs").classList.toggle("hide", id === "auth" || id === "join");
   if (id === "auth" || id === "join") $("back").classList.add("hide");
   if (id !== "post") closeCanvaMenu(false);
 }
 
-let CONF = null, SESSION = null, CLIENT = null, POST = null;
+let CONF = null, SESSION = null, CLIENT = null, POST = null, ME = null;
 let POSTDATA = null;
 let INSPECT = null;
 let inspecting = null;
@@ -1213,6 +1280,12 @@ let inspectGen = 0;
 let selectedLayer = null;
 let editorTab = "layers";
 let showMeasure = false;
+let LABSCREEN = null;
+let labPicked = undefined;
+let labNever = new Set();
+let labChosenReasons = new Set();
+let labReadyAt = null;
+let labBusy = false;
 let upAction = null;
 let viewToken = 0;
 let making = false;
@@ -3934,6 +4007,304 @@ $("download").addEventListener("click", async () => {
   }
 });
 
+// --- Taste Lab --------------------------------------------------------------------
+
+function labRequest(path, options) {
+  return api(path.startsWith("/api") ? path.slice(4) : path, options);
+}
+
+function canMakeLabScreens() {
+  return ME && (ME.role === "owner" || ME.role === "designer");
+}
+
+function labProgressLine(progress) {
+  const data = progress || {};
+  const parts = [`You have rated ${Number(data.mine) || 0}`];
+  const agree = data.agreement || {};
+  if (agree.rate != null) {
+    parts.push(`Raters agree ${Math.round(Number(agree.rate) * 100)}% (${agree.pairs} pairs)`);
+  }
+  const self = data.self_consistency || {};
+  if (self.rate != null) {
+    const repeats = Number(self.repeats) || 0;
+    parts.push(`Your repeats match ${Math.round(Number(self.rate) * repeats)} of ${repeats}`);
+  }
+  return parts.join(" · ");
+}
+
+function setLabBusy(on) {
+  labBusy = Boolean(on);
+  $("labfields").disabled = labBusy;
+  $("labmake").disabled = labBusy;
+  $("labexport").disabled = labBusy;
+  $("labnext").textContent = labBusy && $("labdone").classList.contains("hide") ? "Saving…" : "Next";
+}
+
+function syncLabChoice() {
+  const cards = (LABSCREEN && LABSCREEN.cards) || [];
+  const nodes = $("labgrid").children;
+  for (let i = 0; i < nodes.length && i < cards.length; i += 1) {
+    const card = cards[i];
+    const pick = nodes[i].querySelector(".lab-pick");
+    const mark = nodes[i].querySelector(".lab-picked-mark");
+    const box = nodes[i].querySelector("input[type='checkbox']");
+    const chosen = labPicked === card.design;
+    pick.classList.toggle("picked", chosen);
+    pick.setAttribute("aria-pressed", chosen ? "true" : "false");
+    mark.textContent = chosen ? "Picked" : "";
+    if (box) box.checked = labNever.has(card.design);
+  }
+  $("labnone").setAttribute("aria-pressed", labPicked === null ? "true" : "false");
+  $("labnext").disabled = labBusy || labPicked === undefined;
+}
+
+function pickLabDesign(design) {
+  if (labBusy || !LABSCREEN) return;
+  labPicked = design;
+  labNever.delete(design);
+  syncLabChoice();
+}
+
+function pickLabNone() {
+  if (labBusy || !LABSCREEN) return;
+  labPicked = null;
+  syncLabChoice();
+}
+
+function toggleLabNever(design) {
+  if (labBusy || !LABSCREEN) return;
+  if (labNever.has(design)) labNever.delete(design);
+  else {
+    labNever.add(design);
+    if (labPicked === design) labPicked = undefined;
+  }
+  syncLabChoice();
+}
+
+function labCard(card, position) {
+  const wrap = document.createElement("div");
+  wrap.className = "lab-card";
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "lab-pick";
+  button.setAttribute("aria-label", `Design ${position}`);
+  button.setAttribute("aria-pressed", "false");
+  const img = document.createElement("img");
+  img.alt = "";
+  img.dataset.src = safeSrc(String(card.preview || "").replaceAll("{shape}", "4x5"));
+  const mark = document.createElement("span");
+  mark.className = "lab-picked-mark";
+  button.append(img, mark);
+  button.addEventListener("click", () => { pickLabDesign(card.design); });
+  const never = document.createElement("label");
+  never.className = "lab-never";
+  const box = document.createElement("input");
+  box.type = "checkbox";
+  box.addEventListener("change", () => { toggleLabNever(card.design); });
+  const text = document.createElement("span");
+  text.textContent = "Never send";
+  never.append(box, text);
+  wrap.append(button, never);
+  return wrap;
+}
+
+function labReasons(reasons) {
+  const root = document.createElement("div");
+  const label = document.createElement("p");
+  label.className = "muted";
+  label.textContent = "Optional: anything wrong?";
+  const chips = document.createElement("div");
+  chips.className = "lab-chips";
+  for (const reason of reasons || []) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "secondary";
+    button.textContent = reason;
+    button.setAttribute("aria-pressed", labChosenReasons.has(reason) ? "true" : "false");
+    button.addEventListener("click", () => {
+      if (labBusy) return;
+      if (labChosenReasons.has(reason)) labChosenReasons.delete(reason);
+      else labChosenReasons.add(reason);
+      button.setAttribute("aria-pressed", labChosenReasons.has(reason) ? "true" : "false");
+    });
+    chips.append(button);
+  }
+  root.append(label, chips);
+  return root;
+}
+
+async function paintLab(data) {
+  LABSCREEN = data;
+  labPicked = undefined;
+  labNever = new Set();
+  labChosenReasons = new Set();
+  labReadyAt = null;
+  $("labstatus").textContent = "";
+  $("labprogress").textContent = labProgressLine(data && data.progress);
+  $("labgrid").replaceChildren();
+  $("labreasonbox").replaceChildren();
+  const done = Boolean(data && data.done);
+  $("labfields").classList.toggle("hide", done);
+  $("labdone").classList.toggle("hide", !done);
+  $("labmeta").textContent = "";
+  $("labmake").classList.toggle("hide", !done || !canMakeLabScreens());
+  $("labnext").disabled = true;
+  $("labnext").textContent = "Next";
+  if (done) return;
+  const post = (data && data.post) || {};
+  const client = post.client || "";
+  const brief = post.brief || "";
+  $("labmeta").textContent = [client, brief].filter(Boolean).join(" · ");
+  const cards = (data && data.cards) || [];
+  const gen = ++previewGen;
+  revokePreviews();
+  cards.forEach((card, index) => {
+    $("labgrid").append(labCard(card, index + 1));
+  });
+  $("labreasonbox").append(labReasons(data.reasons || []));
+  syncLabChoice();
+  await loadPreviews($("labgrid"), false, gen);
+  if (LABSCREEN !== data) return;
+  labReadyAt = performance.now();
+}
+
+async function openLab() {
+  const token = ++viewToken;
+  show("lab");
+  setCrumbs([
+    { label: "Clients", action: () => { clients(); } },
+    { label: "Taste Lab" },
+  ]);
+  setLabBusy(false);
+  $("labstatus").textContent = "";
+  try {
+    const [screen, progress] = await Promise.all([
+      labRequest("/api/lab/next"),
+      labRequest("/api/lab/progress"),
+    ]);
+    if (token !== viewToken) return;
+    if (screen && !screen.progress) screen.progress = progress;
+    await paintLab(screen);
+  } catch (err) {
+    if (token !== viewToken) return;
+    $("labstatus").textContent = sentence(err);
+  }
+}
+
+async function submitLab() {
+  if (labBusy || !LABSCREEN || LABSCREEN.done || labPicked === undefined) return;
+  const ms = labReadyAt == null ? 0 : Math.max(0, Math.round(performance.now() - labReadyAt));
+  setLabBusy(true);
+  $("labstatus").textContent = "";
+  try {
+    const out = await api(`/lab/screens/${encodeURIComponent(LABSCREEN.screen_id)}/answer`, {
+      method: "POST",
+      json: {
+        served: LABSCREEN.served,
+        picked: labPicked,
+        never: [...labNever],
+        reasons: [...labChosenReasons],
+        ms,
+        repeat: Boolean(LABSCREEN.repeat),
+      },
+    });
+    const next = await labRequest("/api/lab/next");
+    if (next && !next.progress && out.progress) next.progress = out.progress;
+    setLabBusy(false);
+    await paintLab(next);
+  } catch (err) {
+    $("labstatus").textContent = sentence(err);
+    setLabBusy(false);
+    syncLabChoice();
+  }
+}
+
+async function waitForLabJob(jobId) {
+  const started = performance.now();
+  for (;;) {
+    const job = await api(`/jobs/${jobId}`);
+    if (job.status === "done") return job.result || {};
+    if (job.status === "failed") throw new Error(job.last_error || "making screens failed");
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    if (performance.now() - started > 30 * 60 * 1000) throw new Error("making screens took too long");
+  }
+}
+
+async function makeLabScreens() {
+  if (labBusy || !canMakeLabScreens()) return;
+  setLabBusy(true);
+  $("labstatus").textContent = "Making screens… about a minute per few posts";
+  try {
+    const out = await api("/lab/screens", { method: "POST", json: {} });
+    const result = await waitForLabJob(out.job_id);
+    if ((result.screens || 0) === 0) {
+      $("labstatus").textContent = "No posts with words and photos yet. Make a few posts first.";
+      setLabBusy(false);
+      return;
+    }
+    setLabBusy(false);
+    await openLab();
+  } catch (err) {
+    $("labstatus").textContent = sentence(err);
+    setLabBusy(false);
+  }
+}
+
+async function downloadLabLabels() {
+  if (labBusy) return;
+  try {
+    let res = await fetch("/api/lab/export", { headers: await authHeader() });
+    if (res.status === 401 && await freshSession(true)) {
+      res = await fetch("/api/lab/export", { headers: await authHeader() });
+    }
+    if (res.status === 401) {
+      SESSION = null;
+      save();
+      show("auth");
+      throw new Error("please sign in again");
+    }
+    if (!res.ok) throw new Error(await errorText(res));
+    const url = URL.createObjectURL(await res.blob());
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "taste-lab.jsonl";
+    link.click();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    if (SESSION) toast(sentence(err));
+  }
+}
+
+function onLabKey(event) {
+  if ($("lab").classList.contains("hide") || labBusy) return;
+  // Cmd/Ctrl/Alt + a number belong to the browser (switching tabs), not to the lab.
+  if (event.metaKey || event.ctrlKey || event.altKey) return;
+  if (event.key === "Enter") {
+    event.preventDefault();
+    submitLab();
+    return;
+  }
+  const digit = event.code && event.code.startsWith("Digit") ? event.code.slice(5) : "";
+  const cards = (LABSCREEN && LABSCREEN.cards) || [];
+  if (digit >= "1" && digit <= "4") {
+    const card = cards[Number(digit) - 1];
+    if (!card) return;
+    event.preventDefault();
+    if (event.shiftKey) toggleLabNever(card.design);
+    else pickLabDesign(card.design);
+  } else if (digit === "0" && !event.shiftKey) {
+    event.preventDefault();
+    pickLabNone();
+  }
+}
+
+$("labbtn").addEventListener("click", () => { openLab(); });
+$("labnone").addEventListener("click", () => { pickLabNone(); });
+$("labnext").addEventListener("click", () => { submitLab(); });
+$("labmake").addEventListener("click", () => { makeLabScreens(); });
+$("labexport").addEventListener("click", () => { downloadLabLabels(); });
+document.addEventListener("keydown", onLabKey);
+
 // --- shell ------------------------------------------------------------------------
 
 function wireRadios(container) {
@@ -4044,6 +4415,7 @@ async function start() {
     if (!SESSION) { show("auth"); return; }
     const me = await api("/me");
     if (!me || !me.agency_id) { show("join"); return; }
+    ME = me;
     $("who").textContent = `${me.agency_name} · ${me.role}`;
     await clients();
   } catch (err) {
