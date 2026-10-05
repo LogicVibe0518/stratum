@@ -237,14 +237,21 @@ def build_svg(
     *,
     assets: Mapping[str, str] | None = None,
     root: Path | None = None,
+    width: int | None = None,
 ) -> str:
-    """Render one spec to an SVG document. `assets` maps a SHA-256 to a file path."""
+    """Render one spec to an SVG document. `assets` maps a SHA-256 to a file path.
+
+    `width` draws the whole poster smaller (the height follows): the layout is the
+    poster's own, only the picture is scaled. For quick looks, never for output.
+    """
     assets = assets or {}
     root = root or Path.cwd()
-    width, height = spec.canvas.size
+    canvas_w, canvas_h = spec.canvas.size
+    out_w = width or canvas_w
+    out_h = max(1, round(out_w * canvas_h / canvas_w))
     body: list[str] = [
         f'<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" '
-        f'width="{width}" height="{height}" viewBox="0 0 {width} {height}">'
+        f'width="{out_w}" height="{out_h}" viewBox="0 0 {canvas_w} {canvas_h}">'
     ]
     for layer in spec.layers:
         if not layer.visible:

@@ -18,10 +18,14 @@ def render_poster(
     *,
     assets: dict[str, str] | None = None,
     root: Path | None = None,
+    width: int | None = None,
 ) -> bytes:
-    """One poster, one PNG. Same inputs always produce the same bytes."""
+    """One poster, one PNG. Same inputs always produce the same bytes.
+
+    `width` gives a small picture of the same poster (quick looks, e.g. the Taste Lab
+    checking two designs differ); output is always drawn at the canvas size."""
     root = root or Path.cwd()
-    svg = build_svg(spec, kit, assets=assets, root=root)
+    svg = build_svg(spec, kit, assets=assets, root=root, width=width)
     return rasterize(svg, font_dir=root / DEFAULT_FONT_DIR, resources_dir=root)
 
 
