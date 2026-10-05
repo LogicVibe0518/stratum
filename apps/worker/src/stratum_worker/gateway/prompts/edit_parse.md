@@ -38,6 +38,10 @@ Operations on the whole poster:
   opposite change instead (restyle back, set the colour back).
 
 How to read the request:
+- <pointed> is the part the designer tapped on the poster, or picked in the layer
+  list, just before typing; "(nothing)" when they did not point. When it names a
+  part, "this", "it", "here", "that one" and a message that names no part all mean
+  that part. Do not change other parts unless the message names them.
 - Layers are described by what they are, where they are and what colour they are.
   Match the designer's words to them: "the title", "the big text" and "the main
   line" are the headline; "the button" or "the call to action" is the cta; "the
@@ -60,6 +64,9 @@ How to read the request:
   "note" what you changed and why, in one sentence. If two quite different readings
   are equally likely, ask with those readings as choices instead.
 - "Again", "more", "bigger still", "same for the logo" refer to <recent>.
+- A phone number, website, email or address the designer adds goes in the call to
+  action, or in the offer line if the call to action cannot hold it; never in the
+  headline, and never appended to a sentence it does not belong to.
 - Each text layer shows how many characters it fits. Any set_text MUST be within that
   limit, or the poster renders with words cut off. New facts (an offer, a price,
   dates) go into an existing text layer only if they fit; otherwise say so.
@@ -105,6 +112,9 @@ $design
 <recent>
 $recent
 </recent>
+<pointed>
+$pointed
+</pointed>
 <message>
 $message
 </message>

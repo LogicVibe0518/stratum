@@ -1,4 +1,4 @@
-.PHONY: setup sync check lint fmt type test live api notebook design-sheet frame-sheet copy-eval
+.PHONY: setup sync check lint fmt type test live api notebook design-sheet frame-sheet copy-eval chat-eval
 
 # Git hooks are shared by every worktree of a repo, and pre-commit writes the path of
 # THIS checkout's Python into them. Installing from a worktree would point the main
@@ -56,3 +56,8 @@ frame-sheet: sync
 # scored in code. Costs about a cent. Keys from .env. Report in ml/copy/reports/.
 copy-eval: sync
 	set -a; [ -f .env ] && . ./.env; set +a; uv run python -m stratum_worker.draft.copyeval $(ARGS)
+
+# The chat eval (M10h): 79 typed changes on fixed posters, read by the real model,
+# scored in code. ARGS="--baseline" runs the chat before M10h (prompt v5, no pointing).
+chat-eval: sync
+	set -a; [ -f .env ] && . ./.env; set +a; uv run python -m stratum_worker.edit.chateval $(ARGS)
