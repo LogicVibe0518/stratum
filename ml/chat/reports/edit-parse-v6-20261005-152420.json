@@ -1,0 +1,3110 @@
+{
+ "prompt": "edit.parse v6",
+ "pointing": true,
+ "started": "2026-10-05T14:59:16.533882+00:00",
+ "summary": {
+  "cases": 79,
+  "passed": 0.937,
+  "by_category": {
+   "colour": 1.0,
+   "direct": 0.917,
+   "layout": 1.0,
+   "live": 1.0,
+   "multi": 1.0,
+   "photo": 1.0,
+   "pointing": 1.0,
+   "recent": 0.5,
+   "scope": 0.75,
+   "text": 1.0,
+   "vague": 0.833
+  },
+  "outcomes": {
+   "ask": 6,
+   "change": 67,
+   "invalid": 1,
+   "refuse": 5
+  },
+  "without_a_model": 6,
+  "median_seconds": 3.66,
+  "cost_usd": 0.01291,
+  "models": [
+   "gpt-6-luna",
+   "openai/gpt-6-luna"
+  ]
+ },
+ "rows": [
+  {
+   "id": "logo-bigger",
+   "category": "direct",
+   "poster": "panel",
+   "message": "make the logo bigger",
+   "pointed": null,
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "op": "scale",
+      "layer": "logo",
+      "factor": ">1"
+     }
+    ],
+    "only": true
+   },
+   "ops": [
+    {
+     "op": "scale",
+     "layer": "logo",
+     "factor": 1.3
+    }
+   ],
+   "note": "",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000352,
+   "seconds": 3.58
+  },
+  {
+   "id": "logo-smaller",
+   "category": "direct",
+   "poster": "overlay",
+   "message": "logo is too big",
+   "pointed": null,
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "op": "scale",
+      "layer": "logo",
+      "factor": "<1"
+     }
+    ],
+    "only": true
+   },
+   "ops": [
+    {
+     "op": "scale",
+     "layer": "logo",
+     "factor": 0.8
+    }
+   ],
+   "note": "I made the logo a little smaller.",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 8.5e-05,
+   "seconds": 12.22
+  },
+  {
+   "id": "headline-bigger",
+   "category": "direct",
+   "poster": "panel",
+   "message": "bigger headline",
+   "pointed": null,
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "any": [
+       {
+        "op": "scale",
+        "layer": "headline",
+        "factor": ">1"
+       },
+       {
+        "op": "restyle",
+        "changes": {
+         "scale": "bold"
+        }
+       }
+      ]
+     }
+    ],
+    "only": false
+   },
+   "ops": [
+    {
+     "op": "scale",
+     "layer": "headline",
+     "factor": 1.2
+    }
+   ],
+   "note": "",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000166,
+   "seconds": 4.07
+  },
+  {
+   "id": "headline-smaller",
+   "category": "direct",
+   "poster": "type",
+   "message": "the headline is shouting, make it smaller",
+   "pointed": null,
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "any": [
+       {
+        "op": "scale",
+        "layer": "headline",
+        "factor": "<1"
+       },
+       {
+        "op": "restyle",
+        "changes": {
+         "scale": "calm"
+        }
+       }
+      ]
+     }
+    ],
+    "only": false
+   },
+   "ops": [
+    {
+     "op": "restyle",
+     "changes": {
+      "scale": "calm"
+     }
+    }
+   ],
+   "note": "",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000122,
+   "seconds": 3.61
+  },
+  {
+   "id": "hide-cta",
+   "category": "direct",
+   "poster": "panel",
+   "message": "remove the call to action",
+   "pointed": null,
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "op": "set_visible",
+      "layer": "cta",
+      "visible": false
+     }
+    ],
+    "only": true
+   },
+   "ops": [
+    {
+     "op": "set_visible",
+     "layer": "cta",
+     "visible": false
+    }
+   ],
+   "note": "",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000119,
+   "seconds": 2.12
+  },
+  {
+   "id": "hide-offer",
+   "category": "direct",
+   "poster": "cover",
+   "message": "get rid of the small text under the headline",
+   "pointed": null,
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "op": "set_visible",
+      "layer": "offer",
+      "visible": false
+     }
+    ],
+    "only": false
+   },
+   "ops": [
+    {
+     "op": "ask",
+     "question": "Which small text would you like removed?",
+     "choices": [
+      {
+       "label": "Hide the offer line",
+       "kind": "tweak"
+      },
+      {
+       "label": "Hide the call to action",
+       "kind": "tweak"
+      },
+      {
+       "label": "Hide both the offer line and the call to action",
+       "kind": "tweak"
+      }
+     ]
+    }
+   ],
+   "note": "",
+   "score": {
+    "outcome": "ask",
+    "outcome_ok": false,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": false
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000234,
+   "seconds": 5.88
+  },
+  {
+   "id": "hide-line",
+   "category": "direct",
+   "poster": "panel",
+   "message": "lose the little orange line",
+   "pointed": null,
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "any": [
+       {
+        "op": "set_visible",
+        "layer": "rule",
+        "visible": false
+       },
+       {
+        "op": "restyle",
+        "changes": {
+         "accent": "none"
+        }
+       }
+      ]
+     }
+    ],
+    "only": false
+   },
+   "ops": [
+    {
+     "op": "restyle",
+     "changes": {
+      "accent": "none"
+     }
+    }
+   ],
+   "note": "",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000119,
+   "seconds": 2.97
+  },
+  {
+   "id": "logo-left",
+   "category": "direct",
+   "poster": "cover",
+   "message": "move the logo to the right side",
+   "pointed": null,
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "any": [
+       {
+        "op": "move",
+        "layer": "logo",
+        "dx": ">0"
+       },
+       {
+        "op": "restyle",
+        "changes": {
+         "logo": "end"
+        }
+       }
+      ]
+     }
+    ],
+    "only": false
+   },
+   "ops": [
+    {
+     "op": "restyle",
+     "changes": {
+      "logo": "end"
+     }
+    }
+   ],
+   "note": "",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000116,
+   "seconds": 6.65
+  },
+  {
+   "id": "cta-bigger",
+   "category": "direct",
+   "poster": "overlay",
+   "message": "the phone number is too small to read",
+   "pointed": null,
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "op": "scale",
+      "layer": "cta",
+      "factor": ">1"
+     }
+    ],
+    "only": false
+   },
+   "ops": [
+    {
+     "op": "scale",
+     "layer": "cta",
+     "factor": 1.2
+    }
+   ],
+   "note": "I enlarged the call to action so the phone number is easier to read.",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "gpt-6-luna",
+   "cost_usd": 0.000305,
+   "seconds": 24.36
+  },
+  {
+   "id": "logo-up",
+   "category": "direct",
+   "poster": "pair",
+   "message": "nudge the logo up a bit",
+   "pointed": null,
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "op": "move",
+      "layer": "logo",
+      "dy": "<0"
+     }
+    ],
+    "only": true
+   },
+   "ops": [
+    {
+     "op": "move",
+     "layer": "logo",
+     "dx": 0,
+     "dy": -0.05
+    }
+   ],
+   "note": "",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.00013,
+   "seconds": 3.08
+  },
+  {
+   "id": "words-centre",
+   "category": "direct",
+   "poster": "panel",
+   "message": "centre the words",
+   "pointed": null,
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "op": "restyle",
+      "changes": {
+       "align": "center"
+      }
+     }
+    ],
+    "only": false
+   },
+   "ops": [
+    {
+     "op": "restyle",
+     "changes": {
+      "align": "center"
+     }
+    }
+   ],
+   "note": "",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000119,
+   "seconds": 2.02
+  },
+  {
+   "id": "words-left",
+   "category": "direct",
+   "poster": "cover",
+   "message": "left align the text",
+   "pointed": null,
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "op": "restyle",
+      "changes": {
+       "align": "left"
+      }
+     }
+    ],
+    "only": false
+   },
+   "ops": [
+    {
+     "op": "restyle",
+     "changes": {
+      "align": "left"
+     }
+    }
+   ],
+   "note": "",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000114,
+   "seconds": 2.91
+  },
+  {
+   "id": "headline-orange",
+   "category": "colour",
+   "poster": "type",
+   "message": "make the headline orange",
+   "pointed": null,
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "op": "set_color",
+      "layer": "headline",
+      "color": "palette.secondary"
+     }
+    ],
+    "only": true
+   },
+   "ops": [
+    {
+     "op": "set_color",
+     "layer": "headline",
+     "color": "palette.secondary"
+    }
+   ],
+   "note": "",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.00011,
+   "seconds": 1.92
+  },
+  {
+   "id": "cta-orange",
+   "category": "colour",
+   "poster": "panel",
+   "message": "call to action in the brand orange",
+   "pointed": null,
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "op": "set_color",
+      "layer": "cta",
+      "color": "palette.secondary"
+     }
+    ],
+    "only": true
+   },
+   "ops": [
+    {
+     "op": "set_color",
+     "layer": "cta",
+     "color": "palette.secondary"
+    }
+   ],
+   "note": "",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000121,
+   "seconds": 3.18
+  },
+  {
+   "id": "green-not-brand",
+   "category": "colour",
+   "poster": "panel",
+   "message": "make the headline green",
+   "pointed": null,
+   "expect": {
+    "outcome": "ask"
+   },
+   "ops": [
+    {
+     "op": "ask",
+     "question": "Green isn’t in the brand colours; would you like an existing brand colour or should green be added?",
+     "choices": [
+      {
+       "label": "Make the headline orange",
+       "kind": "tweak"
+      },
+      {
+       "label": "Change the panel to off-white and make the headline slate blue",
+       "kind": "tweak"
+      },
+      {
+       "label": "Add a green to the brand colours",
+       "kind": "brand"
+      }
+     ]
+    }
+   ],
+   "note": "",
+   "score": {
+    "outcome": "ask",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000255,
+   "seconds": 5.32
+  },
+  {
+   "id": "pink-not-brand",
+   "category": "colour",
+   "poster": "type",
+   "message": "pink background please",
+   "pointed": null,
+   "expect": {
+    "outcome": "ask"
+   },
+   "ops": [
+    {
+     "op": "ask",
+     "question": "Pink isn’t in the brand colours; would you like a nearby brand colour or to add pink to the brand?",
+     "choices": [
+      {
+       "label": "Make the background orange",
+       "kind": "tweak"
+      },
+      {
+       "label": "Make the background off-white",
+       "kind": "tweak"
+      },
+      {
+       "label": "Add pink to the brand colours",
+       "kind": "brand"
+      }
+     ]
+    }
+   ],
+   "note": "",
+   "score": {
+    "outcome": "ask",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000163,
+   "seconds": 3.32
+  },
+  {
+   "id": "panel-light",
+   "category": "colour",
+   "poster": "panel",
+   "message": "make the panel behind the words light",
+   "pointed": null,
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "any": [
+       {
+        "op": "restyle",
+        "changes": {
+         "fill": "surface"
+        }
+       },
+       {
+        "op": "set_color",
+        "layer": "panel",
+        "color": "palette.surface"
+       }
+      ]
+     }
+    ],
+    "only": false
+   },
+   "ops": [
+    {
+     "op": "restyle",
+     "changes": {
+      "fill": "surface"
+     }
+    },
+    {
+     "op": "set_color",
+     "layer": "headline",
+     "color": "palette.text"
+    },
+    {
+     "op": "set_color",
+     "layer": "offer",
+     "color": "palette.text"
+    },
+    {
+     "op": "set_color",
+     "layer": "cta",
+     "color": "palette.text"
+    }
+   ],
+   "note": "",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000178,
+   "seconds": 4.08
+  },
+  {
+   "id": "text-white",
+   "category": "colour",
+   "poster": "pair",
+   "message": "make all the words white",
+   "pointed": null,
+   "expect": {
+    "outcome": "change_or_ask"
+   },
+   "ops": [
+    {
+     "op": "restyle",
+     "changes": {
+      "fill": "primary"
+     }
+    },
+    {
+     "op": "set_color",
+     "layer": "headline",
+     "color": "palette.text_on_primary"
+    },
+    {
+     "op": "set_color",
+     "layer": "offer",
+     "color": "palette.text_on_primary"
+    },
+    {
+     "op": "set_color",
+     "layer": "cta",
+     "color": "palette.text_on_primary"
+    }
+   ],
+   "note": "",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.00021,
+   "seconds": 3.66
+  },
+  {
+   "id": "navy-band",
+   "category": "colour",
+   "poster": "overlay",
+   "message": "solid navy band behind the words instead of the fade",
+   "pointed": null,
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "op": "restyle",
+      "changes": {
+       "treatment": "band"
+      }
+     }
+    ],
+    "only": false
+   },
+   "ops": [
+    {
+     "op": "restyle",
+     "changes": {
+      "treatment": "band"
+     }
+    }
+   ],
+   "note": "",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000112,
+   "seconds": 1.67
+  },
+  {
+   "id": "card",
+   "category": "colour",
+   "poster": "overlay",
+   "message": "put the text on a white card",
+   "pointed": null,
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "op": "restyle",
+      "changes": {
+       "treatment": "card"
+      }
+     }
+    ],
+    "only": false
+   },
+   "ops": [
+    {
+     "op": "restyle",
+     "changes": {
+      "treatment": "card"
+     }
+    },
+    {
+     "op": "set_color",
+     "layer": "backing",
+     "color": "palette.text_on_primary"
+    },
+    {
+     "op": "set_color",
+     "layer": "headline",
+     "color": "palette.primary"
+    },
+    {
+     "op": "set_color",
+     "layer": "offer",
+     "color": "palette.primary"
+    },
+    {
+     "op": "set_color",
+     "layer": "cta",
+     "color": "palette.primary"
+    }
+   ],
+   "note": "",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000355,
+   "seconds": 10.17
+  },
+  {
+   "id": "set-headline",
+   "category": "text",
+   "poster": "panel",
+   "message": "change the headline to 'Winter boiler check'",
+   "pointed": null,
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "op": "set_text",
+      "layer": "headline",
+      "text_has": [
+       "winter boiler check"
+      ]
+     }
+    ],
+    "only": true
+   },
+   "ops": [
+    {
+     "op": "set_text",
+     "layer": "headline",
+     "text": "Winter boiler check"
+    }
+   ],
+   "note": "",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.00012,
+   "seconds": 1.64
+  },
+  {
+   "id": "set-cta",
+   "category": "text",
+   "poster": "overlay",
+   "message": "call to action should say Book online",
+   "pointed": null,
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "op": "set_text",
+      "layer": "cta",
+      "text_has": [
+       "book online"
+      ]
+     }
+    ],
+    "only": true
+   },
+   "ops": [
+    {
+     "op": "set_text",
+     "layer": "cta",
+     "text": "Book online"
+    }
+   ],
+   "note": "",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000119,
+   "seconds": 2.42
+  },
+  {
+   "id": "offer-25",
+   "category": "text",
+   "poster": "panel",
+   "message": "its 25% off not 20%",
+   "pointed": null,
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "op": "set_text",
+      "layer": "offer",
+      "text_has": [
+       "25%"
+      ]
+     }
+    ],
+    "only": true
+   },
+   "ops": [
+    {
+     "op": "set_text",
+     "layer": "offer",
+     "text": "25% off every boiler service booked before 31 October."
+    }
+   ],
+   "note": "",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000139,
+   "seconds": 2.77
+  },
+  {
+   "id": "date-change",
+   "category": "text",
+   "poster": "type",
+   "message": "the offer ends 15 November now",
+   "pointed": null,
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "op": "set_text",
+      "layer": "offer",
+      "text_has": [
+       "15 november"
+      ]
+     }
+    ],
+    "only": false
+   },
+   "ops": [
+    {
+     "op": "set_text",
+     "layer": "offer",
+     "text": "20% off every boiler service booked before 15 November."
+    }
+   ],
+   "note": "",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000151,
+   "seconds": 3.64
+  },
+  {
+   "id": "shorter-headline",
+   "category": "text",
+   "poster": "pair",
+   "message": "shorter headline",
+   "pointed": null,
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "op": "set_text",
+      "layer": "headline"
+     }
+    ],
+    "only": false
+   },
+   "ops": [
+    {
+     "op": "set_text",
+     "layer": "headline",
+     "text": "Boiler service, sorted for winter"
+    }
+   ],
+   "note": "",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000173,
+   "seconds": 3.93
+  },
+  {
+   "id": "phone",
+   "category": "text",
+   "poster": "panel",
+   "message": "add phone number 0161 555 0199",
+   "pointed": null,
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "op": "set_text",
+      "layer": [
+       "cta",
+       "offer"
+      ],
+      "text_has": [
+       "0161 555 0199"
+      ]
+     }
+    ],
+    "only": false
+   },
+   "ops": [
+    {
+     "op": "set_text",
+     "layer": "cta",
+     "text": "Call 0161 496 0000 or 0161 555 0199"
+    }
+   ],
+   "note": "",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000171,
+   "seconds": 3.81
+  },
+  {
+   "id": "website",
+   "category": "text",
+   "poster": "overlay",
+   "message": "add our website kowalskiplumbing.example",
+   "pointed": null,
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "op": "set_text",
+      "layer": [
+       "cta",
+       "offer"
+      ],
+      "text_has": [
+       "kowalskiplumbing.example"
+      ]
+     }
+    ],
+    "only": false
+   },
+   "ops": [
+    {
+     "op": "set_text",
+     "layer": "cta",
+     "text": "Call 0161 496 0000 | kowalskiplumbing.example"
+    }
+   ],
+   "note": "",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000167,
+   "seconds": 5.41
+  },
+  {
+   "id": "too-long",
+   "category": "text",
+   "poster": "cover",
+   "message": "change the headline to 'Boiler servicing for every home in Manchester, Didsbury, Chorlton and Salford this winter'",
+   "pointed": null,
+   "expect": {
+    "outcome": "change_or_ask"
+   },
+   "ops": [
+    {
+     "op": "ask",
+     "question": "That wording is too long for the headline’s 48-character limit; which shorter version should I use?",
+     "choices": [
+      {
+       "label": "Change the headline to “Boiler servicing across Manchester this winter”",
+       "kind": "tweak"
+      },
+      {
+       "label": "Change the headline to “Boiler servicing in Didsbury & Chorlton this winter”",
+       "kind": "tweak"
+      }
+     ]
+    }
+   ],
+   "note": "",
+   "score": {
+    "outcome": "ask",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.00038,
+   "seconds": 9.4
+  },
+  {
+   "id": "darker-photo",
+   "category": "photo",
+   "poster": "overlay",
+   "message": "darken the photo",
+   "pointed": null,
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "op": "dim",
+      "layer": "bg",
+      "amount": ">0"
+     }
+    ],
+    "only": true
+   },
+   "ops": [
+    {
+     "op": "dim",
+     "layer": "bg",
+     "amount": 0.3
+    }
+   ],
+   "note": "",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000133,
+   "seconds": 3.03
+  },
+  {
+   "id": "lighter-photo",
+   "category": "photo",
+   "poster": "overlay",
+   "message": "the photo is too dark",
+   "pointed": null,
+   "expect": {
+    "outcome": "change_or_ask"
+   },
+   "ops": [
+    {
+     "op": "ask",
+     "question": "I can’t brighten the photo directly; would you like to change the words’ backing instead?",
+     "choices": [
+      {
+       "label": "Use a solid navy band behind the words",
+       "kind": "tweak"
+      },
+      {
+       "label": "Put the words on an off-white card",
+       "kind": "tweak"
+      }
+     ]
+    }
+   ],
+   "note": "",
+   "score": {
+    "outcome": "ask",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.00046,
+   "seconds": 11.25
+  },
+  {
+   "id": "zoom-in",
+   "category": "photo",
+   "poster": "panel",
+   "message": "zoom in on the photo",
+   "pointed": null,
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "op": "zoom",
+      "layer": "bg",
+      "factor": ">1"
+     }
+    ],
+    "only": true
+   },
+   "ops": [
+    {
+     "op": "zoom",
+     "layer": "bg",
+     "factor": 1.2
+    }
+   ],
+   "note": "",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000139,
+   "seconds": 4.38
+  },
+  {
+   "id": "zoom-out",
+   "category": "photo",
+   "poster": "cover",
+   "message": "show more of the picture",
+   "pointed": null,
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "op": "zoom",
+      "layer": "bg",
+      "factor": "<1"
+     }
+    ],
+    "only": false
+   },
+   "ops": [
+    {
+     "op": "zoom",
+     "layer": "bg",
+     "factor": 0.8
+    }
+   ],
+   "note": "I zoomed the picture out so more of it is visible.",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000165,
+   "seconds": 4.3
+  },
+  {
+   "id": "head-cut",
+   "category": "photo",
+   "poster": "panel",
+   "message": "his head is cut off at the top",
+   "pointed": null,
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "any": [
+       {
+        "op": "pan",
+        "layer": "bg",
+        "dy": ">0"
+       },
+       {
+        "op": "zoom",
+        "layer": "bg"
+       }
+      ]
+     }
+    ],
+    "only": false
+   },
+   "ops": [
+    {
+     "op": "pan",
+     "layer": "bg",
+     "dx": 0,
+     "dy": 0.15
+    }
+   ],
+   "note": "",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000171,
+   "seconds": 3.81
+  },
+  {
+   "id": "pan-left",
+   "category": "photo",
+   "poster": "overlay",
+   "message": "show more of the left side of the photo",
+   "pointed": null,
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "op": "pan",
+      "layer": "bg",
+      "dx": ">0"
+     }
+    ],
+    "only": false
+   },
+   "ops": [
+    {
+     "op": "pan",
+     "layer": "bg",
+     "dx": 0.2,
+     "dy": 0
+    }
+   ],
+   "note": "I shifted the photo right to show more of its left side.",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000176,
+   "seconds": 4.74
+  },
+  {
+   "id": "both-photos-darker",
+   "category": "photo",
+   "poster": "pair",
+   "message": "darker photos",
+   "pointed": null,
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "op": "dim",
+      "layer": "photo_a",
+      "amount": ">0"
+     },
+     {
+      "op": "dim",
+      "layer": "photo_b",
+      "amount": ">0"
+     }
+    ],
+    "only": false
+   },
+   "ops": [
+    {
+     "op": "dim",
+     "layer": "photo_a",
+     "amount": 0.25
+    },
+    {
+     "op": "dim",
+     "layer": "photo_b",
+     "amount": 0.25
+    }
+   ],
+   "note": "I darkened both photos slightly.",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000153,
+   "seconds": 2.98
+  },
+  {
+   "id": "swap-sides",
+   "category": "photo",
+   "poster": "pair",
+   "message": "second photo darker only",
+   "pointed": null,
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "op": "dim",
+      "layer": "photo_b",
+      "amount": ">0"
+     }
+    ],
+    "only": true
+   },
+   "ops": [
+    {
+     "op": "dim",
+     "layer": "photo_b",
+     "amount": 0.25
+    }
+   ],
+   "note": "",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000124,
+   "seconds": 2.54
+  },
+  {
+   "id": "words-on-photo",
+   "category": "layout",
+   "poster": "panel",
+   "message": "put the words over the photo",
+   "pointed": null,
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "op": "restyle",
+      "changes": {
+       "family": "overlay"
+      }
+     }
+    ],
+    "only": false
+   },
+   "ops": [
+    {
+     "op": "restyle",
+     "changes": {
+      "family": "overlay"
+     }
+    }
+   ],
+   "note": "",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000133,
+   "seconds": 2.53
+  },
+  {
+   "id": "two-photos",
+   "category": "layout",
+   "poster": "panel",
+   "message": "use two photos",
+   "pointed": null,
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "op": "restyle",
+      "changes": {
+       "family": "pair"
+      }
+     }
+    ],
+    "only": false
+   },
+   "ops": [
+    {
+     "op": "restyle",
+     "changes": {
+      "family": "pair"
+     }
+    }
+   ],
+   "note": "",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.00017,
+   "seconds": 3.54
+  },
+  {
+   "id": "no-photo",
+   "category": "layout",
+   "poster": "overlay",
+   "message": "no photo, just words",
+   "pointed": null,
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "op": "restyle",
+      "changes": {
+       "family": "type"
+      }
+     }
+    ],
+    "only": false
+   },
+   "ops": [
+    {
+     "op": "restyle",
+     "changes": {
+      "family": "type"
+     }
+    }
+   ],
+   "note": "",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000125,
+   "seconds": 3.17
+  },
+  {
+   "id": "panel-top",
+   "category": "layout",
+   "poster": "panel",
+   "message": "put the words above the photo",
+   "pointed": null,
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "op": "restyle",
+      "changes": {
+       "side": "start"
+      }
+     }
+    ],
+    "only": false
+   },
+   "ops": [
+    {
+     "op": "restyle",
+     "changes": {
+      "side": "start"
+     }
+    }
+   ],
+   "note": "",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.00013,
+   "seconds": 2.92
+  },
+  {
+   "id": "words-top",
+   "category": "layout",
+   "poster": "overlay",
+   "message": "words at the top",
+   "pointed": null,
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "op": "restyle",
+      "changes": {
+       "zone": "top"
+      }
+     }
+    ],
+    "only": false
+   },
+   "ops": [
+    {
+     "op": "restyle",
+     "changes": {
+      "zone": "top"
+     }
+    }
+   ],
+   "note": "",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000113,
+   "seconds": 2.51
+  },
+  {
+   "id": "bigger-panel",
+   "category": "layout",
+   "poster": "panel",
+   "message": "make the photo bigger and the panel smaller",
+   "pointed": null,
+   "expect": {
+    "outcome": "change_or_ask"
+   },
+   "ops": [
+    {
+     "op": "restyle",
+     "changes": {
+      "family": "overlay"
+     }
+    }
+   ],
+   "note": "I switched to a full-photo layout, so the photo fills more of the poster and there’s no separate panel.",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000314,
+   "seconds": 11.26
+  },
+  {
+   "id": "calmer",
+   "category": "layout",
+   "poster": "type",
+   "message": "make it calmer, less shouty",
+   "pointed": null,
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "op": "restyle",
+      "changes": {
+       "scale": "calm"
+      }
+     }
+    ],
+    "only": false
+   },
+   "ops": [
+    {
+     "op": "restyle",
+     "changes": {
+      "scale": "calm"
+     }
+    }
+   ],
+   "note": "I made the headline smaller with more space to give the poster a calmer feel.",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000129,
+   "seconds": 2.99
+  },
+  {
+   "id": "magazine",
+   "category": "layout",
+   "poster": "overlay",
+   "message": "make it look like a magazine cover",
+   "pointed": null,
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "op": "restyle",
+      "changes": {
+       "family": "cover"
+      }
+     }
+    ],
+    "only": false
+   },
+   "ops": [
+    {
+     "op": "restyle",
+     "changes": {
+      "family": "cover"
+     }
+    }
+   ],
+   "note": "I switched to the cover layout, with the headline across the top, for a magazine-cover look.",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000157,
+   "seconds": 3.34
+  },
+  {
+   "id": "pop",
+   "category": "vague",
+   "poster": "panel",
+   "message": "make it pop",
+   "pointed": null,
+   "expect": {
+    "outcome": "change_or_ask"
+   },
+   "ops": [
+    {
+     "op": "restyle",
+     "changes": {
+      "share": 0.5
+     }
+    }
+   ],
+   "note": "",
+   "score": {
+    "outcome": "invalid",
+    "outcome_ok": false,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": false
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000224,
+   "seconds": 4.44
+  },
+  {
+   "id": "premium",
+   "category": "vague",
+   "poster": "type",
+   "message": "more premium",
+   "pointed": null,
+   "expect": {
+    "outcome": "change_or_ask"
+   },
+   "ops": [
+    {
+     "op": "restyle",
+     "changes": {
+      "scale": "calm",
+      "accent": "none"
+     }
+    }
+   ],
+   "note": "I made the headline more understated and removed the accent line for a calmer, more premium feel.",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000203,
+   "seconds": 5.57
+  },
+  {
+   "id": "cleaner",
+   "category": "vague",
+   "poster": "overlay",
+   "message": "cleaner please",
+   "pointed": null,
+   "expect": {
+    "outcome": "change_or_ask"
+   },
+   "ops": [
+    {
+     "op": "restyle",
+     "changes": {
+      "accent": "none",
+      "scale": "calm"
+     }
+    }
+   ],
+   "note": "I removed the accent line and made the headline calmer to give the poster a cleaner look.",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000155,
+   "seconds": 3.93
+  },
+  {
+   "id": "looks-off",
+   "category": "vague",
+   "poster": "pair",
+   "message": "something looks off",
+   "pointed": null,
+   "expect": {
+    "outcome": "change_or_ask"
+   },
+   "ops": [
+    {
+     "op": "restyle",
+     "changes": {
+      "scale": "calm"
+     }
+    }
+   ],
+   "note": "I made the headline calmer and gave the layout more breathing room.",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000172,
+   "seconds": 3.18
+  },
+  {
+   "id": "busy",
+   "category": "vague",
+   "poster": "overlay",
+   "message": "too busy",
+   "pointed": null,
+   "expect": {
+    "outcome": "change_or_ask"
+   },
+   "ops": [
+    {
+     "op": "restyle",
+     "changes": {
+      "accent": "none",
+      "scale": "calm"
+     }
+    }
+   ],
+   "note": "I removed the accent line and made the headline calmer to simplify the poster.",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000156,
+   "seconds": 3.61
+  },
+  {
+   "id": "modern",
+   "category": "vague",
+   "poster": "cover",
+   "message": "more modern",
+   "pointed": null,
+   "expect": {
+    "outcome": "change_or_ask"
+   },
+   "ops": [
+    {
+     "op": "restyle",
+     "changes": {
+      "treatment": "scrim",
+      "align": "left"
+     }
+    }
+   ],
+   "note": "I switched to a softer photo scrim and left-aligned the words for a more contemporary look.",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000201,
+   "seconds": 6.99
+  },
+  {
+   "id": "multi-2",
+   "category": "multi",
+   "poster": "panel",
+   "message": "bigger logo and darker photo",
+   "pointed": null,
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "op": "scale",
+      "layer": "logo",
+      "factor": ">1"
+     },
+     {
+      "op": "dim",
+      "layer": "bg",
+      "amount": ">0"
+     }
+    ],
+    "only": true
+   },
+   "ops": [
+    {
+     "op": "scale",
+     "layer": "logo",
+     "factor": 1.2
+    },
+    {
+     "op": "dim",
+     "layer": "bg",
+     "amount": 0.2
+    }
+   ],
+   "note": "I enlarged the logo slightly and darkened the photo a little.",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000172,
+   "seconds": 4.45
+  },
+  {
+   "id": "multi-3",
+   "category": "multi",
+   "poster": "overlay",
+   "message": "headline orange, hide the line, logo smaller",
+   "pointed": null,
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "op": "set_color",
+      "layer": "headline",
+      "color": "palette.secondary"
+     },
+     {
+      "any": [
+       {
+        "op": "set_visible",
+        "layer": "rule",
+        "visible": false
+       },
+       {
+        "op": "restyle",
+        "changes": {
+         "accent": "none"
+        }
+       }
+      ]
+     },
+     {
+      "op": "scale",
+      "layer": "logo",
+      "factor": "<1"
+     }
+    ],
+    "only": false
+   },
+   "ops": [
+    {
+     "op": "set_color",
+     "layer": "headline",
+     "color": "palette.secondary"
+    },
+    {
+     "op": "set_visible",
+     "layer": "rule",
+     "visible": false
+    },
+    {
+     "op": "scale",
+     "layer": "logo",
+     "factor": 0.8
+    }
+   ],
+   "note": "",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000153,
+   "seconds": 3.22
+  },
+  {
+   "id": "multi-text",
+   "category": "multi",
+   "poster": "type",
+   "message": "change the headline to 'Boilers fixed fast' and the button to 'Call now'",
+   "pointed": null,
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "op": "set_text",
+      "layer": "headline",
+      "text_has": [
+       "boilers fixed fast"
+      ]
+     },
+     {
+      "op": "set_text",
+      "layer": "cta",
+      "text_has": [
+       "call now"
+      ]
+     }
+    ],
+    "only": false
+   },
+   "ops": [
+    {
+     "op": "set_text",
+     "layer": "headline",
+     "text": "Boilers fixed fast"
+    },
+    {
+     "op": "set_text",
+     "layer": "cta",
+     "text": "Call now"
+    }
+   ],
+   "note": "",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000123,
+   "seconds": 2.6
+  },
+  {
+   "id": "multi-part-impossible",
+   "category": "multi",
+   "poster": "panel",
+   "message": "make the logo bigger and add a video",
+   "pointed": null,
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "op": "scale",
+      "layer": "logo",
+      "factor": ">1"
+     }
+    ],
+    "only": false
+   },
+   "ops": [
+    {
+     "op": "scale",
+     "layer": "logo",
+     "factor": 1.2
+    }
+   ],
+   "note": "",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000206,
+   "seconds": 5.0
+  },
+  {
+   "id": "again",
+   "category": "recent",
+   "poster": "panel",
+   "message": "again",
+   "pointed": null,
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "op": "scale",
+      "layer": "logo",
+      "factor": ">1"
+     }
+    ],
+    "only": true
+   },
+   "ops": [
+    {
+     "op": "scale",
+     "layer": "logo",
+     "factor": 1.2
+    }
+   ],
+   "note": "",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000169,
+   "seconds": 5.67
+  },
+  {
+   "id": "bit-more",
+   "category": "recent",
+   "poster": "overlay",
+   "message": "a bit more",
+   "pointed": null,
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "op": "dim",
+      "layer": "bg",
+      "amount": ">0"
+     }
+    ],
+    "only": true
+   },
+   "ops": [
+    {
+     "op": "dim",
+     "layer": "bg",
+     "amount": 0.5
+    }
+   ],
+   "note": "I darkened the photo a bit more.",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000186,
+   "seconds": 4.57
+  },
+  {
+   "id": "same-logo",
+   "category": "recent",
+   "poster": "type",
+   "message": "same for the logo",
+   "pointed": null,
+   "expect": {
+    "outcome": [
+     "refuse",
+     "ask"
+    ]
+   },
+   "ops": [
+    {
+     "op": "set_color",
+     "layer": "logo",
+     "color": "palette.secondary"
+    }
+   ],
+   "note": "",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": false,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": false
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000192,
+   "seconds": 4.59
+  },
+  {
+   "id": "other-way",
+   "category": "recent",
+   "poster": "panel",
+   "message": "no, the other way",
+   "pointed": null,
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "op": "scale",
+      "layer": "headline",
+      "factor": "<1"
+     }
+    ],
+    "only": false
+   },
+   "ops": [
+    {
+     "op": "restyle",
+     "changes": {
+      "scale": "calm"
+     }
+    }
+   ],
+   "note": "I made the headline smaller, reversing the last change.",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": false,
+    "extra": [],
+    "model": true,
+    "passed": false
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000159,
+   "seconds": 3.99
+  },
+  {
+   "id": "pt-bigger",
+   "category": "pointing",
+   "poster": "panel",
+   "message": "bigger",
+   "pointed": "logo",
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "op": "scale",
+      "layer": "logo",
+      "factor": ">1"
+     }
+    ],
+    "only": true
+   },
+   "ops": [
+    {
+     "op": "scale",
+     "layer": "logo",
+     "factor": 1.15
+    }
+   ],
+   "note": "",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": false,
+    "passed": true
+   },
+   "model": "",
+   "cost_usd": 0.0,
+   "seconds": 0.0
+  },
+  {
+   "id": "pt-hide",
+   "category": "pointing",
+   "poster": "overlay",
+   "message": "hide this",
+   "pointed": "rule",
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "op": "set_visible",
+      "layer": "rule",
+      "visible": false
+     }
+    ],
+    "only": true
+   },
+   "ops": [
+    {
+     "op": "set_visible",
+     "layer": "rule",
+     "visible": false
+    }
+   ],
+   "note": "",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": false,
+    "passed": true
+   },
+   "model": "",
+   "cost_usd": 0.0,
+   "seconds": 0.0
+  },
+  {
+   "id": "pt-darker",
+   "category": "pointing",
+   "poster": "panel",
+   "message": "a bit darker",
+   "pointed": "bg",
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "op": "dim",
+      "layer": "bg",
+      "amount": ">0"
+     }
+    ],
+    "only": true
+   },
+   "ops": [
+    {
+     "op": "dim",
+     "layer": "bg",
+     "amount": 0.15
+    }
+   ],
+   "note": "",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": false,
+    "passed": true
+   },
+   "model": "",
+   "cost_usd": 0.0,
+   "seconds": 0.0
+  },
+  {
+   "id": "pt-up",
+   "category": "pointing",
+   "poster": "type",
+   "message": "up a little",
+   "pointed": "cta",
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "op": "move",
+      "layer": "cta",
+      "dy": "<0"
+     }
+    ],
+    "only": true
+   },
+   "ops": [
+    {
+     "op": "move",
+     "layer": "cta",
+     "dx": 0.0,
+     "dy": -0.03
+    }
+   ],
+   "note": "",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": false,
+    "passed": true
+   },
+   "model": "",
+   "cost_usd": 0.0,
+   "seconds": 0.0
+  },
+  {
+   "id": "pt-orange",
+   "category": "pointing",
+   "poster": "panel",
+   "message": "make this orange",
+   "pointed": "offer",
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "op": "set_color",
+      "layer": "offer",
+      "color": "palette.secondary"
+     }
+    ],
+    "only": true
+   },
+   "ops": [
+    {
+     "op": "set_color",
+     "layer": "offer",
+     "color": "palette.secondary"
+    }
+   ],
+   "note": "",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000131,
+   "seconds": 5.85
+  },
+  {
+   "id": "pt-say",
+   "category": "pointing",
+   "poster": "overlay",
+   "message": "make it say Book today",
+   "pointed": "cta",
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "op": "set_text",
+      "layer": "cta",
+      "text_has": [
+       "book today"
+      ]
+     }
+    ],
+    "only": true
+   },
+   "ops": [
+    {
+     "op": "set_text",
+     "layer": "cta",
+     "text": "Book today"
+    }
+   ],
+   "note": "",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000118,
+   "seconds": 2.91
+  },
+  {
+   "id": "pt-too-big",
+   "category": "pointing",
+   "poster": "cover",
+   "message": "this is too big",
+   "pointed": "logo",
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "op": "scale",
+      "layer": "logo",
+      "factor": "<1"
+     }
+    ],
+    "only": true
+   },
+   "ops": [
+    {
+     "op": "scale",
+     "layer": "logo",
+     "factor": 0.8
+    }
+   ],
+   "note": "I made the logo a little smaller.",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000142,
+   "seconds": 5.12
+  },
+  {
+   "id": "pt-closer",
+   "category": "pointing",
+   "poster": "pair",
+   "message": "zoom in on this one",
+   "pointed": "photo_b",
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "op": "zoom",
+      "layer": "photo_b",
+      "factor": ">1"
+     }
+    ],
+    "only": true
+   },
+   "ops": [
+    {
+     "op": "zoom",
+     "layer": "photo_b",
+     "factor": 1.2
+    }
+   ],
+   "note": "",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000113,
+   "seconds": 2.02
+  },
+  {
+   "id": "pt-that-one",
+   "category": "pointing",
+   "poster": "pair",
+   "message": "darken that one",
+   "pointed": "photo_a",
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "op": "dim",
+      "layer": "photo_a",
+      "amount": ">0"
+     }
+    ],
+    "only": true
+   },
+   "ops": [
+    {
+     "op": "dim",
+     "layer": "photo_a",
+     "amount": 0.15
+    }
+   ],
+   "note": "",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": false,
+    "passed": true
+   },
+   "model": "",
+   "cost_usd": 0.0,
+   "seconds": 0.0
+  },
+  {
+   "id": "pt-reads",
+   "category": "pointing",
+   "poster": "type",
+   "message": "cant read this",
+   "pointed": "offer",
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "any": [
+       {
+        "op": "scale",
+        "layer": "offer",
+        "factor": ">1"
+       },
+       {
+        "op": "set_color",
+        "layer": "offer"
+       }
+      ]
+     }
+    ],
+    "only": false
+   },
+   "ops": [
+    {
+     "op": "scale",
+     "layer": "offer",
+     "factor": 1.2
+    }
+   ],
+   "note": "I made the offer line larger to make it easier to read.",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000168,
+   "seconds": 3.65
+  },
+  {
+   "id": "pt-move-right",
+   "category": "pointing",
+   "poster": "panel",
+   "message": "move it to the right a little",
+   "pointed": "logo",
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "op": "move",
+      "layer": "logo",
+      "dx": ">0"
+     }
+    ],
+    "only": true
+   },
+   "ops": [
+    {
+     "op": "move",
+     "layer": "logo",
+     "dx": 0.03,
+     "dy": 0.0
+    }
+   ],
+   "note": "",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": false,
+    "passed": true
+   },
+   "model": "",
+   "cost_usd": 0.0,
+   "seconds": 0.0
+  },
+  {
+   "id": "pt-not-this",
+   "category": "pointing",
+   "poster": "panel",
+   "message": "make the headline bigger",
+   "pointed": "logo",
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "op": "scale",
+      "layer": "headline",
+      "factor": ">1"
+     }
+    ],
+    "only": true
+   },
+   "ops": [
+    {
+     "op": "scale",
+     "layer": "headline",
+     "factor": 1.2
+    }
+   ],
+   "note": "",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000177,
+   "seconds": 4.86
+  },
+  {
+   "id": "live-phone",
+   "category": "live",
+   "poster": "panel",
+   "message": "add phone number +61 412 354 961",
+   "pointed": null,
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "op": "set_text",
+      "layer": [
+       "cta",
+       "offer"
+      ],
+      "text_has": [
+       "412 354 961"
+      ]
+     }
+    ],
+    "only": false
+   },
+   "ops": [
+    {
+     "op": "set_text",
+     "layer": "cta",
+     "text": "Call 0161 496 0000 or +61 412 354 961"
+    }
+   ],
+   "note": "",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000235,
+   "seconds": 6.21
+  },
+  {
+   "id": "live-other-photos",
+   "category": "live",
+   "poster": "panel",
+   "message": "include some other photos as well",
+   "pointed": null,
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "op": "restyle",
+      "changes": {
+       "family": "pair"
+      }
+     }
+    ],
+    "only": false
+   },
+   "ops": [
+    {
+     "op": "restyle",
+     "changes": {
+      "family": "pair"
+     }
+    }
+   ],
+   "note": "I switched to the two-photo design to make room for another photo.",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000442,
+   "seconds": 10.03
+  },
+  {
+   "id": "live-use-3",
+   "category": "live",
+   "poster": "pair",
+   "message": "some more photos like use 3",
+   "pointed": null,
+   "expect": {
+    "outcome": [
+     "refuse",
+     "ask"
+    ]
+   },
+   "ops": [],
+   "note": "This design has space for two photos, so I can’t make it use three. The available designs don’t specify one with more photo spaces.",
+   "score": {
+    "outcome": "refuse",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000183,
+   "seconds": 3.29
+  },
+  {
+   "id": "live-use-5",
+   "category": "live",
+   "poster": "pair",
+   "message": "some more photos like use 5",
+   "pointed": null,
+   "expect": {
+    "outcome": [
+     "refuse",
+     "ask"
+    ]
+   },
+   "ops": [],
+   "note": "This design only has space for two photos, and no available design is listed as supporting five. A new post or design with more photo spaces is needed.",
+   "score": {
+    "outcome": "refuse",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000183,
+   "seconds": 3.56
+  },
+  {
+   "id": "live-logo-bigger",
+   "category": "live",
+   "poster": "overlay",
+   "message": "make the logo bigger",
+   "pointed": null,
+   "expect": {
+    "outcome": "change",
+    "ops": [
+     {
+      "op": "scale",
+      "layer": "logo",
+      "factor": ">1"
+     }
+    ],
+    "only": true
+   },
+   "ops": [
+    {
+     "op": "scale",
+     "layer": "logo",
+     "factor": 1.25
+    }
+   ],
+   "note": "I made the logo modestly larger.",
+   "score": {
+    "outcome": "change",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000145,
+   "seconds": 4.02
+  },
+  {
+   "id": "new-post",
+   "category": "scope",
+   "poster": "panel",
+   "message": "make a new post for Christmas",
+   "pointed": null,
+   "expect": {
+    "outcome": "refuse"
+   },
+   "ops": [],
+   "note": "A Christmas post needs to be created as a new post; this editor can only change the current poster.",
+   "score": {
+    "outcome": "refuse",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.00013,
+   "seconds": 3.66
+  },
+  {
+   "id": "publish",
+   "category": "scope",
+   "poster": "overlay",
+   "message": "post this to instagram",
+   "pointed": null,
+   "expect": {
+    "outcome": "refuse"
+   },
+   "ops": [],
+   "note": "I can’t publish to Instagram from here; please post this design through Instagram.",
+   "score": {
+    "outcome": "refuse",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000152,
+   "seconds": 2.83
+  },
+  {
+   "id": "animate",
+   "category": "scope",
+   "poster": "type",
+   "message": "make the headline animate",
+   "pointed": null,
+   "expect": {
+    "outcome": "refuse"
+   },
+   "ops": [
+    {
+     "op": "ask",
+     "question": "I can’t animate the headline in this poster; would you like a static change instead?",
+     "choices": [
+      {
+       "label": "Center the words",
+       "kind": "tweak"
+      },
+      {
+       "label": "Remove the orange accent line",
+       "kind": "tweak"
+      },
+      {
+       "label": "Move the words to the bottom",
+       "kind": "tweak"
+      }
+     ]
+    }
+   ],
+   "note": "",
+   "score": {
+    "outcome": "ask",
+    "outcome_ok": false,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": false
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000258,
+   "seconds": 10.28
+  },
+  {
+   "id": "font",
+   "category": "scope",
+   "poster": "panel",
+   "message": "use comic sans",
+   "pointed": null,
+   "expect": {
+    "outcome": [
+     "refuse",
+     "ask"
+    ]
+   },
+   "ops": [],
+   "note": "I can’t change the typeface with the available style settings.",
+   "score": {
+    "outcome": "refuse",
+    "outcome_ok": true,
+    "ops_ok": true,
+    "extra": [],
+    "model": true,
+    "passed": true
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000168,
+   "seconds": 3.51
+  }
+ ]
+}
