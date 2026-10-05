@@ -36,6 +36,7 @@ from stratum_worker.brand import Check, Suggestion, check_palette, is_starter
 from stratum_worker.design import PRESETS, is_design
 from stratum_worker.design.choose import AUTO
 from stratum_worker.draft.bindings import BINDINGS
+from stratum_worker.draft.brief import gaps as brief_gaps
 from stratum_worker.draft.compose import ComposeError
 from stratum_worker.draft.pipeline import DraftError
 from stratum_worker.gateway.config import load_config
@@ -365,6 +366,22 @@ async def get_brand(client_id: str, ctx: service.Context = Depends(context)) -> 
         "checks": _checks(check_palette(kit.palette)),
         "history": history,
     }
+
+
+class BriefCheck(BaseModel):
+    brief: str = Field(default="", max_length=2000)
+
+
+@app.post("/api/clients/{client_id}/brief/check")
+async def check_brief(
+    client_id: str, body: BriefCheck, ctx: service.Context = Depends(context)
+) -> dict[str, Any]:
+    """What this brief is missing, against the client's profile: at most three
+    questions, most useful first. No model, so the page can ask while typing."""
+    client = await _client(ctx, client_id)
+    rules = service.rules_of(client)
+    found = brief_gaps(body.brief, services=rules.services, areas=rules.areas)
+    return {"gaps": [one.as_dict() for one in found]}
 
 
 @app.get("/api/clients/{client_id}/brand/suggestion")

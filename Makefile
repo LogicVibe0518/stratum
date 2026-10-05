@@ -1,4 +1,4 @@
-.PHONY: setup sync check lint fmt type test live api notebook design-sheet frame-sheet
+.PHONY: setup sync check lint fmt type test live api notebook design-sheet frame-sheet copy-eval
 
 # Git hooks are shared by every worktree of a repo, and pre-commit writes the path of
 # THIS checkout's Python into them. Installing from a worktree would point the main
@@ -51,3 +51,8 @@ design-sheet: sync
 frame-sheet: sync
 	@test -n "$(PHOTO)" || (echo "usage: make frame-sheet PHOTO=path/to/photo.jpg" && exit 2)
 	uv run python -m stratum_worker.photo.sheet "$(PHOTO)" --out frames.png
+
+# The copy eval (M7b): 30 briefs for the fictional clients, written by the real model,
+# scored in code. Costs about a cent. Keys from .env. Report in ml/copy/reports/.
+copy-eval: sync
+	set -a; [ -f .env ] && . ./.env; set +a; uv run python -m stratum_worker.draft.copyeval $(ARGS)
