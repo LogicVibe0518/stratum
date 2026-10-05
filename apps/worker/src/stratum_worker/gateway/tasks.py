@@ -128,6 +128,9 @@ class EditParseRequest(Frozen):
     asked: list[str] = Field(default_factory=list, max_length=8)
     design: str = Field(default="", max_length=4000)
     recent: list[str] = Field(default_factory=list, max_length=6)
+    # Since v6 (M10h): the part the designer pointed at before typing, as
+    # "<layer id>: <its description>", or "" when they did not point.
+    pointed: str = Field(default="", max_length=400)
 
 
 class EditParseResult(Frozen):

@@ -39,6 +39,7 @@ from stratum_worker.draft.bindings import BINDINGS
 from stratum_worker.draft.brief import gaps as brief_gaps
 from stratum_worker.draft.compose import ComposeError
 from stratum_worker.draft.pipeline import DraftError
+from stratum_worker.edit.pointing import Pointing
 from stratum_worker.gateway.config import load_config
 from stratum_worker.gateway.errors import NoProviderAvailable
 from stratum_worker.gateway.gateway import Gateway
@@ -418,8 +419,20 @@ class NewPost(BaseModel):
     occasion: str = ""
 
 
+class PointedAt(BaseModel):
+    """The part of the poster the designer pointed at before typing (M10h): a layer
+    picked in the layer list, or a tap at (x, y), fractions of the poster in the size
+    they were looking at."""
+
+    layer: str | None = Field(default=None, max_length=64)
+    x: float | None = Field(default=None, ge=0.0, le=1.0)
+    y: float | None = Field(default=None, ge=0.0, le=1.0)
+    aspect: Literal["4:5", "1:1", "9:16", "16:9"] | None = None
+
+
 class Tweak(BaseModel):
     message: str = Field(min_length=1, max_length=1000)
+    pointed: PointedAt | None = None
 
 
 async def _post_and_client(
@@ -638,7 +651,8 @@ async def tweak_post(
     post_id: str, body: Tweak, ctx: service.Context = Depends(context)
 ) -> dict[str, Any]:
     post, client = await _post_and_client(ctx, post_id)
-    return await service.tweak(ctx, post, client, body.message)
+    pointing = Pointing(**body.pointed.model_dump()) if body.pointed is not None else None
+    return await service.tweak(ctx, post, client, body.message, pointing)
 
 
 class PanelEdit(BaseModel):

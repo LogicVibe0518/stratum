@@ -16,6 +16,8 @@ from __future__ import annotations
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, TypeAdapter
+from stratum_spec import LogoLayer, PosterSpec
+from stratum_spec.ops import EditOp, SetColor
 
 
 class _Action(BaseModel):
@@ -32,10 +34,32 @@ _SPELLINGS = {"centre": "center", "centred": "center", "centered": "center"}
 
 
 def _plain(value: object) -> object:
+    # A setting like share is a number in the design space's own words ("0.5"); a
+    # model may send it as the number 0.5. The chat eval (6 Oct) found "make it pop"
+    # thrown away as invalid for exactly that, so a number is read as its text.
+    if isinstance(value, int | float) and not isinstance(value, bool):
+        value = f"{value:g}"
     if not isinstance(value, str):
         return value
     word = value.strip().lower()
     return _SPELLINGS.get(word, word)
+
+
+LOGO_NEVER_RECOLOURED = (
+    "The logo is the client's own file, so it is never recoloured. You can move it, "
+    "resize it, hide it, or put it on a panel."
+)
+
+
+def without_logo_recolours(spec: PosterSpec, ops: list[EditOp]) -> tuple[list[EditOp], str]:
+    """The ops, minus any that recolour a logo, and the sentence saying why (or "").
+
+    A logo is always the client's original file (AGENTS.md). A model asked "same for
+    the logo" after a colour change will try anyway (chat eval, 6 Oct); the editor
+    said "That change could not be made" when it should say why."""
+    logos = {layer.id for layer in spec.layers if isinstance(layer, LogoLayer)}
+    kept = [op for op in ops if not (isinstance(op, SetColor) and op.layer in logos)]
+    return kept, LOGO_NEVER_RECOLOURED if len(kept) < len(ops) else ""
 
 
 Setting = Annotated[
@@ -125,6 +149,7 @@ def is_undo(message: str) -> bool:
 
 __all__ = [
     "ACTIONS",
+    "LOGO_NEVER_RECOLOURED",
     "NAMES",
     "Action",
     "Ask",
@@ -134,4 +159,5 @@ __all__ = [
     "is_undo",
     "split",
     "undo_asked",
+    "without_logo_recolours",
 ]

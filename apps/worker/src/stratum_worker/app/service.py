@@ -58,15 +58,20 @@ from stratum_worker.draft.preflight import (
     check_copy,
     check_layout,
 )
-from stratum_worker.edit.actions import Ask, Choice, Restyle, Undo, split, undo_asked
-from stratum_worker.edit.context import (
-    asked_colours,
-    colour_lines,
-    describe_layers,
-    friendly,
-    recent_lines,
-    style_menu,
+from stratum_worker.edit.actions import (
+    Ask,
+    Choice,
+    Restyle,
+    Undo,
+    split,
+    undo_asked,
+    without_logo_recolours,
 )
+from stratum_worker.edit.context import (
+    edit_request,
+    friendly,
+)
+from stratum_worker.edit.pointing import Pointing, pointed_layer, quick_ops
 from stratum_worker.edit.restyle import RestyleError
 from stratum_worker.gateway.errors import (
     InvalidProviderOutput,
@@ -78,7 +83,6 @@ from stratum_worker.gateway.errors import (
 from stratum_worker.gateway.gateway import Gateway
 from stratum_worker.gateway.tasks import (
     BackgroundRequest,
-    EditParseRequest,
     EditParseResult,
     PostCopyRequest,
     PostCopyResult,
@@ -1037,7 +1041,11 @@ def off_brand_colour(
 
 
 async def tweak(
-    ctx: Context, post: dict[str, Any], client: dict[str, Any], message: str
+    ctx: Context,
+    post: dict[str, Any],
+    client: dict[str, Any],
+    message: str,
+    pointing: Pointing | None = None,
 ) -> dict[str, Any]:
     """Plain English in, a new version out - with no model touching the poster.
 
@@ -1084,17 +1092,14 @@ async def tweak(
             limit="5",
         ),
     )
-    request = EditParseRequest(
-        message=message,
-        layers=describe_layers(spec, kit, fits, sizes),
-        palette=[f"palette.{name}" for name in kit.palette],
-        colours=colour_lines(spec, kit),
-        asked=asked_colours(message, kit),
-        design=style_menu(post["template_id"], kit, len(photos)),
-        recent=recent_lines(list(reversed(recent))),
+    # Point and say (M10h): the part tapped before typing. A short message about it
+    # ("bigger", "hide", "a bit darker") is carried out without a model.
+    target = (
+        pointed_layer(spec, kit, ctx.settings.repo_root, **pointing.parts())
+        if pointing is not None
+        else None
     )
-    tracer = CollectingTracer(inner=ctx.gateway.tracer)
-    gateway = Gateway(router=ctx.gateway.router, budget=ctx.gateway.budget, tracer=tracer)
+    quick = quick_ops(spec, target, message) if target is not None else None
 
     async def record(outcome: str, ops: list[dict[str, Any]], cost_usd: float) -> None:
         await ctx.supa.insert(
@@ -1111,6 +1116,39 @@ async def tweak(
                 "created_by": ctx.user_id,
             },
         )
+
+    if quick is not None:
+        done = [op.model_dump(mode="json") for op in quick]
+        return await commit_change(
+            ctx,
+            post,
+            client,
+            latest=latest,
+            spec=spec,
+            kit=kit,
+            ops=quick,
+            changes=None,
+            photos=photos,
+            message=message,
+            record=lambda outcome: record(outcome, done, 0.0),
+            notes=[],
+            unable=[],
+            started=started,
+        )
+
+    request = edit_request(
+        spec,
+        kit,
+        fits,
+        sizes,
+        template_id=post["template_id"],
+        photos=len(photos),
+        message=message,
+        recent=list(reversed(recent)),
+        pointed=target,
+    )
+    tracer = CollectingTracer(inner=ctx.gateway.tracer)
+    gateway = Gateway(router=ctx.gateway.router, budget=ctx.gateway.budget, tracer=tracer)
 
     try:
         result = await gateway.run(TaskName.EDIT_PARSE, request, agency_id=ctx.agency_id)
@@ -1150,6 +1188,14 @@ async def tweak(
     if off_brand is not None:
         await record("needs_human", raw, step.cost_usd)
         return off_brand
+    ops, logo_refused = without_logo_recolours(spec, ops)
+    if logo_refused and not ops and not restyles:
+        await record("needs_human", raw, step.cost_usd)
+        return {"outcome": "needs_human", "why": logo_refused}
+    if logo_refused:
+        result = result.model_copy(
+            update={"needs_human": " ".join(filter(None, [result.needs_human, logo_refused]))}
+        )
 
     return await commit_change(
         ctx,

@@ -25,6 +25,7 @@ from stratum_worker.brand.names import colour_name, nearest, words_in
 from stratum_worker.design import decode, is_design
 from stratum_worker.design.families import FAMILIES, FILL
 from stratum_worker.draft.bindings import binding_for
+from stratum_worker.gateway.tasks import EditParseRequest
 
 # What a designer calls each layer the design space makes. A hand-made template's
 # own layer ids are shown with their underscores as spaces.
@@ -264,11 +265,41 @@ def recent_lines(edits: Sequence[Mapping[str, object]]) -> list[str]:
     return [f"{row.get('message', '')!s:.160} -> {row.get('outcome', '')}" for row in edits][-5:]
 
 
+def edit_request(
+    spec: PosterSpec,
+    kit: BrandKit,
+    fits: Mapping[str, int],
+    photo_sizes: Mapping[str, tuple[int, int]],
+    *,
+    template_id: str,
+    photos: int,
+    message: str,
+    recent: Sequence[Mapping[str, object]] = (),
+    pointed: str | None = None,
+) -> EditParseRequest:
+    """Everything the model is told about a tweak: the poster as a designer would
+    describe it, the brand's colours by name, the colours the message names, this
+    design's style settings, the last few changes and the part pointed at. Shared by
+    tweaks and the chat eval, so the eval asks exactly what the product asks."""
+    layers = describe_layers(spec, kit, fits, photo_sizes)
+    return EditParseRequest(
+        message=message,
+        pointed=f"{pointed}: {layers[pointed]}" if pointed in layers else "",
+        layers=layers,
+        palette=[f"palette.{name}" for name in kit.palette],
+        colours=colour_lines(spec, kit),
+        asked=asked_colours(message, kit),
+        design=style_menu(template_id, kit, photos),
+        recent=recent_lines(recent),
+    )
+
+
 __all__ = [
     "FRIENDLY",
     "asked_colours",
     "colour_lines",
     "describe_layers",
+    "edit_request",
     "friendly",
     "layer_line",
     "recent_lines",
