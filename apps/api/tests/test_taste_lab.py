@@ -232,7 +232,23 @@ def test_the_export_has_every_answer_with_its_designs(lab_world: Lab) -> None:
     assert {one["bucket"] for one in lines[0]["designs"]} <= {"top", "middle", "any"}
 
 
+def another_post(lab: Lab, slug: str) -> None:
+    client = asyncio.run(lab.world.factory(lab.agency).select("clients", select="id"))[0]["id"]
+    made = lab.http.post(
+        "/api/posts",
+        json={
+            "client_id": client,
+            "brief": "Emergency plumber, same-day callouts across Manchester.",
+            "slug": slug,
+            "template_id": "ds.panel.1.0010110",
+            "aspects": ["4:5"],
+        },
+    )
+    assert made.status_code == 200, made.text
+
+
 def test_making_screens_is_a_job_run_as_the_person_who_asked(lab_world: Lab) -> None:
+    another_post(lab_world, "second-post")
     out = lab_world.http.post("/api/lab/screens", json={"posts": 1, "per_post": 2})
     assert out.status_code == 200, out.text
     [row] = asyncio.run(
@@ -256,3 +272,93 @@ def test_making_screens_is_a_job_run_as_the_person_who_asked(lab_world: Lab) -> 
     deps = worker.Deps(settings=lab_world.world.settings(REPO), gateway=fake.gateway())
     result = asyncio.run(worker.lab_screens(job, lab_world.world.factory(lab_world.agency), deps))
     assert result["screens"] == 2
+
+
+def test_pressing_again_skips_posts_that_already_have_screens(lab_world: Lab) -> None:
+    again = asyncio.run(lab.make_screens(lab_world.ctx(), per_post=4))
+    assert again["screens"] == 0 and again["posts"] == 0
+    another_post(lab_world, "next-post")
+    more = asyncio.run(lab.make_screens(lab_world.ctx(), per_post=3))
+    assert more["posts"] == 1 and more["screens"] == 3
+
+
+def test_screens_say_how_they_were_chosen_and_how_alike_they_are(lab_world: Lab) -> None:
+    rows = asyncio.run(lab_world.world.factory(lab_world.agency).select("lab_screens"))
+    for row in rows:
+        detail = row["detail"]
+        assert detail["chooser"] == lab.CHOOSER
+        assert detail["photos"] and isinstance(detail["closest"], float)
+    exported = lab_world.http.get("/api/lab/export")
+    for line in exported.text.splitlines():
+        one = json.loads(line)
+        assert one["chooser"] == lab.CHOOSER and "closest" in one
+
+
+def test_old_screens_are_not_served_but_their_answers_are_kept(lab_world: Lab) -> None:
+    first = lab_world.http.get("/api/lab/next").json()
+    assert answer(lab_world.http, first, 0).status_code == 200
+    supa = lab_world.world.factory(lab_world.agency)
+    post = asyncio.run(supa.select("posts", select="id"))[0]["id"]
+    asyncio.run(
+        supa.insert(
+            "lab_screens",
+            {
+                "agency_id": lab_world.agency,
+                "post_id": post,
+                "shared": True,
+                "designs": [{"design_id": "a"}, {"design_id": "b"}],
+                "detail": {"batch": "old", "index": 0},  # chooser 1: near-twins
+            },
+        )
+    )
+    progress = lab_world.http.get("/api/lab/progress").json()
+    assert progress["screens"] == 4  # the old one is not counted or served
+    seen = set()
+    while True:
+        screen = lab_world.http.get("/api/lab/next").json()
+        if screen["done"]:
+            break
+        assert screen["screen_id"] not in seen
+        seen.add(screen["screen_id"])
+        assert answer(lab_world.http, screen, None).status_code == 200
+    assert len(seen) == 3
+    assert len(lab_world.http.get("/api/lab/export").text.splitlines()) == 4
+
+
+def test_a_job_out_of_time_leaves_the_rest_for_the_next_press(lab_world: Lab) -> None:
+    another_post(lab_world, "late-post")
+    out = asyncio.run(lab.make_screens(lab_world.ctx(), per_post=2, budget_s=-1.0))
+    assert out["screens"] == 0 and out["left"] == 1
+    later = asyncio.run(lab.make_screens(lab_world.ctx(), per_post=2))
+    assert later["screens"] == 2 and later["left"] == 0
+
+
+def tinted(shift: int) -> bytes:
+    """Another sharp synthetic photo, a different colour: a different picture."""
+    import io
+
+    import numpy as np
+    from PIL import Image
+
+    y, x = np.mgrid[0:1350, 0:1080]
+    edges = 40 * (((x // 6) + (y // 6)) % 2)
+    base = 120 + 50 * np.sin(x / (7.0 + shift)) * np.cos(y / 13.0) + edges
+    rgb = np.stack([(base + 40 * shift) % 255, base * 0.6, 200 - base * 0.3], axis=-1)
+    out = io.BytesIO()
+    Image.fromarray(rgb.clip(0, 255).astype("uint8"), "RGB").save(out, "PNG")
+    return out.getvalue()
+
+
+def test_alternate_screens_use_the_clients_next_best_photos(lab_world: Lab) -> None:
+    ctx = lab_world.ctx()
+    client = asyncio.run(ctx.supa.select("clients", select="id"))[0]["id"]
+    for shift in (1, 2, 3):
+        asyncio.run(service.store_image(ctx, client, tinted(shift), kind="photo"))
+    another_post(lab_world, "many-photos")
+    out = asyncio.run(lab.make_screens(ctx, per_post=4))
+    assert out["screens"] == 4
+    rows = asyncio.run(ctx.supa.select("lab_screens", select="detail,created_at"))
+    newest = [row["detail"] for row in rows if row["detail"]["batch"] == out["batch"]]
+    sets = [tuple(one["photos"]) for one in sorted(newest, key=lambda d: d["index"])]
+    assert len(set(sets)) == 2 and sets[0] == sets[2] and sets[1] == sets[3]
+    assert set(sets[0]).isdisjoint(sets[1])  # the next two, not the same two again
