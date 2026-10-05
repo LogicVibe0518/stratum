@@ -772,6 +772,19 @@ img.entering { animation: fade-in var(--speed) ease-out; }
 }
 .flag-row { display: flex; gap: 8px; align-items: flex-start; margin: 0 0 8px; }
 .flag-row span:last-child { min-width: 0; overflow-wrap: anywhere; }
+.brief-gap {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.brief-gap button { height: auto; min-height: 28px; padding: 2px 8px; font-size: 12px; font-weight: 400; }
+#briefgaps:empty { display: none; }
+#asklist p { margin: 0 0 6px; font-size: 13px; }
+#askcopy { height: auto; padding: 0; font-size: 12px; color: var(--muted); }
 .quick-grid { display: flex; flex-wrap: wrap; gap: 8px; }
 .quick-grid button { height: auto; min-height: 36px; white-space: normal; text-align: left; }
 table { width: 100%; border-collapse: collapse; }
@@ -1025,6 +1038,7 @@ button, input, select, textarea, .card, .badge, .drop, .switch-ui, .toast {
           <h2>New post</h2>
           <label for="brief">What is the post about?</label>
           <textarea id="brief" rows="3" placeholder="20% off boiler servicing, book before 31 October. Gas Safe 000000. Call 0161 496 0000."></textarea>
+          <div id="briefgaps"></div>
           <p class="field-error" id="brieferr" role="alert"></p>
           <div class="row">
             <div>
@@ -1147,6 +1161,11 @@ button, input, select, textarea, .card, .badge, .drop, .switch-ui, .toast {
         <section>
           <h2>To check</h2>
           <div id="flaglist"></div>
+        </section>
+        <section class="hide" id="askclient">
+          <h2>Ask the client</h2>
+          <div id="asklist"></div>
+          <button type="button" class="ghost" id="askcopy">Copy</button>
         </section>
         <section class="card">
           <h2>Instant changes</h2>
@@ -1280,6 +1299,8 @@ let inspectGen = 0;
 let selectedLayer = null;
 let editorTab = "layers";
 let showMeasure = false;
+let briefTimer = null;
+let briefAbort = null;
 let LABSCREEN = null;
 let labPicked = undefined;
 let labNever = new Set();
@@ -2397,6 +2418,8 @@ async function openClient(client) {
   BRAND = null;
   HAS_LOGO = false;
   assetsLoaded = false;
+  cancelBriefCheck();
+  paintBriefGaps([]);
   show("client");
   $("clienttitle").textContent = client.name || "";
   setCrumbs([
@@ -2466,6 +2489,8 @@ async function makePost() {
     $("brief").value = "";
     $("slug").value = "";
     $("photonote").value = "";
+    cancelBriefCheck();
+    paintBriefGaps([]);
     autosize($("brief"));
     if (queued) {
       if (!out.job_id) throw new Error("the queue did not return a job");
@@ -2523,7 +2548,11 @@ $("makeform").addEventListener("submit", (event) => {
   event.preventDefault();
   makePost();
 });
-$("brief").addEventListener("input", () => { setField("brief", ""); autosize($("brief")); });
+$("brief").addEventListener("input", () => {
+  setField("brief", "");
+  autosize($("brief"));
+  scheduleBriefCheck();
+});
 $("slug").addEventListener("input", () => setField("slug", ""));
 $("brief").addEventListener("keydown", (event) => {
   if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
@@ -2531,6 +2560,82 @@ $("brief").addEventListener("keydown", (event) => {
     $("makeform").requestSubmit();
   }
 });
+
+function paintBriefGaps(gaps) {
+  const root = $("briefgaps");
+  root.replaceChildren();
+  for (const gap of gaps || []) {
+    const row = document.createElement("div");
+    row.className = "brief-gap";
+    const question = document.createElement("span");
+    question.textContent = gap.question || "";
+    row.append(question);
+    if (gap.example) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "secondary";
+      button.textContent = `Add "${gap.example}"`;
+      button.addEventListener("click", () => { addBriefExample(gap.example); });
+      row.append(button);
+    }
+    root.append(row);
+  }
+}
+
+function addBriefExample(example) {
+  const area = $("brief");
+  const trimmed = area.value.replace(/\s+$/, "");
+  const sep = !trimmed ? "" : /[.!?]$/.test(trimmed) ? " " : ", ";
+  area.value = trimmed + sep + example;
+  area.focus();
+  autosize(area);
+  checkBrief();
+}
+
+function scheduleBriefCheck() {
+  if (briefTimer) clearTimeout(briefTimer);
+  briefTimer = setTimeout(() => { checkBrief(); }, 400);
+}
+
+function cancelBriefCheck() {
+  if (briefTimer) {
+    clearTimeout(briefTimer);
+    briefTimer = null;
+  }
+  if (briefAbort) {
+    briefAbort.abort();
+    briefAbort = null;
+  }
+}
+
+async function checkBrief() {
+  if (briefTimer) {
+    clearTimeout(briefTimer);
+    briefTimer = null;
+  }
+  const text = $("brief").value;
+  if (!CLIENT || !CLIENT.id || text.length < 2) {
+    cancelBriefCheck();
+    paintBriefGaps([]);
+    return;
+  }
+  if (briefAbort) briefAbort.abort();
+  const controller = new AbortController();
+  briefAbort = controller;
+  try {
+    const out = await api(`/clients/${CLIENT.id}/brief/check`, {
+      method: "POST",
+      json: { brief: text },
+      signal: controller.signal,
+    });
+    if (briefAbort !== controller) return;
+    paintBriefGaps(out.gaps || []);
+  } catch (err) {
+    if (err && err.name === "AbortError") return;
+    if (briefAbort !== controller) return;
+    paintBriefGaps([]);
+  }
+}
 
 function setKind(kind) {
   uploadKind = kind === "logo" ? "logo" : "photo";
@@ -2679,6 +2784,34 @@ function paintFlags(flags) {
     const tone = flag.severity === "blocker" ? "blocker" : "warn";
     return `<div class="flag-row"><span class="badge ${tone}">${esc(flag.severity)}</span><span>${esc(flag.message)}</span></div>`;
   }).join("");
+}
+
+function paintAskClient(data) {
+  const root = $("askclient");
+  const list = $("asklist");
+  const words = (data && data.post && data.post.words) || {};
+  const missing = words.missing || [];
+  list.replaceChildren();
+  if (!missing.length) {
+    root.classList.add("hide");
+    return;
+  }
+  root.classList.remove("hide");
+  for (const question of missing) {
+    const line = document.createElement("p");
+    line.textContent = question;
+    list.append(line);
+  }
+}
+
+function copyAskClient() {
+  const words = (POSTDATA && POSTDATA.post && POSTDATA.post.words) || {};
+  const missing = words.missing || [];
+  const text = missing.filter(Boolean).join("\n");
+  if (!text) return;
+  navigator.clipboard.writeText(text).catch((err) => {
+    if (SESSION) toast(sentence(err));
+  });
 }
 
 function historyResult(outcome) {
@@ -2979,6 +3112,7 @@ function paintPost(data, options) {
   $("posttitle").textContent = (data.post && data.post.slug) || "";
   paintStats(data, opts.lastChange);
   paintFlags(data.flags || []);
+  paintAskClient(data);
   paintHistory(data.edits || []);
   paintCanvaMenu(data.post || {});
   syncPreview(Boolean(opts.fade));
@@ -4299,6 +4433,7 @@ function onLabKey(event) {
 }
 
 $("labbtn").addEventListener("click", () => { openLab(); });
+$("askcopy").addEventListener("click", () => { copyAskClient(); });
 $("labnone").addEventListener("click", () => { pickLabNone(); });
 $("labnext").addEventListener("click", () => { submitLab(); });
 $("labmake").addEventListener("click", () => { makeLabScreens(); });
