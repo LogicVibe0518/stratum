@@ -137,48 +137,52 @@ STOP = frozenset(
     ]
 )
 
-# Words a call to action may start with: what the reader does next.
-VERBS = frozenset(
-    [
-        "book",
-        "call",
-        "get",
-        "grab",
-        "claim",
-        "message",
-        "text",
-        "email",
-        "visit",
-        "order",
-        "shop",
-        "find",
-        "see",
-        "try",
-        "start",
-        "join",
-        "reserve",
-        "request",
-        "ask",
-        "enquire",
-        "contact",
-        "dm",
-        "follow",
-        "learn",
-        "discover",
-        "save",
-        "sign",
-        "apply",
-        "register",
-        "schedule",
-        "secure",
-        "check",
-        "come",
-        "pop",
-        "drop",
-        "treat",
-        "give",
-        "send",
-    ]
+# Words a call to action does not start with: it starts with what to do next ("Book",
+# "Talk", "Arrange"), so a call to action opening with one of these is a label, not an
+# instruction ("Free quote", "Your first clean"). A list of verbs missed real verbs
+# (the 5 Oct eval flagged "Talk about your patio"); a list of non-starts does not.
+NOT_VERB = frozenset(
+    {
+        "a",
+        "an",
+        "the",
+        "your",
+        "our",
+        "my",
+        "their",
+        "his",
+        "her",
+        "its",
+        "this",
+        "that",
+        "these",
+        "those",
+        "free",
+        "new",
+        "best",
+        "special",
+        "limited",
+        "exclusive",
+        "great",
+        "amazing",
+        "first",
+        "only",
+        "just",
+        "now",
+        "today",
+        "quality",
+        "professional",
+        "expert",
+        "local",
+        "friendly",
+        "affordable",
+        "cheap",
+        "more",
+        "less",
+        "all",
+        "every",
+        "no",
+    }
 )
 
 _WORD = re.compile(r"[a-z0-9£$€%]+(?:'[a-z]+)?")
@@ -239,9 +243,34 @@ def copied_run(brief: str, text: str) -> int:
 
 
 def cta_verb(cta: str) -> bool:
-    """A call to action starts with what to do next."""
+    """A call to action starts with what to do next: not with a determiner, a
+    pronoun, an adjective or a number."""
     first = _tokens(cta)
-    return bool(first) and stem(first[0]) in {stem(one) for one in VERBS}
+    return bool(first) and first[0] not in NOT_VERB and not first[0][0].isdigit()
+
+
+def banned_in(text: str, banned: Sequence[str]) -> list[str]:
+    """The client's banned phrases that appear in `text`, ignoring case."""
+    folded = text.casefold()
+    return [one for one in banned if one.strip() and one.casefold() in folded]
+
+
+def _named(text: str, names: Sequence[str]) -> set[str]:
+    said = content(text)
+    return {name for name in names if content(name) and content(name) <= said}
+
+
+def wanders(brief: str, offer: str, services: Sequence[str], areas: Sequence[str]) -> bool:
+    """The offer line names a service or an area the brief did not, while the brief
+    named its own: "Monthly garden maintenance from £60, Bristol" came back with the
+    offer line "Garden design in Clifton" (5 Oct eval). Filling a thin brief with the
+    client's own service and area is the point of v3; swapping the brief's for others
+    is not."""
+    for names in (services, areas):
+        in_brief, in_offer = _named(brief, names), _named(offer, names)
+        if in_brief and in_offer - in_brief:
+            return True
+    return False
 
 
 @dataclass(frozen=True)
@@ -251,9 +280,21 @@ class Problem:
     detail: str
 
 
-def problems(brief: str, headline: str, offer: str, cta: str) -> list[Problem]:
+def problems(
+    brief: str,
+    headline: str,
+    offer: str,
+    cta: str,
+    *,
+    banned: Sequence[str] = (),
+    services: Sequence[str] = (),
+    areas: Sequence[str] = (),
+) -> list[Problem]:
     """What is wrong with the words on a poster, most serious first."""
     found: list[Problem] = []
+    said = banned_in(f"{headline}\n{offer}\n{cta}", banned)
+    if said:
+        found.append(Problem("banned", "all", f"uses a banned phrase: {', '.join(said)}"))
     repeated = echo(headline, offer)
     if repeated > ECHO_MAX:
         found.append(
@@ -267,27 +308,51 @@ def problems(brief: str, headline: str, offer: str, cta: str) -> list[Problem]:
         run = copied_run(brief, text)
         if run >= COPIED_MAX:
             found.append(Problem("copied", line, f"copies {run} words in a row from the brief"))
+    if wanders(brief, offer, services, areas):
+        found.append(
+            Problem("off_topic", "offer_detail", "names a service or area the brief did not")
+        )
     if cta and not cta_verb(cta):
         found.append(Problem("cta_verb", "cta", "the call to action does not start with a verb"))
     return found
 
 
-def feedback(found: Sequence[Problem], headline: str, offer: str) -> str:
-    """What the writer is told when a draft is sent back: the echo only. Copying a
-    fact from the brief is often right, so it is measured, not sent back."""
-    if not any(one.code == "echo" for one in found):
-        return ""
-    return (
-        f'Your offer_detail "{offer}" said the same as your headline "{headline}". '
-        "Write an offer_detail that adds something the headline does not say: the "
-        "detail, the proof, or a service and an area from the lists above."
-    )
+# Sent back for a second try: these two only. Copying a fact from the brief is often
+# right, and a wandering line or a CTA without a verb is measured, not worth a call.
+SENT_BACK = ("banned", "echo")
+
+
+def feedback(
+    found: Sequence[Problem], headline: str, offer: str, banned: Sequence[str] = ()
+) -> str:
+    """What the writer is told when a draft is sent back, or "" when it is not."""
+    told: list[str] = []
+    if any(one.code == "banned" for one in found):
+        said = banned_in(f"{headline}\n{offer}", banned) or [
+            one.detail.split(": ", 1)[-1] for one in found if one.code == "banned"
+        ]
+        told.append(
+            f"Your words used a phrase this business must never say ({', '.join(said)}), "
+            "even though the brief used it. Say the fact another way only if it is still "
+            "true and allowed; otherwise leave it out."
+        )
+    if any(one.code == "echo" for one in found):
+        told.append(
+            f'Your offer_detail "{offer}" said the same as your headline "{headline}". '
+            "Write an offer_detail that adds something the headline does not say: first a "
+            "fact from the brief the headline did not use; only if there is none, the "
+            "service this post is about and an area, from the lists above."
+        )
+    return " ".join(told)
 
 
 __all__ = [
     "COPIED_MAX",
     "ECHO_MAX",
+    "NOT_VERB",
+    "SENT_BACK",
     "Problem",
+    "banned_in",
     "content",
     "copied_run",
     "cta_verb",
@@ -295,5 +360,6 @@ __all__ = [
     "feedback",
     "problems",
     "stem",
+    "wanders",
     "words",
 ]

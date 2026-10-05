@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from stratum_worker.draft.copycheck import (
     ECHO_MAX,
+    banned_in,
     content,
     copied_run,
     cta_verb,
@@ -13,6 +14,7 @@ from stratum_worker.draft.copycheck import (
     feedback,
     problems,
     stem,
+    wanders,
 )
 
 
@@ -45,6 +47,10 @@ def test_copied_runs_count_words_in_a_row_from_the_brief() -> None:
 def test_a_call_to_action_starts_with_a_verb() -> None:
     assert cta_verb("Book your free clean") and cta_verb("Get in touch")
     assert cta_verb("Call 0161 496 0000")
+    # Real verbs the first list missed (5 Oct eval):
+    assert cta_verb("Talk about your patio") and cta_verb("Arrange a move-out clean")
+    assert cta_verb("Plan your garden") and cta_verb("Enjoy a Diwali thali")
+    assert not cta_verb("Free quote") and not cta_verb("20% off today")
     assert not cta_verb("Your free quote") and not cta_verb("")
 
 
@@ -57,6 +63,23 @@ def test_problems_are_found_and_only_an_echo_is_sent_back() -> None:
     )
     assert [one.code for one in found] == ["echo", "copied", "copied", "cta_verb"]
     told = feedback(found, "First time booking is free", "Your first time booking is free.")
-    assert "same as your headline" in told and "service and an area" in told
+    assert "same as your headline" in told and "a fact from the brief" in told
     copied_only = problems("20% off boilers", "20% off boilers this week", "Book a service", "Call")
     assert feedback(copied_only, "20% off boilers this week", "Book a service") == ""
+
+
+def test_a_banned_phrase_is_found_whatever_its_case() -> None:
+    assert banned_in("Book a FREE ROOF inspection", ("free roof", "")) == ["free roof"]
+    assert banned_in("Book a roof inspection", ("free roof",)) == []
+
+
+def test_an_offer_line_that_swaps_the_briefs_service_or_area_wanders() -> None:
+    services = ("garden design", "garden maintenance", "patio laying")
+    areas = ("Bristol", "Clifton")
+    brief = "monthly garden maintenance from £60, Bristol"
+    assert wanders(brief, "Garden design in Clifton.", services, areas)
+    assert not wanders(
+        brief, "Mowing, edging and weeding, every month in Bristol.", services, areas
+    )
+    # A thin brief names nothing: using the client's own service and area is the point.
+    assert not wanders("first booking is free", "Garden design in Clifton.", services, areas)

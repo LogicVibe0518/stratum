@@ -132,7 +132,7 @@ def test_the_eval_scores_what_the_product_writes() -> None:
     summary = report.summary()
     assert summary["cases"] == 3 and summary["second_tries"] == 1
     assert set(summary["rates"]) == set(copyeval.PROBLEMS)
-    assert "post.copy v3" in copyeval.table(report)
+    assert "post.copy v4" in copyeval.table(report)
     json.dumps(report.as_dict())  # the report is plain JSON
 
 
@@ -157,5 +157,29 @@ def test_the_baseline_runs_the_old_prompt_once_and_then_restores_the_new() -> No
     assert report.version == 2 and report.rows[0]["score"]["calls"] == 1
     assert report.rows[0]["score"]["echo"]  # the old product kept the echo
     assert len(provider.calls) == 1
-    assert load(TaskName.POST_COPY).version == 3
+    assert load(TaskName.POST_COPY).version == 4
     assert "different job" in load(TaskName.POST_COPY).system
+
+
+def test_a_banned_phrase_from_the_brief_is_sent_back_too() -> None:
+    """5 Oct eval: Lone Star bans "free roof"; the brief said "Free roof inspection" and
+    v3 wrote it. The second try is told, and kept because it fixed it."""
+    request = REQUEST.model_copy(
+        update={"brief": "Free roof inspection this week", "banned_claims": ("free roof",)}
+    )
+    said = {
+        "headline": "Hail in Stone Oak?",
+        "offer_detail": "Free roof inspection this week for storm damage.",
+        "cta": "Book a free roof inspection",
+        "caption": "Hail hit Stone Oak.",
+    }
+    fixed = {
+        **said,
+        "offer_detail": "Roof inspections this week for storm damage.",
+        "cta": "Book a roof inspection",
+    }
+    gate, provider = gateway([said, fixed])
+    result, calls = asyncio.run(ask_for_copy(gate, request, agency_id="a"))
+    assert calls == 2 and "free roof" not in result.offer_detail.lower()
+    second = provider.calls[1][1]
+    assert isinstance(second, PostCopyRequest) and "must never say (free roof)" in second.feedback

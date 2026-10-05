@@ -1,10 +1,11 @@
-# M7b — Words that earn their space, and a brief box that asks
+# M7b — Words that earn their space, and a brief box that asks (post.copy v3/v4)
 
 **Status:** written by Claude, 5 Oct 2026. It builds on M7 (draft post) and M10e
 (post.copy v2).
 
 **Review flags:**
-- **Prompt change:** post.copy v2 → v3. The pinned hash is updated.
+- **Prompt change:** post.copy v2 → v4 (v3 was evaluated and never shipped). The pinned
+  hashes are updated.
 - **New fields:**
   - `PostCopyRequest.feedback`;
   - `PostCopyResult.missing` and `PostCopy.missing`, stored in `posts.words`.
@@ -138,18 +139,44 @@ keys, about a cent each) and writes the numbers into this doc.
 
 ## Results
 
-Rushil fills this in after the two runs:
+The real model (openai/gpt-6-luna via OpenRouter), the same 30 briefs, the same code,
+5 Oct 2026. The share of cases with each problem (lower is better). Both reports were
+re-scored with the final checks, so the columns compare like with like:
 
-| | baseline (v2, one call) | v3 |
+| | baseline: v2, one call | v3 |
 |---|---|---|
-| echo | | |
-| copied | | |
-| cta_no_verb | | |
-| invented_number | | |
-| banned_claim | | |
-| clean (no problem) | | |
-| second tries | – | |
-| with questions back | – | |
+| echo (offer line repeats the headline) | 0.448 (13 of 29) | 0.0 |
+| copied (5+ words in a row from the brief) | 0.448 | 0.2 |
+| off_topic (offer line swaps the brief's service or area) | 0.0 | 0.067 (2) |
+| banned_claim | 0.0 | 0.033 (1) |
+| invented_number | 0.0 | 0.0 |
+| cta_no_verb | 0.0 | 0.0 |
+| no_service_first | 0.034 | 0.033 |
+| **clean (no problem at all)** | **0.31** | **0.767** |
+| second tries | – | 2 of 30 |
+| with questions back | 4 (unasked) | 28 of 30 |
+| cost of 30 briefs | $0.0133 | $0.0142 |
+| failed | 1 (cut off at 900 tokens) | 0 (3000 tokens) |
+
+**v3's two side effects, and v4.** Filling a thin offer line with the client's own
+service and area also filled two offer lines that had facts of their own:
+- "Monthly garden maintenance from £60" came back over "Garden design in Clifton."
+  The brief said maintenance, in Bristol.
+- A brief saying "Free roof inspection" came back with Lone Star's banned "free roof".
+  v2 had happened to write "No-charge".
+
+v4 changes the prompt in two ways:
+- the offer line uses a fact from the brief first, and only then the service the post
+  is about;
+- banned phrases win over the brief.
+
+In code, a banned phrase is now sent back like an echo, and `off_topic` is measured.
+The first CTA check missed real verbs ("Talk", "Arrange", "Plan"). It now flags only a
+call to action that opens with a determiner, an adjective or a number.
+
+| | v4 |
+|---|---|
+| Rushil's run | (to fill in) |
 
 ## Tests
 

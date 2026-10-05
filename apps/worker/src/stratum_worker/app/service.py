@@ -329,23 +329,36 @@ async def ask_for_copy(
 ) -> tuple[PostCopyResult, int]:
     """The words for one post, and how many calls it took (1 or 2).
 
-    The offer line must say something the headline does not (post.copy v3). Asking is
-    not enough, so it is checked in code; one second try is told exactly what was
-    wrong, and the better of the two is kept. Shared by drafts and the copy eval, so
-    the eval measures what the product does.
+    The offer line must say something the headline does not, and no line may use a
+    phrase the client's rules ban, even when the brief does (post.copy v3/v4). Asking
+    is not enough, so both are checked in code; one second try is told exactly what
+    was wrong, and the second is kept only if it fixed more than it broke. Shared by
+    drafts and the copy eval, so the eval measures what the product does.
     """
     result = await gateway.run(TaskName.POST_COPY, request, agency_id=agency_id)
     assert isinstance(result, PostCopyResult)
-    found = copycheck.problems(request.brief, result.headline, result.offer_detail, result.cta)
-    sent_back = copycheck.feedback(found, result.headline, result.offer_detail)
+    first = _sent_back(request, result)
+    sent_back = copycheck.feedback(
+        first, result.headline, result.offer_detail, request.banned_claims
+    )
     if not sent_back or not second_try:
         return result, 1
     retry = request.model_copy(update={"feedback": sent_back})
     second = await gateway.run(TaskName.POST_COPY, retry, agency_id=agency_id)
     assert isinstance(second, PostCopyResult)
-    first_echo = copycheck.echo(result.headline, result.offer_detail)
-    second_echo = copycheck.echo(second.headline, second.offer_detail)
-    return (second if second_echo < first_echo else result), 2
+    # Keep the second only if it fixed more than it broke.
+    return (second if len(_sent_back(request, second)) < len(first) else result), 2
+
+
+def _sent_back(request: PostCopyRequest, result: PostCopyResult) -> list[copycheck.Problem]:
+    found = copycheck.problems(
+        request.brief,
+        result.headline,
+        result.offer_detail,
+        result.cta,
+        banned=request.banned_claims,
+    )
+    return [one for one in found if one.code in copycheck.SENT_BACK]
 
 
 async def write_copy(

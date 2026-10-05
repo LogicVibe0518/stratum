@@ -12,6 +12,8 @@ copy of it. Every line is then scored:
 - echo: the offer line repeats the headline (copycheck.ECHO_MAX);
 - copied: a line copies COPIED_MAX or more words in a row from the brief;
 - cta_verb: the call to action starts with a verb;
+- off_topic: the offer line names a service or area the brief did not, while the
+  brief named its own;
 - invented_number, banned_claim, missing_required_phrase: the client's rules
   (draft.preflight.check_copy, the same checks a draft gets);
 - service / area in the caption's first sentence, when the client has them;
@@ -122,6 +124,7 @@ def score(case: Case, words: PostCopy, rules: ClientRules, calls: int) -> dict[s
         "copied": copied >= copycheck.COPIED_MAX,
         "copied_run": copied,
         "cta_no_verb": not copycheck.cta_verb(words.cta),
+        "off_topic": copycheck.wanders(case.brief, words.offer_detail, rules.services, rules.areas),
         **{code: code in flags for code in RULE_FLAGS},
         "no_service_first": bool(rules.services) and "no_service_in_first_sentence" in flags,
         "no_area_first": bool(rules.areas) and "no_area_in_first_sentence" in flags,
@@ -136,6 +139,7 @@ PROBLEMS = (
     "echo",
     "copied",
     "cta_no_verb",
+    "off_topic",
     *RULE_FLAGS,
     "no_service_first",
     "no_area_first",

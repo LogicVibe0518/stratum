@@ -30,7 +30,7 @@ from stratum_worker.gateway.tasks import (
 )
 
 VERSION: dict[TaskName, int] = {
-    TaskName.POST_COPY: 3,
+    TaskName.POST_COPY: 4,
     TaskName.CAPTION_GENERATE: 1,
     TaskName.EDIT_PARSE: 5,
     TaskName.BACKGROUND_CREATE: 1,
