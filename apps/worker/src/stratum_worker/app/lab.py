@@ -15,26 +15,50 @@ How the labels are kept honest:
   found and removed;
 - nothing about a design (family, rank, score) is shown.
 
-Screens are made by a job (slow: a ranking per post). Rating is quick and runs in the
-request. Answers are decision_log rows of kind 'designer_pick' with source 'lab'.
+Screens are made by a job (slow: a ranking per photo set per post). Rating is quick
+and runs in the request. Answers are decision_log rows of kind 'designer_pick' with
+source 'lab'.
+
+What a screen is made of (design/lab.py, chooser 2, 5 Oct): designs that look
+different at a glance, top picks rotating through the families, and - when the client
+has more than two photos - alternate screens laid out around the client's next-best
+photos, so the lab sees more than one picture. Screens from chooser 1 (near-twins on
+one photo) are no longer served; their answers stay in the export, marked.
 """
 
 from __future__ import annotations
 
 import asyncio
 import hashlib
+import io
 import json
 import random
+import time
 import uuid
 from collections import Counter, defaultdict
+from collections.abc import Sequence
 from itertools import combinations
+from pathlib import Path
 from typing import Any
+
+import numpy as np
+from PIL import Image
+from stratum_spec import BrandKit
 
 from stratum_worker.app import service
 from stratum_worker.app.options import material_for
-from stratum_worker.design.choose import NothingFits, candidates, seed_for
-from stratum_worker.design.lab import lab_screen
+from stratum_worker.design.choose import Candidate, NothingFits, candidates, seed_for
+from stratum_worker.design.lab import (
+    LOOK_WIDTH,
+    MIN_APART,
+    Look,
+    Shown,
+    cielab,
+    closest,
+    lab_screen,
+)
 from stratum_worker.draft.pipeline import DraftError
+from stratum_worker.render import render_poster
 
 REPEAT_RATE = 0.1
 REPEAT_AFTER = 10  # answers before repeats start
@@ -50,6 +74,13 @@ REASONS = (
     "Looks cheap",
 )
 MAX_MS = 10 * 60 * 1000
+CHOOSER = 2  # how screens are chosen (design/lab.py); older screens are not served
+PHOTO_SETS = 2  # the best two photos, then the next two, when the client has them
+# Seconds a screen-making job spends before it stops starting new posts. The job may
+# run for its lease minus a margin (queue/worker.work_timeout: 150 s on the default
+# lease); a post takes several seconds per photo set. Posts left over are made by the
+# next press, which skips posts that already have current screens.
+BUDGET_S = 100.0
 
 
 def _rng(*parts: object) -> random.Random:
@@ -68,47 +99,101 @@ def display_order(screen_id: str, user_id: str | None, served: str, count: int) 
 # --- making screens (a job) --------------------------------------------------------------
 
 
-async def make_screens(
-    ctx: service.Context, *, posts: int = 20, per_post: int = 6, shared_per_post: int = 3
-) -> dict[str, Any]:
-    """Screens for the agency's newest posts that have words and a client with photos.
+def looks_of(
+    ranked: Sequence[Candidate], kit: BrandKit, assets: dict[str, str], root: Path
+) -> list[Look]:
+    """How each design looks at a glance: a LOOK_WIDTH px render, in CIELAB."""
+    out: list[Look] = []
+    for candidate in ranked:
+        png = render_poster(candidate.spec, kit, assets=assets, root=root, width=LOOK_WIDTH)
+        with Image.open(io.BytesIO(png)) as image:
+            rgb = np.asarray(image.convert("RGB"), dtype=np.float64) / 255.0
+        out.append(cielab(rgb))
+    return out
 
-    The first `shared_per_post` screens of each post are shown to every rater.
+
+def photo_sets(ranked_photos: Sequence[str]) -> list[tuple[str, ...]]:
+    """The photos each ranking is laid out around: the best two, then the next two."""
+    sets = [tuple(ranked_photos[n * 2 : n * 2 + 2]) for n in range(PHOTO_SETS)]
+    return [one for one in sets if one]
+
+
+async def _current_posts(ctx: service.Context) -> set[str]:
+    """Posts that already have screens made the current way."""
+    rows = await ctx.supa.select("lab_screens", select="post_id,detail")
+    return {
+        str(one["post_id"])
+        for one in rows
+        if int((one.get("detail") or {}).get("chooser", 1)) >= CHOOSER
+    }
+
+
+async def make_screens(
+    ctx: service.Context,
+    *,
+    posts: int = 20,
+    per_post: int = 6,
+    shared_per_post: int = 3,
+    budget_s: float = BUDGET_S,
+) -> dict[str, Any]:
+    """Screens for the agency's newest posts that have words, a client with photos, and
+    no current screens yet.
+
+    The first `shared_per_post` screens of each post are shown to every rater. Stops
+    starting new posts after `budget_s` seconds; the rest are reported as `left`.
     """
+    began = time.monotonic()
     rows = await ctx.supa.select("posts", order="created_at.desc", select="*")
-    done, made, skipped = 0, 0, []
+    covered = await _current_posts(ctx)
+    done, made, skipped, left = 0, 0, [], 0
+    near_twins = 0
+    families: Counter[str] = Counter()
     batch = str(uuid.uuid4())
     root = ctx.settings.repo_root
     for post in rows:
         if done >= posts:
             break
         words = post.get("words") or {}
-        if not words.get("headline"):
+        if not words.get("headline") or str(post["id"]) in covered:
+            continue
+        if time.monotonic() - began > budget_s:
+            left += 1
             continue
         clients = await ctx.supa.select("clients", id=f"eq.{post['client_id']}", select="*")
         if not clients:
             continue
         client = clients[0]
-        picked, _ = await service.pick_photos(ctx, client["id"], {"a": "photo", "b": "photo"})
-        photos = tuple(picked[key] for key in ("a", "b") if key in picked)
-        if not photos:
+        wanted = {f"p{n}": "photo" for n in range(2 * PHOTO_SETS)}
+        picked, _ = await service.pick_photos(ctx, client["id"], wanted)
+        ranked_photos = [picked[key] for key in wanted if key in picked]
+        if not ranked_photos:
             skipped.append(post["slug"])
             continue
-        try:
-            material, asset_paths = await material_for(
-                ctx, client, words, service.brand_of(client), photos, None
-            )
-            ranked = await asyncio.to_thread(
-                candidates, material, ["4:5"], root, seed=seed_for(str(post["id"]))
-            )
-        except (DraftError, NothingFits):
+        rankings: list[tuple[tuple[str, ...], list[Candidate], list[Look], dict[str, str]]] = []
+        kit = service.brand_of(client)
+        for photos in photo_sets(ranked_photos):
+            try:
+                material, asset_paths = await material_for(ctx, client, words, kit, photos, None)
+                ranked = await asyncio.to_thread(
+                    candidates, material, ["4:5"], root, seed=seed_for(str(post["id"]))
+                )
+            except (DraftError, NothingFits):
+                continue
+            looks = await asyncio.to_thread(looks_of, ranked, kit, asset_paths, root)
+            rankings.append((photos, ranked, looks, asset_paths))
+        if not rankings:
             skipped.append(post["slug"])
             continue
+        shown = Shown.nothing()
         screens = []
         for index in range(per_post):
-            chosen = lab_screen(ranked, _rng(post["id"], batch, index))
+            photos, ranked, looks, asset_paths = rankings[index % len(rankings)]
+            chosen = lab_screen(ranked, _rng(post["id"], batch, index), looks=looks, shown=shown)
             if chosen is None:
                 break
+            hardest = closest(chosen, looks)
+            near_twins += int(hardest < MIN_APART)
+            families.update(one.candidate.family for one in chosen)
             screens.append(
                 {
                     "agency_id": ctx.agency_id,
@@ -127,14 +212,29 @@ async def make_screens(
                         }
                         for one in chosen
                     ],
-                    "detail": {"batch": batch, "candidates": len(ranked), "index": index},
+                    "detail": {
+                        "batch": batch,
+                        "candidates": len(ranked),
+                        "index": index,
+                        "chooser": CHOOSER,
+                        "photos": list(photos),
+                        "closest": round(hardest, 2),
+                    },
                 }
             )
         if screens:
             await ctx.supa.insert("lab_screens", screens)
             made += len(screens)
             done += 1
-    return {"posts": done, "screens": made, "skipped": skipped, "batch": batch}
+    return {
+        "posts": done,
+        "screens": made,
+        "skipped": skipped,
+        "left": left,
+        "near_twins": near_twins,
+        "families": dict(sorted(families.items())),
+        "batch": batch,
+    }
 
 
 # --- rating ------------------------------------------------------------------------------
@@ -151,9 +251,11 @@ async def _answers(ctx: service.Context) -> list[dict[str, Any]]:
 
 
 async def _screens(ctx: service.Context) -> list[dict[str, Any]]:
-    return await ctx.supa.select(
-        "lab_screens", select="id,post_id,shared,created_at", order="created_at.asc"
+    """The screens raters are served: those made the current way."""
+    rows = await ctx.supa.select(
+        "lab_screens", select="id,post_id,shared,created_at,detail", order="created_at.asc"
     )
+    return [one for one in rows if int((one.get("detail") or {}).get("chooser", 1)) >= CHOOSER]
 
 
 def _choose(
@@ -165,7 +267,8 @@ def _choose(
     rng = _rng(user, len(mine))
     if len(mine) >= REPEAT_AFTER and rng.random() < REPEAT_RATE:
         recent = set(seen[-RECENT:]) if RECENT else set()
-        older = sorted(set(seen) - recent)
+        servable = {one["id"] for one in screens}
+        older = sorted((set(seen) - recent) & servable)
         if older:
             screen_id = rng.choice(older)
             return next((one for one in screens if one["id"] == screen_id), None), True
@@ -362,6 +465,8 @@ async def export(ctx: service.Context) -> str:
                     "ms": detail.get("ms"),
                     "order": detail.get("order", []),
                     "designs": screen["designs"],
+                    "chooser": int((screen.get("detail") or {}).get("chooser", 1)),
+                    "closest": (screen.get("detail") or {}).get("closest"),
                     "at": one.get("created_at"),
                 },
                 separators=(",", ":"),
@@ -385,12 +490,16 @@ async def preview(ctx: service.Context, screen_id: str, index: int, aspect: str)
 
 
 __all__ = [
+    "BUDGET_S",
+    "CHOOSER",
     "REASONS",
     "answer",
     "display_order",
     "export",
+    "looks_of",
     "make_screens",
     "next_screen",
+    "photo_sets",
     "preview",
     "progress",
     "summarise",
