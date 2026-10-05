@@ -174,9 +174,33 @@ In code, a banned phrase is now sent back like an echo, and `off_topic` is measu
 The first CTA check missed real verbs ("Talk", "Arrange", "Plan"). It now flags only a
 call to action that opens with a determiner, an adjective or a number.
 
-| | v4 |
-|---|---|
-| Rushil's run | (to fill in) |
+Rushil's v4 run (5 Oct 2026; 30 cases, 0 failed, $0.0150):
+
+| | v2 | v3 | v4 |
+|---|---|---|---|
+| echo | 0.448 | 0.0 | 0.0 |
+| copied | 0.448 | 0.2 | 0.2 |
+| off_topic | 0.0 | 0.067 | 0.033 |
+| banned_claim | 0.0 | 0.033 | 0.0 |
+| invented_number | 0.0 | 0.0 | 0.0 |
+| cta_no_verb | 0.0 | 0.0 | 0.0 |
+| no_service_first | 0.034 | 0.033 | 0.067 |
+| **clean** | **0.31** | **0.767** | **0.733** |
+| second tries | – | 2 | 1 |
+| with questions back | – | 28 | 26 |
+
+**Reading the v4 run:**
+- **What v4 fixed:** the banned phrase is gone. The wrong service is gone: "Monthly
+  garden maintenance from £60" now has "Also serving Clifton, Bedminster and Redland."
+  under it.
+- **The one `off_topic` left is that same line.** It adds areas next to the brief's
+  Bristol rather than replacing it. That is a false positive of the check, which flags
+  any area the brief did not name.
+- **v3 and v4 are within one run's noise of each other.** 0.767 against 0.733 is one
+  case out of thirty.
+- **What is left to work on:**
+  - `copied` (facts copied word for word, often fine: "This weekend only in Brandon");
+  - two captions whose first sentence names no service.
 
 ## Tests
 

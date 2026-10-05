@@ -290,7 +290,8 @@ def main(argv: list[str] | None = None) -> int:
     args.out.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
     path = args.out / f"post-copy-v{report.version}-{stamp}.json"
-    path.write_text(json.dumps(report.as_dict(), indent=1, ensure_ascii=False), "utf-8")
+    # Ends with a newline, as the repo's end-of-file hook wants (the first reports did not).
+    path.write_text(json.dumps(report.as_dict(), indent=1, ensure_ascii=False) + "\n", "utf-8")
     print(table(report))
     print(f"\nreport: {path}")
     return 0
