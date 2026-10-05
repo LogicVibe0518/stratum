@@ -38,14 +38,14 @@ from typing import Any
 from PIL import Image
 from pydantic import TypeAdapter, ValidationError
 from stratum_spec import BrandKit, PosterSpec
-from stratum_spec.ops import EditOp
+from stratum_spec.ops import EditOp, OpError, apply_ops
 
 from stratum_worker.design.preview import bind, ink
 from stratum_worker.design.space import lay_out
 from stratum_worker.design.typeset import Copy
 from stratum_worker.draft.capacity import measure
 from stratum_worker.draft.pipeline import CollectingTracer
-from stratum_worker.edit.actions import Ask, Restyle, Undo, split
+from stratum_worker.edit.actions import Ask, Restyle, Undo, split, without_logo_recolours
 from stratum_worker.edit.context import edit_request
 from stratum_worker.edit.pointing import quick_ops
 from stratum_worker.gateway import prompts
@@ -186,19 +186,31 @@ class Answer:
     note: str = ""
 
 
-def answer_of(result: EditParseResult) -> Answer:
-    """What the product would do with a model's answer (service.tweak's rules)."""
+def answer_of(result: EditParseResult, spec: PosterSpec | None = None) -> Answer:
+    """What the product would do with a model's answer (service.tweak's rules): ops
+    that do not validate, or (given the poster) do not apply, are invalid; a logo
+    recolour is dropped with a reason, as the editor drops it."""
     raw = [dict(one) for one in result.ops]
     try:
         spec_ops, service_ops = split(raw)
-        OPS.validate_python(spec_ops)
+        ops = OPS.validate_python(spec_ops)
     except ValidationError:
         return Answer("invalid", raw, True)
     if any(isinstance(one, Ask) for one in service_ops):
         return Answer("ask", raw, True, result.needs_human or "")
-    if not spec_ops and not any(isinstance(one, Restyle | Undo) for one in service_ops):
-        return Answer("refuse", raw, True, result.needs_human or "")
-    return Answer("change", raw, True, result.note or "")
+    refused = ""
+    if spec is not None:
+        ops, refused = without_logo_recolours(spec, ops)
+        try:
+            apply_ops(spec, ops)
+        except OpError:
+            return Answer("invalid", raw, True)
+    kept = [op.model_dump(mode="json") for op in ops] + [
+        dict(one) for one in raw if one.get("op") in ("restyle", "undo")
+    ]
+    if not ops and not any(isinstance(one, Restyle | Undo) for one in service_ops):
+        return Answer("refuse", kept, True, refused or result.needs_human or "")
+    return Answer("change", kept, True, result.note or "")
 
 
 def score(case: Case, answer: Answer) -> dict[str, Any]:
@@ -263,7 +275,7 @@ async def respond(
     traced = Gateway(router=gateway.router, budget=gateway.budget, tracer=tracer)
     result = await traced.run(TaskName.EDIT_PARSE, request, agency_id="chat-eval")
     assert isinstance(result, EditParseResult)
-    return answer_of(result), tracer
+    return answer_of(result, shown.spec), tracer
 
 
 @dataclass

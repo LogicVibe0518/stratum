@@ -58,7 +58,15 @@ from stratum_worker.draft.preflight import (
     check_copy,
     check_layout,
 )
-from stratum_worker.edit.actions import Ask, Choice, Restyle, Undo, split, undo_asked
+from stratum_worker.edit.actions import (
+    Ask,
+    Choice,
+    Restyle,
+    Undo,
+    split,
+    undo_asked,
+    without_logo_recolours,
+)
 from stratum_worker.edit.context import (
     edit_request,
     friendly,
@@ -1180,6 +1188,14 @@ async def tweak(
     if off_brand is not None:
         await record("needs_human", raw, step.cost_usd)
         return off_brand
+    ops, logo_refused = without_logo_recolours(spec, ops)
+    if logo_refused and not ops and not restyles:
+        await record("needs_human", raw, step.cost_usd)
+        return {"outcome": "needs_human", "why": logo_refused}
+    if logo_refused:
+        result = result.model_copy(
+            update={"needs_human": " ".join(filter(None, [result.needs_human, logo_refused]))}
+        )
 
     return await commit_change(
         ctx,

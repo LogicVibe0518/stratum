@@ -98,21 +98,53 @@ fictional Kowalski Plumbing. The categories:
 
 ## Results
 
-Rushil fills this in after the two runs:
+The real model (openai/gpt-6-luna), the same 79 cases, 6 Oct 2026 (Rushil's runs).
 
-| | before (v5, no pointing) | v6 + pointing |
+| | before: v5, no pointing | v6 + pointing |
 |---|---|---|
-| passed | | |
-| pointing | | |
-| live | | |
-| text (phone number) | | |
-| answered without a model | 0 | |
-| median seconds (model) | | |
-| cost of 79 | | |
+| passed, as run | 0.835 | 0.937 |
+| pointing (12 cases) | 0.25 | 1.0 |
+| answered without a model | 0 | 6 |
+| median seconds (model) | 3.57 | 3.66 |
+| cost of 79 | $0.0137 | $0.0129 |
+
+**What the five v6 failures were, and what was done:**
+- **Two were product bugs, now fixed in code.** The fixes change what a designer gets,
+  in both columns:
+  - "make it pop" came back as `restyle share 0.5`. 0.5 was sent as a number, and the
+    whole answer was thrown away as invalid ("I could not turn that into a change").
+    A restyle value sent as a number is now read as its text (`edit/actions._plain`).
+  - "same for the logo" after a colour change tried to recolour the logo. The editor
+    said "That change could not be made". A logo recolour is now dropped with the
+    reason: the logo is the client's own file, and here is what can be done instead
+    (`without_logo_recolours`). The rest of the change still goes ahead.
+- **Three were the eval's labels, corrected after seeing the answers:**
+  - "get rid of the small text under the headline": asking which of two small lines
+    is right;
+  - "no, the other way" after "bigger headline": the calm setting is a smaller
+    headline too;
+  - "make the headline animate": asking with static alternatives is right.
+
+  Corrected labels after seeing results flatter any model, so both numbers are kept:
+
+| | before | after |
+|---|---|---|
+| as run | 0.835 | 0.937 |
+| with the two fixes, original labels | 0.861 | 0.962 |
+| with the two fixes and corrected labels | 0.886 | 1.0 |
+
+These were re-scored from the answers each run gave (no new calls), so the model's
+words are the same and only the rules changed.
+
+**What 1.0 means.** At 1.0 on 79 cases, this set can no longer tell a better chat
+from a worse one. The next cases should be harder: two-step references, conflicting
+instructions, cases that need a question back, and messy text (issue I-35). The
+pointing gain (0.25 → 1.0) is the robust result: without pointing, "bigger", "make
+this orange" and "darken that one" can only be guessed.
 
 ## Tests
 
-**`test_point_and_say.py`** (20):
+**`test_point_and_say.py`** (22):
 - **Taps:**
   - a tap on the headline's letters is the headline;
   - a tap on the photo is the photo, and a tap off the poster is nothing;
@@ -128,16 +160,20 @@ Rushil fills this in after the two runs:
 - **Through the real tweak:**
   - a pointed short message changes the poster with no model call and a cost of 0;
   - a longer message goes to the model with the part;
-  - a tap is read in the size it was made in.
+  - a tap is read in the size it was made in;
+  - a logo is never recoloured, and the designer is told why;
+  - the rest of a change goes ahead without the logo recolour.
 
-**`test_chateval.py`** (7):
+**`test_chateval.py`** (9):
 - ops match on kind, layer and direction;
 - a case passes on outcome, ops and touching nothing else;
 - answers are read by the product's rules;
 - every case names parts its poster has;
 - a pointed short message is answered without the model;
 - the baseline runs v5 with no pointing, then restores v6;
-- a failed case is scored and the run goes on.
+- a failed case is scored and the run goes on;
+- a logo recolour is refused and an op that cannot apply is invalid;
+- a setting sent as a number is read as its text.
 
 **`apps/api/tests/test_point_and_say_api.py`** (3):
 - a picked part with a short message is applied;

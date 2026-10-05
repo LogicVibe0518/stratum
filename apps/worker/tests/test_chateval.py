@@ -125,3 +125,24 @@ def test_a_case_that_fails_is_scored_and_the_run_goes_on() -> None:
     report = asyncio.run(chateval.run(gate, cases))
     assert report.rows[0]["score"]["outcome"] == "failed"
     assert report.rows[1]["score"]["passed"]
+
+
+def test_a_logo_recolour_is_refused_and_an_op_that_cannot_apply_is_invalid() -> None:
+    spec = chateval.poster("panel").spec
+    logo = {"op": "set_color", "layer": "logo", "color": "palette.secondary"}
+    refused = answer_of(EditParseResult(ops=[logo]), spec)
+    assert refused.outcome == "refuse" and "never recoloured" in refused.note
+    both = answer_of(EditParseResult(ops=[logo, {**logo, "layer": "headline"}]), spec)
+    assert both.outcome == "change" and [one["layer"] for one in both.ops] == ["headline"]
+    ghost = {"op": "scale", "layer": "nope", "factor": 1.2}
+    assert answer_of(EditParseResult(ops=[ghost]), spec).outcome == "invalid"
+
+
+def test_a_setting_sent_as_a_number_is_read_as_its_text() -> None:
+    """Chat eval, 6 Oct: "make it pop" came back as share 0.5 (a number) and the
+    whole answer was thrown away."""
+    restyle = {"op": "restyle", "changes": {"share": 0.5, "scale": "calm"}}
+    assert answer_of(EditParseResult(ops=[restyle])).outcome == "change"
+    from stratum_worker.edit.actions import Restyle
+
+    assert Restyle.model_validate(restyle).changes == {"share": "0.5", "scale": "calm"}

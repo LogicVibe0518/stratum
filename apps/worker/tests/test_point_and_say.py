@@ -201,3 +201,22 @@ async def test_a_tap_is_read_in_the_size_it_was_made_in(tmp_path: Path) -> None:
         Pointing(x=0.5, y=0.2, aspect="4:5"),
     )
     assert asked(one.provider).pointed.startswith("bg: photo")
+
+
+async def test_a_logo_is_never_recoloured_and_the_designer_is_told_why(tmp_path: Path) -> None:
+    logo = {"op": "set_color", "layer": "logo", "color": "palette.secondary"}
+    one = await studio(tmp_path, {"ops": [logo]})
+    post = await one.post()
+    out = await one.tweak(post, "same for the logo")
+    assert out["outcome"] == "needs_human" and "never recoloured" in out["why"]
+    assert len(await one.versions(post)) == 1
+
+
+async def test_the_rest_of_a_change_goes_ahead_without_the_logo_recolour(tmp_path: Path) -> None:
+    logo = {"op": "set_color", "layer": "logo", "color": "palette.secondary"}
+    headline = {**logo, "layer": "headline"}
+    one = await studio(tmp_path, {"ops": [logo, headline]})
+    post = await one.post()
+    out = await one.tweak(post, "make the headline and the logo orange")
+    assert out["outcome"] == "applied"
+    assert "never recoloured" in out["unable"]
