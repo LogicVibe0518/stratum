@@ -40,6 +40,9 @@ class PostCopy(Frozen):
     # fits it best (design/copyfit.py). Empty when there is none.
     headline_short: str = Field(default="", max_length=120)
     headline_long: str = Field(default="", max_length=180)
+    # Questions for the business (post.copy v3): details that would make the post
+    # stronger. Shown to the designer, never printed.
+    missing: tuple[str, ...] = Field(default=(), max_length=3)
 
     @property
     def printed(self) -> str:

@@ -1,0 +1,1192 @@
+{
+ "prompt": "post.copy v2",
+ "started": "2026-10-05T10:20:42.969723+00:00",
+ "summary": {
+  "cases": 29,
+  "failed": 1,
+  "rates": {
+   "echo": 0.448,
+   "copied": 0.448,
+   "cta_no_verb": 0.069,
+   "invented_number": 0.0,
+   "banned_claim": 0.0,
+   "missing_required_phrase": 0.0,
+   "no_service_first": 0.034,
+   "no_area_first": 0.0,
+   "too_long": 0.0
+  },
+  "clean": 0.31,
+  "second_tries": 0,
+  "with_questions": 4,
+  "cost_usd": 0.01332,
+  "models": [
+   "gpt-6-luna",
+   "openai/gpt-6-luna"
+  ]
+ },
+ "rows": [
+  {
+   "id": "live-sparkle-free-first",
+   "client": "sparkle-squad",
+   "profile": "empty",
+   "brief": "first time booking is free",
+   "about": "one fact, an offer, no profile",
+   "words": {
+    "headline": "Your first booking is free",
+    "offer_detail": "Your first-time booking is free.",
+    "cta": "Book for the first time",
+    "caption": "Your first booking is free. Get in touch to book with Sparkle Squad Cleaning.",
+    "hashtags": [],
+    "alt_text": "",
+    "headline_short": "",
+    "headline_long": "",
+    "missing": [
+     "Services and areas served were not provided, so the caption’s first sentence cannot include both."
+    ]
+   },
+   "score": {
+    "echo": true,
+    "echo_share": 0.75,
+    "copied": true,
+    "copied_run": 5,
+    "cta_no_verb": false,
+    "invented_number": false,
+    "banned_claim": false,
+    "missing_required_phrase": false,
+    "no_service_first": false,
+    "no_area_first": false,
+    "too_long": false,
+    "missing": 1,
+    "calls": 1
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.00032,
+   "seconds": 7.96
+  },
+  {
+   "id": "live-lonestar-8yrs",
+   "client": "lone-star-roofing",
+   "profile": "empty",
+   "brief": "we have been doing roofing for the past 8yrs and are experienced",
+   "about": "one fact, proof",
+   "words": {
+    "headline": "We've been doing roofing for 8 years",
+    "offer_detail": "We've been doing roofing for 8 years and are experienced.",
+    "cta": "Get in touch",
+    "caption": "Lone Star Roofing has been doing roofing for the past 8 years and is experienced.",
+    "hashtags": [],
+    "alt_text": "",
+    "headline_short": "",
+    "headline_long": "",
+    "missing": [
+     "Services and areas served were not provided, so the caption's first sentence cannot include both."
+    ]
+   },
+   "score": {
+    "echo": true,
+    "echo_share": 0.75,
+    "copied": false,
+    "copied_run": 4,
+    "cta_no_verb": false,
+    "invented_number": false,
+    "banned_claim": false,
+    "missing_required_phrase": false,
+    "no_service_first": false,
+    "no_area_first": false,
+    "too_long": false,
+    "missing": 1,
+    "calls": 1
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.00047,
+   "seconds": 9.21
+  },
+  {
+   "id": "sparkle-free-first",
+   "client": "sparkle-squad",
+   "profile": "full",
+   "brief": "first time booking is free",
+   "about": "one fact; profile gives service + area",
+   "words": {
+    "headline": "First booking is free",
+    "offer_detail": "Your first booking is free.",
+    "cta": "Get in touch",
+    "caption": "We offer house cleaning in Tampa, along with deep cleans, move-out cleaning and recurring cleaning. Your first booking is free. Get in touch to book.",
+    "hashtags": [
+     "#tampa",
+     "#tampacleaning",
+     "#cleaningservice"
+    ],
+    "alt_text": "",
+    "headline_short": "",
+    "headline_long": "",
+    "missing": []
+   },
+   "score": {
+    "echo": true,
+    "echo_share": 1.0,
+    "copied": false,
+    "copied_run": 3,
+    "cta_no_verb": false,
+    "invented_number": false,
+    "banned_claim": false,
+    "missing_required_phrase": false,
+    "no_service_first": false,
+    "no_area_first": false,
+    "too_long": false,
+    "missing": 0,
+    "calls": 1
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000402,
+   "seconds": 9.91
+  },
+  {
+   "id": "lonestar-8yrs",
+   "client": "lone-star-roofing",
+   "profile": "full",
+   "brief": "we have been doing roofing for the past 8yrs and are experienced",
+   "about": "one fact; profile",
+   "words": {
+    "headline": "Roofing in San Antonio",
+    "offer_detail": "We’ve been doing roofing for 8 years and are experienced.",
+    "cta": "Ask us about your roof",
+    "caption": "Lone Star Roofing provides roof repairs in San Antonio. We’ve been doing roofing for 8 years and are experienced in roof replacement, storm damage repair, gutter replacement and roof inspections. We serve Alamo Heights, Stone Oak and Bexar County too.",
+    "hashtags": [
+     "#sanantonio",
+     "#sanantonioroofing",
+     "#roofing"
+    ],
+    "alt_text": "",
+    "headline_short": "",
+    "headline_long": "",
+    "missing": []
+   },
+   "score": {
+    "echo": false,
+    "echo_share": 0.25,
+    "copied": false,
+    "copied_run": 4,
+    "cta_no_verb": false,
+    "invented_number": false,
+    "banned_claim": false,
+    "missing_required_phrase": false,
+    "no_service_first": false,
+    "no_area_first": false,
+    "too_long": false,
+    "missing": 0,
+    "calls": 1
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000492,
+   "seconds": 9.96
+  },
+  {
+   "id": "kowalski-boiler-20",
+   "client": "kowalski-plumbing",
+   "profile": "full",
+   "brief": "boiler service 20% off",
+   "about": "one fact, offer, no end date",
+   "words": {
+    "headline": "20% off boiler service",
+    "offer_detail": "20% off boiler service",
+    "cta": "Get in touch",
+    "caption": "We’re offering 20% off boiler service in Manchester. Gas Safe 000000.",
+    "hashtags": [
+     "#manchester",
+     "#boilerservice"
+    ],
+    "alt_text": "",
+    "headline_short": "",
+    "headline_long": "",
+    "missing": []
+   },
+   "score": {
+    "echo": true,
+    "echo_share": 1.0,
+    "copied": false,
+    "copied_run": 2,
+    "cta_no_verb": false,
+    "invented_number": false,
+    "banned_claim": false,
+    "missing_required_phrase": false,
+    "no_service_first": false,
+    "no_area_first": false,
+    "too_long": false,
+    "missing": 0,
+    "calls": 1
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.00038,
+   "seconds": 8.69
+  },
+  {
+   "id": "bloom-patio",
+   "client": "bloom-and-blade",
+   "profile": "full",
+   "brief": "patios",
+   "about": "one word",
+   "words": {
+    "headline": "Patio laying in Bristol",
+    "offer_detail": "Patio laying",
+    "cta": "Ask us about patio laying",
+    "caption": "We offer patio laying in Bristol. Ask us about patio laying in Clifton, Bedminster or Redland too.",
+    "hashtags": [
+     "#bristol",
+     "#bristolgardens",
+     "#landscaping"
+    ],
+    "alt_text": "",
+    "headline_short": "",
+    "headline_long": "",
+    "missing": []
+   },
+   "score": {
+    "echo": true,
+    "echo_share": 1.0,
+    "copied": false,
+    "copied_run": 1,
+    "cta_no_verb": false,
+    "invented_number": false,
+    "banned_claim": false,
+    "missing_required_phrase": false,
+    "no_service_first": false,
+    "no_area_first": false,
+    "too_long": false,
+    "missing": 0,
+    "calls": 1
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000467,
+   "seconds": 10.14
+  },
+  {
+   "id": "dhaba-thali",
+   "client": "sharmas-dhaba",
+   "profile": "full",
+   "brief": "new thali menu",
+   "about": "thin",
+   "words": {
+    "headline": "New thali menu",
+    "offer_detail": "A new thali menu from Sharma's Dhaba.",
+    "cta": "Come and try it.",
+    "caption": "We serve thali in Southall, and our new thali menu is here.",
+    "hashtags": [
+     "#thali",
+     "#southallfood"
+    ],
+    "alt_text": "",
+    "headline_short": "",
+    "headline_long": "",
+    "missing": []
+   },
+   "score": {
+    "echo": false,
+    "echo_share": 0.6,
+    "copied": false,
+    "copied_run": 3,
+    "cta_no_verb": false,
+    "invented_number": false,
+    "banned_claim": false,
+    "missing_required_phrase": false,
+    "no_service_first": false,
+    "no_area_first": false,
+    "too_long": false,
+    "missing": 0,
+    "calls": 1
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000349,
+   "seconds": 8.5
+  },
+  {
+   "id": "kowalski-boiler-dated",
+   "client": "kowalski-plumbing",
+   "profile": "full",
+   "brief": "Boiler service 20% off for bookings before 31 October, Didsbury and Chorlton",
+   "about": "offer + date + areas",
+   "words": {
+    "headline": "20% off boiler service",
+    "offer_detail": "20% off boiler service for bookings made before 31 October in Didsbury and Chorlton.",
+    "cta": "Book before 31 October",
+    "caption": "We’re offering 20% off boiler service in Didsbury and Chorlton for bookings made before 31 October. Gas Safe 000000.",
+    "hashtags": [
+     "#boilerservice",
+     "#manchesterplumber"
+    ],
+    "alt_text": "",
+    "headline_short": "",
+    "headline_long": "",
+    "missing": []
+   },
+   "score": {
+    "echo": false,
+    "echo_share": 0.3,
+    "copied": false,
+    "copied_run": 3,
+    "cta_no_verb": false,
+    "invented_number": false,
+    "banned_claim": false,
+    "missing_required_phrase": false,
+    "no_service_first": false,
+    "no_area_first": false,
+    "too_long": false,
+    "missing": 0,
+    "calls": 1
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000998,
+   "seconds": 21.4
+  },
+  {
+   "id": "kowalski-emergency",
+   "client": "kowalski-plumbing",
+   "profile": "full",
+   "brief": "Emergency plumber, we answer 24/7 and are usually with you within 2 hours",
+   "about": "service + proof",
+   "words": {
+    "headline": "Emergency plumber in Manchester",
+    "offer_detail": "We answer 24/7 and are usually with you within 2 hours.",
+    "cta": "Get in touch",
+    "caption": "Our emergency plumber service covers Manchester, and we answer 24/7. We're usually with you within 2 hours. Gas Safe 000000.",
+    "hashtags": [
+     "#manchester",
+     "#manchesterplumber",
+     "#plumbing"
+    ],
+    "alt_text": "",
+    "headline_short": "",
+    "headline_long": "",
+    "missing": []
+   },
+   "score": {
+    "echo": false,
+    "echo_share": 0.0,
+    "copied": true,
+    "copied_run": 12,
+    "cta_no_verb": false,
+    "invented_number": false,
+    "banned_claim": false,
+    "missing_required_phrase": false,
+    "no_service_first": false,
+    "no_area_first": false,
+    "too_long": false,
+    "missing": 0,
+    "calls": 1
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000443,
+   "seconds": 9.43
+  },
+  {
+   "id": "kowalski-bathroom",
+   "client": "kowalski-plumbing",
+   "profile": "full",
+   "brief": "Just finished a full bathroom fitting in Chorlton, walk-in shower and new tiles, took 5 days",
+   "about": "job showcase",
+   "words": {
+    "headline": "Bathroom fitting in Chorlton",
+    "offer_detail": "Walk-in shower and new tiles, finished in 5 days. Gas Safe 000000",
+    "cta": "Ask us about bathroom fitting",
+    "caption": "We’ve just finished a bathroom fitting in Chorlton, with a walk-in shower and new tiles. The job took 5 days.",
+    "hashtags": [
+     "#manchester",
+     "#manchesterplumber",
+     "#plumbing"
+    ],
+    "alt_text": "",
+    "headline_short": "",
+    "headline_long": "",
+    "missing": []
+   },
+   "score": {
+    "echo": false,
+    "echo_share": 0.0,
+    "copied": true,
+    "copied_run": 6,
+    "cta_no_verb": false,
+    "invented_number": false,
+    "banned_claim": false,
+    "missing_required_phrase": false,
+    "no_service_first": false,
+    "no_area_first": false,
+    "too_long": false,
+    "missing": 0,
+    "calls": 1
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000938,
+   "seconds": 18.73
+  },
+  {
+   "id": "lonestar-storm",
+   "client": "lone-star-roofing",
+   "profile": "full",
+   "brief": "Hail last night in Stone Oak. Free roof inspection this week for storm damage",
+   "about": "urgent + free + area",
+   "words": {
+    "headline": "Storm damage roof inspection",
+    "offer_detail": "No-charge roof inspection this week for storm damage in Stone Oak.",
+    "cta": "Message us about an inspection",
+    "caption": "We’re offering a roof inspection in Stone Oak this week for storm damage after last night’s hail. There’s no charge for the inspection. Message us if you’d like to arrange one.",
+    "hashtags": [
+     "#sanantonio",
+     "#stormdamage",
+     "#roofing"
+    ],
+    "alt_text": "",
+    "headline_short": "",
+    "headline_long": "",
+    "missing": []
+   },
+   "score": {
+    "echo": false,
+    "echo_share": 0.5,
+    "copied": true,
+    "copied_run": 7,
+    "cta_no_verb": false,
+    "invented_number": false,
+    "banned_claim": false,
+    "missing_required_phrase": false,
+    "no_service_first": false,
+    "no_area_first": false,
+    "too_long": false,
+    "missing": 0,
+    "calls": 1
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.00048,
+   "seconds": 9.9
+  },
+  {
+   "id": "lonestar-gutters",
+   "client": "lone-star-roofing",
+   "profile": "full",
+   "brief": "gutter replacement $15 off per foot until Nov 15",
+   "about": "price + date",
+   "words": {
+    "headline": "Gutter replacement: $15 off per foot",
+    "offer_detail": "$15 off per foot on gutter replacement until Nov 15.",
+    "cta": "Get in touch about your gutters",
+    "caption": "We’re offering $15 off per foot on gutter replacement in San Antonio until Nov 15. Get in touch to ask about replacing your gutters.",
+    "hashtags": [
+     "#sanantonio",
+     "#sanantonioroofing",
+     "#roofing"
+    ],
+    "alt_text": "",
+    "headline_short": "",
+    "headline_long": "",
+    "missing": []
+   },
+   "score": {
+    "echo": true,
+    "echo_share": 0.625,
+    "copied": true,
+    "copied_run": 6,
+    "cta_no_verb": false,
+    "invented_number": false,
+    "banned_claim": false,
+    "missing_required_phrase": false,
+    "no_service_first": false,
+    "no_area_first": false,
+    "too_long": false,
+    "missing": 0,
+    "calls": 1
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000283,
+   "seconds": 6.27
+  },
+  {
+   "id": "lonestar-team",
+   "client": "lone-star-roofing",
+   "profile": "full",
+   "brief": "meet our crew, 6 roofers, family owned since 2017",
+   "about": "people + proof",
+   "words": {
+    "headline": "Meet the Lone Star Roofing crew",
+    "offer_detail": "6 roofers. Family owned since 2017.",
+    "cta": "Say hello to the crew",
+    "caption": "We handle roof repairs in San Antonio. Meet our crew: six roofers at a family-owned business since 2017.",
+    "hashtags": [
+     "#sanantonioroofing",
+     "#roofing",
+     "#sanantonio"
+    ],
+    "alt_text": "",
+    "headline_short": "",
+    "headline_long": "",
+    "missing": []
+   },
+   "score": {
+    "echo": false,
+    "echo_share": 0.0,
+    "copied": true,
+    "copied_run": 6,
+    "cta_no_verb": true,
+    "invented_number": false,
+    "banned_claim": false,
+    "missing_required_phrase": false,
+    "no_service_first": false,
+    "no_area_first": false,
+    "too_long": false,
+    "missing": 0,
+    "calls": 1
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000417,
+   "seconds": 9.08
+  },
+  {
+   "id": "sparkle-deep-clean",
+   "client": "sparkle-squad",
+   "profile": "full",
+   "brief": "Deep clean 20% off this weekend only in Brandon",
+   "about": "offer + time + area",
+   "words": {
+    "headline": "20% off a deep clean in Brandon",
+    "offer_detail": "Deep clean 20% off this weekend only in Brandon",
+    "cta": "Book your deep clean",
+    "caption": "We’re offering 20% off a deep clean in Brandon this weekend only. Get in touch to book.",
+    "hashtags": [
+     "#deepclean",
+     "#cleaningservice"
+    ],
+    "alt_text": "",
+    "headline_short": "",
+    "headline_long": "",
+    "missing": []
+   },
+   "score": {
+    "echo": true,
+    "echo_share": 0.667,
+    "copied": true,
+    "copied_run": 9,
+    "cta_no_verb": false,
+    "invented_number": false,
+    "banned_claim": false,
+    "missing_required_phrase": false,
+    "no_service_first": false,
+    "no_area_first": false,
+    "too_long": false,
+    "missing": 0,
+    "calls": 1
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000301,
+   "seconds": 5.66
+  },
+  {
+   "id": "sparkle-moveout",
+   "client": "sparkle-squad",
+   "profile": "full",
+   "brief": "move-out cleaning so you get your deposit back. checklist landlords use",
+   "about": "benefit",
+   "words": {
+    "headline": "Move-out cleaning with the checklist landlords use",
+    "offer_detail": "A move-out clean with the checklist landlords use.",
+    "cta": "Ask about a move-out clean",
+    "caption": "Need move-out cleaning in Tampa? We use the checklist landlords use. Get in touch to ask about a clean.",
+    "hashtags": [
+     "#tampa",
+     "#tampacleaning",
+     "#cleaningservice"
+    ],
+    "alt_text": "",
+    "headline_short": "",
+    "headline_long": "",
+    "missing": []
+   },
+   "score": {
+    "echo": true,
+    "echo_share": 1.0,
+    "copied": false,
+    "copied_run": 3,
+    "cta_no_verb": false,
+    "invented_number": false,
+    "banned_claim": false,
+    "missing_required_phrase": false,
+    "no_service_first": false,
+    "no_area_first": false,
+    "too_long": false,
+    "missing": 0,
+    "calls": 1
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000361,
+   "seconds": 7.89
+  },
+  {
+   "id": "sparkle-recurring",
+   "client": "sparkle-squad",
+   "profile": "full",
+   "brief": "weekly cleaning from $99, same cleaner every time",
+   "about": "price + promise",
+   "words": {
+    "headline": "Weekly cleaning from $99",
+    "offer_detail": "Weekly cleaning from $99. The same cleaner every time.",
+    "cta": "Ask us about weekly cleaning",
+    "caption": "Our weekly house cleaning in Tampa starts from $99, with the same cleaner every time.",
+    "hashtags": [
+     "#tampa",
+     "#tampacleaning",
+     "#cleaningservice"
+    ],
+    "alt_text": "",
+    "headline_short": "",
+    "headline_long": "",
+    "missing": []
+   },
+   "score": {
+    "echo": false,
+    "echo_share": 0.5,
+    "copied": false,
+    "copied_run": 4,
+    "cta_no_verb": false,
+    "invented_number": false,
+    "banned_claim": false,
+    "missing_required_phrase": false,
+    "no_service_first": false,
+    "no_area_first": false,
+    "too_long": false,
+    "missing": 0,
+    "calls": 1
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000384,
+   "seconds": 8.09
+  },
+  {
+   "id": "bloom-spring",
+   "client": "bloom-and-blade",
+   "profile": "full",
+   "brief": "Spring planting slots open for March, book a garden design visit",
+   "about": "season + service",
+   "words": {
+    "headline": "Spring planting slots open for March",
+    "offer_detail": "Spring planting slots are open for March.",
+    "cta": "Book a garden design visit",
+    "caption": "Spring planting slots are open for March in Bristol. Book a garden design visit.",
+    "hashtags": [
+     "#bristol",
+     "#bristolgardens",
+     "#gardendesign"
+    ],
+    "alt_text": "",
+    "headline_short": "",
+    "headline_long": "",
+    "missing": []
+   },
+   "score": {
+    "echo": true,
+    "echo_share": 1.0,
+    "copied": true,
+    "copied_run": 6,
+    "cta_no_verb": false,
+    "invented_number": false,
+    "banned_claim": false,
+    "missing_required_phrase": false,
+    "no_service_first": false,
+    "no_area_first": false,
+    "too_long": false,
+    "missing": 0,
+    "calls": 1
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.00034,
+   "seconds": 7.98
+  },
+  {
+   "id": "bloom-before-after",
+   "client": "bloom-and-blade",
+   "profile": "full",
+   "brief": "before and after of a Clifton garden: overgrown lawn to a new patio and borders in 3 weeks",
+   "about": "showcase + proof",
+   "words": {
+    "headline": "Clifton garden: new patio & borders",
+    "offer_detail": "An overgrown lawn turned into a new patio and borders in 3 weeks.",
+    "cta": "See the before and after",
+    "caption": "We laid a new patio in Clifton, replacing an overgrown lawn with a patio and borders in 3 weeks. Here’s the garden before and after.",
+    "hashtags": [
+     "#bristol",
+     "#bristolgardens",
+     "#landscaping"
+    ],
+    "alt_text": "",
+    "headline_short": "",
+    "headline_long": "",
+    "missing": []
+   },
+   "score": {
+    "echo": false,
+    "echo_share": 0.375,
+    "copied": true,
+    "copied_run": 8,
+    "cta_no_verb": false,
+    "invented_number": false,
+    "banned_claim": false,
+    "missing_required_phrase": false,
+    "no_service_first": true,
+    "no_area_first": false,
+    "too_long": false,
+    "missing": 0,
+    "calls": 1
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000984,
+   "seconds": 22.8
+  },
+  {
+   "id": "bloom-maintenance",
+   "client": "bloom-and-blade",
+   "profile": "full",
+   "brief": "monthly garden maintenance from £60, Bristol",
+   "about": "price + area",
+   "words": {
+    "headline": "Monthly garden maintenance from £60",
+    "offer_detail": "Monthly garden maintenance from £60 in Bristol.",
+    "cta": "Ask about monthly maintenance",
+    "caption": "We offer monthly garden maintenance in Bristol, from £60. Get in touch to talk about your garden.",
+    "hashtags": [
+     "#bristol",
+     "#bristolgardens",
+     "#landscaping"
+    ],
+    "alt_text": "",
+    "headline_short": "",
+    "headline_long": "",
+    "missing": []
+   },
+   "score": {
+    "echo": true,
+    "echo_share": 0.8,
+    "copied": true,
+    "copied_run": 5,
+    "cta_no_verb": false,
+    "invented_number": false,
+    "banned_claim": false,
+    "missing_required_phrase": false,
+    "no_service_first": false,
+    "no_area_first": false,
+    "too_long": false,
+    "missing": 0,
+    "calls": 1
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000412,
+   "seconds": 9.01
+  },
+  {
+   "id": "dhaba-diwali",
+   "client": "sharmas-dhaba",
+   "profile": "full",
+   "brief": "Diwali thali special 10-14 November, £14.95, sweets included",
+   "about": "event + price + date",
+   "words": {
+    "headline": "Diwali thali special",
+    "offer_detail": "10-14 November · £14.95 · Sweets included",
+    "cta": "Enjoy a Diwali thali",
+    "caption": "Try our thali in Southall for Diwali. Our Diwali thali special runs 10-14 November for £14.95, with sweets included.",
+    "hashtags": [
+     "#southallfood",
+     "#punjabifood",
+     "#thali"
+    ],
+    "alt_text": "",
+    "headline_short": "",
+    "headline_long": "",
+    "missing": []
+   },
+   "score": {
+    "echo": false,
+    "echo_share": 0.0,
+    "copied": true,
+    "copied_run": 7,
+    "cta_no_verb": true,
+    "invented_number": false,
+    "banned_claim": false,
+    "missing_required_phrase": false,
+    "no_service_first": false,
+    "no_area_first": false,
+    "too_long": false,
+    "missing": 0,
+    "calls": 1
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000294,
+   "seconds": 5.36
+  },
+  {
+   "id": "dhaba-takeaway",
+   "client": "sharmas-dhaba",
+   "profile": "full",
+   "brief": "takeaway now on our own website, 10% off your first order",
+   "about": "offer, no end",
+   "words": {
+    "headline": "10% off your first takeaway order",
+    "offer_detail": "Takeaway is now available on our own website. Get 10% off your first order.",
+    "cta": "Order takeaway on our website",
+    "caption": "Get takeaway from Sharma's Dhaba in Southall, with 10% off your first order on our own website. We also serve thali, street food and Punjabi food, and offer catering across West London.",
+    "hashtags": [
+     "#southall",
+     "#southallfood",
+     "#punjabifood"
+    ],
+    "alt_text": "",
+    "headline_short": "",
+    "headline_long": "",
+    "missing": [
+     "Website URL not provided"
+    ]
+   },
+   "score": {
+    "echo": false,
+    "echo_share": 0.571,
+    "copied": true,
+    "copied_run": 5,
+    "cta_no_verb": false,
+    "invented_number": false,
+    "banned_claim": false,
+    "missing_required_phrase": false,
+    "no_service_first": false,
+    "no_area_first": false,
+    "too_long": false,
+    "missing": 1,
+    "calls": 1
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000376,
+   "seconds": 7.37
+  },
+  {
+   "id": "dhaba-family",
+   "client": "sharmas-dhaba",
+   "profile": "full",
+   "brief": "family run since 1998, recipes from Amritsar",
+   "about": "story + proof",
+   "words": {
+    "headline": "Family-run Punjabi food since 1998",
+    "offer_detail": "Family run since 1998, with recipes from Amritsar.",
+    "cta": "Ask us about takeaway",
+    "caption": "Our thali is served in Southall, Ealing and across West London. Sharma's Dhaba has been family run since 1998, with recipes from Amritsar.",
+    "hashtags": [
+     "#southallfood",
+     "#punjabifood",
+     "#thali"
+    ],
+    "alt_text": "",
+    "headline_short": "",
+    "headline_long": "",
+    "missing": []
+   },
+   "score": {
+    "echo": true,
+    "echo_share": 0.667,
+    "copied": false,
+    "copied_run": 4,
+    "cta_no_verb": false,
+    "invented_number": false,
+    "banned_claim": false,
+    "missing_required_phrase": false,
+    "no_service_first": false,
+    "no_area_first": false,
+    "too_long": false,
+    "missing": 0,
+    "calls": 1
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000396,
+   "seconds": 8.51
+  },
+  {
+   "id": "kowalski-cheapest",
+   "client": "kowalski-plumbing",
+   "profile": "full",
+   "brief": "tell people we are the cheapest in Manchester for boiler repair",
+   "about": "banned claim in the brief",
+   "words": {
+    "headline": "Boiler repair in Manchester",
+    "offer_detail": "Gas Safe 000000",
+    "cta": "Get in touch about a repair",
+    "caption": "We carry out boiler repairs in Manchester, Didsbury, Chorlton and Salford. We also offer boiler servicing, emergency plumbing, bathroom fitting and radiator installation.",
+    "hashtags": [
+     "#manchester",
+     "#manchesterplumber",
+     "#boilerservice"
+    ],
+    "alt_text": "",
+    "headline_short": "",
+    "headline_long": "",
+    "missing": []
+   },
+   "score": {
+    "echo": false,
+    "echo_share": 0.0,
+    "copied": false,
+    "copied_run": 2,
+    "cta_no_verb": false,
+    "invented_number": false,
+    "banned_claim": false,
+    "missing_required_phrase": false,
+    "no_service_first": false,
+    "no_area_first": false,
+    "too_long": false,
+    "missing": 0,
+    "calls": 1
+   },
+   "model": "gpt-6-luna",
+   "cost_usd": 0.000626,
+   "seconds": 39.03
+  },
+  {
+   "id": "dhaba-best-curry",
+   "client": "sharmas-dhaba",
+   "profile": "full",
+   "brief": "say we have the best curry in London",
+   "about": "banned claim",
+   "words": {
+    "headline": "Punjabi food in Southall",
+    "offer_detail": "Thali, street food, takeaway and catering.",
+    "cta": "Ask us about catering",
+    "caption": "We serve thali and Punjabi food in Southall. You can also find us serving Ealing and West London, with street food, takeaway and catering.",
+    "hashtags": [
+     "#southall",
+     "#punjabifood",
+     "#thali"
+    ],
+    "alt_text": "",
+    "headline_short": "",
+    "headline_long": "",
+    "missing": [
+     "The requested claim could not be included because it is prohibited."
+    ]
+   },
+   "score": {
+    "echo": false,
+    "echo_share": 0.2,
+    "copied": false,
+    "copied_run": 1,
+    "cta_no_verb": false,
+    "invented_number": false,
+    "banned_claim": false,
+    "missing_required_phrase": false,
+    "no_service_first": false,
+    "no_area_first": false,
+    "too_long": false,
+    "missing": 1,
+    "calls": 1
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000424,
+   "seconds": 9.51
+  },
+  {
+   "id": "sparkle-no-price",
+   "client": "sparkle-squad",
+   "profile": "full",
+   "brief": "house cleaning special this month, call for details",
+   "about": "offer without a number: must not invent one",
+   "words": {
+    "headline": "House cleaning special this month",
+    "offer_detail": "House cleaning special this month",
+    "cta": "Call for details",
+    "caption": "We’re offering a house cleaning special in Tampa this month. Call for details.",
+    "hashtags": [
+     "#tampa",
+     "#tampacleaning",
+     "#cleaningservice"
+    ],
+    "alt_text": "",
+    "headline_short": "",
+    "headline_long": "",
+    "missing": []
+   },
+   "score": {
+    "echo": true,
+    "echo_share": 1.0,
+    "copied": true,
+    "copied_run": 5,
+    "cta_no_verb": false,
+    "invented_number": false,
+    "banned_claim": false,
+    "missing_required_phrase": false,
+    "no_service_first": false,
+    "no_area_first": false,
+    "too_long": false,
+    "missing": 0,
+    "calls": 1
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000373,
+   "seconds": 8.08
+  },
+  {
+   "id": "lonestar-invent",
+   "client": "lone-star-roofing",
+   "profile": "full",
+   "brief": "roof replacement financing available",
+   "about": "must not invent a rate or term",
+   "words": {
+    "headline": "Roof replacement finance available",
+    "offer_detail": "Financing available for roof replacement.",
+    "cta": "Get in touch",
+    "caption": "We offer roof replacement in San Antonio, with financing available. Get in touch to ask about it.",
+    "hashtags": [
+     "#sanantonioroofing",
+     "#sanantonio",
+     "#roofing"
+    ],
+    "alt_text": "",
+    "headline_short": "",
+    "headline_long": "",
+    "missing": []
+   },
+   "score": {
+    "echo": true,
+    "echo_share": 1.0,
+    "copied": false,
+    "copied_run": 4,
+    "cta_no_verb": false,
+    "invented_number": false,
+    "banned_claim": false,
+    "missing_required_phrase": false,
+    "no_service_first": false,
+    "no_area_first": false,
+    "too_long": false,
+    "missing": 0,
+    "calls": 1
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000407,
+   "seconds": 9.03
+  },
+  {
+   "id": "sparkle-chatty",
+   "client": "sparkle-squad",
+   "profile": "full",
+   "brief": "hey can u make a post saying we r hiring cleaners in tampa, good pay, flexible hours",
+   "about": "hiring, messy text",
+   "words": {
+    "headline": "We're hiring cleaners in Tampa",
+    "offer_detail": "Good pay and flexible hours.",
+    "cta": "Ask us about joining the team",
+    "caption": "Our house cleaning team in Tampa is hiring cleaners. The role offers good pay and flexible hours.",
+    "hashtags": [
+     "#tampa",
+     "#tampacleaning",
+     "#cleaningservice"
+    ],
+    "alt_text": "",
+    "headline_short": "",
+    "headline_long": "",
+    "missing": []
+   },
+   "score": {
+    "echo": false,
+    "echo_share": 0.0,
+    "copied": false,
+    "copied_run": 4,
+    "cta_no_verb": false,
+    "invented_number": false,
+    "banned_claim": false,
+    "missing_required_phrase": false,
+    "no_service_first": false,
+    "no_area_first": false,
+    "too_long": false,
+    "missing": 0,
+    "calls": 1
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000312,
+   "seconds": 7.25
+  },
+  {
+   "id": "bloom-weather",
+   "client": "bloom-and-blade",
+   "profile": "full",
+   "brief": "its been raining loads but we are still out working, rain doesnt stop us",
+   "about": "no offer, a mood",
+   "words": {
+    "headline": "Rain doesn't stop us working",
+    "offer_detail": "We’re still out working, even with all this rain.",
+    "cta": "Ask us about your garden",
+    "caption": "For garden maintenance in Bristol, rain doesn’t stop us getting out to work. We also offer garden design, planting, patio laying and hedge trimming across Clifton, Bedminster and Redland.",
+    "hashtags": [
+     "#bristol",
+     "#bristolgardens",
+     "#gardendesign",
+     "#landscaping"
+    ],
+    "alt_text": "",
+    "headline_short": "",
+    "headline_long": "",
+    "missing": []
+   },
+   "score": {
+    "echo": false,
+    "echo_share": 0.5,
+    "copied": false,
+    "copied_run": 3,
+    "cta_no_verb": false,
+    "invented_number": false,
+    "banned_claim": false,
+    "missing_required_phrase": false,
+    "no_service_first": false,
+    "no_area_first": false,
+    "too_long": false,
+    "missing": 0,
+    "calls": 1
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000378,
+   "seconds": 7.99
+  },
+  {
+   "id": "kowalski-review",
+   "client": "kowalski-plumbing",
+   "profile": "full",
+   "brief": "Mrs Patel in Didsbury said her new boiler is the quietest she has had",
+   "about": "testimonial",
+   "words": {
+    "headline": "Mrs Patel’s quietest boiler yet",
+    "offer_detail": "Gas Safe 000000",
+    "cta": "Ask us about boiler service",
+    "caption": "We offer boiler service in Didsbury. Mrs Patel said her new boiler is the quietest she has had.",
+    "hashtags": [
+     "#boilerservice",
+     "#manchesterplumber",
+     "#manchester"
+    ],
+    "alt_text": "",
+    "headline_short": "",
+    "headline_long": "",
+    "missing": []
+   },
+   "score": {
+    "echo": false,
+    "echo_share": 0.0,
+    "copied": false,
+    "copied_run": 2,
+    "cta_no_verb": false,
+    "invented_number": false,
+    "banned_claim": false,
+    "missing_required_phrase": false,
+    "no_service_first": false,
+    "no_area_first": false,
+    "too_long": false,
+    "missing": 0,
+    "calls": 1
+   },
+   "model": "openai/gpt-6-luna",
+   "cost_usd": 0.000515,
+   "seconds": 9.07
+  }
+ ],
+ "failed": [
+  {
+   "id": "live-lonestar-brand",
+   "error": "NoProviderAvailable: post.copy: every provider failed"
+  }
+ ]
+}

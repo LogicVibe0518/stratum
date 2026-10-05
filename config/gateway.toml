@@ -16,7 +16,11 @@
 [tasks."post.copy"]           # every word of a post in one call
 order = ["openrouter", "openai"]
 max_attempts_per_provider = 2
-max_output_tokens = 900
+# Was 900. The copy eval on 5 Oct: the model reasons before it answers and the
+# reasoning counts against this limit. At 900, v2 was cut off on 3 of 30 briefs and
+# v3 (more rules, a `missing` list) on most. 3000 is headroom; at $0.50 per million
+# output tokens the most one call can cost is $0.0015.
+max_output_tokens = 3000
 
 [tasks."caption.generate"]
 order = ["openrouter", "openai"]

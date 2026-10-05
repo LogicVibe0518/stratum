@@ -12,6 +12,8 @@ from the task request. Values are inserted as data and never re-interpreted.
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import cache
 from importlib.resources import files
@@ -28,7 +30,7 @@ from stratum_worker.gateway.tasks import (
 )
 
 VERSION: dict[TaskName, int] = {
-    TaskName.POST_COPY: 2,
+    TaskName.POST_COPY: 4,
     TaskName.CAPTION_GENERATE: 1,
     TaskName.EDIT_PARSE: 5,
     TaskName.BACKGROUND_CREATE: 1,
@@ -67,7 +69,7 @@ def read_text(task: TaskName) -> str:
     return files(__name__).joinpath(FILES[task]).read_text(encoding="utf-8")
 
 
-def _parse(task: TaskName, text: str) -> Prompt:
+def _parse(task: TaskName, text: str, version: int | None = None) -> Prompt:
     sections: dict[str, list[str]] = {}
     current: str | None = None
     for line in text.splitlines():
@@ -80,12 +82,31 @@ def _parse(task: TaskName, text: str) -> Prompt:
         raise ValueError(f"prompt {FILES[task]} has no '## user' section")
     system = "\n".join(sections.get("## system", [])).strip()
     user = "\n".join(sections["## user"]).strip()
-    return Prompt(task=task, version=VERSION[task], system=system, user=Template(user))
+    return Prompt(task=task, version=version or VERSION[task], system=system, user=Template(user))
+
+
+# For evals only: run an older prompt through the same code to compare (copy eval).
+_OVERRIDE: dict[TaskName, Prompt] = {}
+
+
+@contextmanager
+def overridden(task: TaskName, text: str, version: int) -> Iterator[None]:
+    """Use `text` as `task`'s prompt (calling it `version`) inside this block. For an
+    eval comparing an old prompt with the current one; never used by the product."""
+    _OVERRIDE[task] = _parse(task, text, version)
+    try:
+        yield
+    finally:
+        _OVERRIDE.pop(task, None)
 
 
 @cache
-def load(task: TaskName) -> Prompt:
+def _load(task: TaskName) -> Prompt:
     return _parse(task, read_text(task))
+
+
+def load(task: TaskName) -> Prompt:
+    return _OVERRIDE.get(task) or _load(task)
 
 
 def _list(values: tuple[str, ...]) -> str:
@@ -113,6 +134,7 @@ def _values(task: TaskName, request: BaseModel) -> dict[str, str]:
             "offer_max_chars": str(request.offer_max_chars),
             "cta_max_chars": str(request.cta_max_chars),
             "brief": request.brief,
+            "feedback": request.feedback or "(no, this is the first draft)",
         }
     if task is TaskName.CAPTION_GENERATE and isinstance(request, CaptionRequest):
         return {
@@ -146,4 +168,13 @@ def render(task: TaskName, request: BaseModel) -> RenderedPrompt:
     return RenderedPrompt(id=prompt.id, system=prompt.system, user=user)
 
 
-__all__ = ["FILES", "VERSION", "Prompt", "RenderedPrompt", "load", "read_text", "render"]
+__all__ = [
+    "FILES",
+    "VERSION",
+    "Prompt",
+    "RenderedPrompt",
+    "load",
+    "overridden",
+    "read_text",
+    "render",
+]

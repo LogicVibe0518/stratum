@@ -106,7 +106,7 @@ class GatewayConfig(_Frozen):
 # real bill.
 _DEFAULTS: dict[str, object] = {
     "tasks": {
-        "post.copy": {"order": ["openrouter", "openai"], "max_output_tokens": 900},
+        "post.copy": {"order": ["openrouter", "openai"], "max_output_tokens": 3000},
         "caption.generate": {"order": ["openrouter", "openai"], "max_output_tokens": 600},
         "edit.parse": {"order": ["openrouter", "openai"], "max_output_tokens": 1200},
         "background.create": {"order": ["fal", "openai"]},
