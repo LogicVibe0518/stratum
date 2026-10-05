@@ -99,3 +99,29 @@ def test_editor_builders_do_not_put_server_strings_into_markup() -> None:
     ):
         body = _function_body(name)
         assert "innerHTML" not in body, name
+
+
+def test_the_page_has_the_taste_lab() -> None:
+    assert "/api/lab/next" in PAGE
+    assert "/answer" in PAGE
+    assert "/api/lab/progress" in PAGE
+    assert "Which would you send the client?" in PAGE
+
+
+def test_lab_builders_do_not_put_server_strings_into_markup() -> None:
+    for name in ("paintLab", "labCard", "labReasons"):
+        body = _function_body(name)
+        assert "innerHTML" not in body, name
+        assert "textContent" in body or "setAttribute" in body, name
+
+
+def test_lab_keys_leave_browser_shortcuts_alone() -> None:
+    body = _function_body("onLabKey")
+    assert "metaKey" in body and "ctrlKey" in body
+
+
+def test_lab_functions_do_not_read_ranking_fields() -> None:
+    for name in ("paintLab", "labCard", "labReasons"):
+        body = _function_body(name)
+        for word in ("bucket", "rank", "score", "family"):
+            assert word not in body, f"{name} reads {word}"
