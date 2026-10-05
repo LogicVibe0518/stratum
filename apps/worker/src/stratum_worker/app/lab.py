@@ -43,11 +43,21 @@ from typing import Any
 
 import numpy as np
 from PIL import Image
-from stratum_spec import BrandKit
+from stratum_spec import BrandKit, ImageLayer
+from stratum_spec import load as load_spec
 
 from stratum_worker.app import service
+from stratum_worker.app.options import _edges as edges_of
 from stratum_worker.app.options import material_for
-from stratum_worker.design.choose import Candidate, NothingFits, candidates, seed_for
+from stratum_worker.critic.features import measure
+from stratum_worker.critic.taste import ROLES
+from stratum_worker.design.choose import (
+    Candidate,
+    Material,
+    NothingFits,
+    candidates,
+    seed_for,
+)
 from stratum_worker.design.lab import (
     LOOK_WIDTH,
     MIN_APART,
@@ -169,7 +179,9 @@ async def make_screens(
         if not ranked_photos:
             skipped.append(post["slug"])
             continue
-        rankings: list[tuple[tuple[str, ...], list[Candidate], list[Look], dict[str, str]]] = []
+        rankings: list[
+            tuple[tuple[str, ...], list[Candidate], list[Look], dict[str, str], Material]
+        ] = []
         kit = service.brand_of(client)
         for photos in photo_sets(ranked_photos):
             try:
@@ -180,14 +192,14 @@ async def make_screens(
             except (DraftError, NothingFits):
                 continue
             looks = await asyncio.to_thread(looks_of, ranked, kit, asset_paths, root)
-            rankings.append((photos, ranked, looks, asset_paths))
+            rankings.append((photos, ranked, looks, asset_paths, material))
         if not rankings:
             skipped.append(post["slug"])
             continue
         shown = Shown.nothing()
         screens = []
         for index in range(per_post):
-            photos, ranked, looks, asset_paths = rankings[index % len(rankings)]
+            photos, ranked, looks, asset_paths, material = rankings[index % len(rankings)]
             chosen = lab_screen(ranked, _rng(post["id"], batch, index), looks=looks, shown=shown)
             if chosen is None:
                 break
@@ -209,6 +221,11 @@ async def make_screens(
                             "spec": (
                                 await service.with_mattes(ctx, one.candidate.spec, asset_paths)
                             ).model_dump(mode="json"),
+                            # The critic's 35 measurements, exactly as the ranking took
+                            # them: what critic v2 learns from (taste.py).
+                            "features": _rounded(
+                                measure(one.candidate.spec, kit, root, edges=dict(material.edges))
+                            ),
                         }
                         for one in chosen
                     ],
@@ -328,9 +345,17 @@ async def answer(
     reasons: list[str],
     ms: int,
     repeat: bool,
+    send: list[int] | None = None,
+    role: str | None = None,
 ) -> dict[str, Any]:
     """Record one rater's choice on one screen. The same serving sent twice is one
-    answer. Raises DraftError with a sentence when the answer cannot be right."""
+    answer. Raises DraftError with a sentence when the answer cannot be right.
+
+    `send` (M15c, issue I-31) is every design the rater would send as it is; None
+    from a page that does not ask. The best one is always one they would send, so a
+    pick is added to it; ticking several without saying which is best is refused.
+    `role` is what the rater says they are (ROLES): designers' answers are the answer
+    key critic v2 is scored against."""
     rows = await ctx.supa.select("lab_screens", id=f"eq.{screen_id}", select="*")
     if not rows:
         raise DraftError("That screen is not one of this agency's.")
@@ -346,6 +371,18 @@ async def answer(
         raise DraftError("A design marked 'never send' is not on this screen.")
     if picked is not None and picked in never:
         raise DraftError("A design cannot be both the pick and 'never send'.")
+    if send is not None:
+        if any(not 0 <= one < count for one in send) or len(set(send)) != len(send):
+            raise DraftError("A design marked 'would send' is not on this screen.")
+        if set(send) & set(never):
+            raise DraftError("A design cannot be both 'would send' and 'never send'.")
+        if picked is None and len(send) == 1:
+            picked = send[0]  # the only one they would send is the best
+        elif picked is None and send:
+            raise DraftError("Pick the best of the designs you would send.")
+        send = sorted({*send, *([picked] if picked is not None else [])})
+    if role is not None and role not in ROLES:
+        raise DraftError(f"Unknown role: {role}.")
     unknown = sorted(set(reasons) - set(REASONS))
     if unknown:
         raise DraftError(f"Unknown reason: {', '.join(unknown)}.")
@@ -381,6 +418,8 @@ async def answer(
                     "repeat": repeat,
                     "shared": bool(screen.get("shared")),
                     "design_ids": [one["design_id"] for one in screen["designs"]],
+                    **({"send": send} if send is not None else {}),
+                    **({"role": role} if role is not None else {}),
                 },
             },
         )
@@ -437,11 +476,59 @@ async def progress(ctx: service.Context) -> dict[str, Any]:
     return summarise(screens, answers, ctx.user_id)
 
 
+def _rounded(values: Any) -> list[float]:
+    return [round(float(value), 6) for value in values]
+
+
+class _Measurer:
+    """The critic's measurements for designs on screens made before they were kept:
+    the client's brand kit as the poster was made, and the photos' edge maps, each
+    read once per export."""
+
+    def __init__(self, ctx: service.Context) -> None:
+        self.ctx = ctx
+        self.kits: dict[tuple[str, int], BrandKit] = {}
+        self.edges: dict[str, Any] = {}
+        self.clients: dict[str, dict[str, Any]] = {}
+
+    async def features(self, screen: dict[str, Any]) -> list[list[float]]:
+        designs = screen["designs"]
+        if all(isinstance(one.get("features"), list) for one in designs):
+            return [one["features"] for one in designs]
+        post_id = str(screen["post_id"])
+        if post_id not in self.clients:
+            [post] = await self.ctx.supa.select("posts", id=f"eq.{post_id}", select="client_id")
+            [client] = await self.ctx.supa.select("clients", id=f"eq.{post['client_id']}")
+            self.clients[post_id] = client
+        client = self.clients[post_id]
+        out = []
+        for one in designs:
+            if isinstance(one.get("features"), list):
+                out.append(one["features"])
+                continue
+            spec = load_spec(one["spec"])
+            key = (str(client["id"]), spec.brand_kit_version)
+            if key not in self.kits:
+                self.kits[key] = await service.kit_for(self.ctx, client, spec.brand_kit_version)
+            for layer in spec.layers:
+                sha = getattr(layer, "asset", None)
+                if isinstance(layer, ImageLayer) and isinstance(sha, str) and sha not in self.edges:
+                    path = await service.local_path(self.ctx, sha)
+                    self.edges[sha] = await asyncio.to_thread(edges_of, path)
+            root = self.ctx.settings.repo_root
+            out.append(_rounded(measure(spec, self.kits[key], root, edges=dict(self.edges))))
+        return out
+
+
 async def export(ctx: service.Context) -> str:
     """Every answer with the designs it was about, one JSON object per line: what the
-    critic v2 walkthrough trains on. Raters are numbered, not named."""
+    critic v2 walkthrough trains on. Raters are numbered, not named. Each line carries
+    `features`: the critic's measurements of each design (critic/features.FEATURES
+    order), so training needs neither the photos nor the brand kits."""
     answers = await _answers(ctx)
     screens = {one["id"]: one for one in await ctx.supa.select("lab_screens", select="*")}
+    measurer = _Measurer(ctx)
+    measured: dict[str, list[list[float]]] = {}
     numbers: dict[str, int] = {}
     lines = []
     for one in answers:
@@ -449,6 +536,8 @@ async def export(ctx: service.Context) -> str:
         screen = screens.get(detail["screen"])
         if screen is None:
             continue
+        if screen["id"] not in measured:
+            measured[screen["id"]] = await measurer.features(screen)
         rater = numbers.setdefault(str(one.get("actor")), len(numbers) + 1)
         lines.append(
             json.dumps(
@@ -461,10 +550,13 @@ async def export(ctx: service.Context) -> str:
                     "repeat": detail.get("repeat", False),
                     "picked": detail.get("picked"),
                     "never": detail.get("never", []),
+                    "send": detail.get("send"),
+                    "role": detail.get("role"),
                     "reasons": detail.get("reasons", []),
                     "ms": detail.get("ms"),
                     "order": detail.get("order", []),
                     "designs": screen["designs"],
+                    "features": measured[screen["id"]],
                     "chooser": int((screen.get("detail") or {}).get("chooser", 1)),
                     "closest": (screen.get("detail") or {}).get("closest"),
                     "at": one.get("created_at"),
@@ -493,6 +585,7 @@ __all__ = [
     "BUDGET_S",
     "CHOOSER",
     "REASONS",
+    "ROLES",
     "answer",
     "display_order",
     "export",

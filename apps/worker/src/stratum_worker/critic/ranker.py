@@ -154,8 +154,13 @@ def heuristic(x: np.ndarray) -> np.ndarray:
 
 
 # Shipped inside the package, so it is in the server image and in every install.
-# The walkthrough notebook (ml/critic/walkthrough.ipynb) writes it here.
-DEFAULT_MODEL = Path(__file__).resolve().parent / "model" / "critic-v1.json"
+# The walkthrough notebooks (ml/critic/walkthrough*.ipynb) write models here.
+MODELS = Path(__file__).resolve().parent / "model"
+DEFAULT_MODEL = MODELS / "critic-v1.json"
+# The switch: a one-line file naming the model the product uses. The v2 walkthrough
+# writes it only when its model beats v1 out of fold; without it, v1 is used. Going
+# back is deleting one file.
+ACTIVE = MODELS / "ACTIVE"
 
 # What prediction needs from LightGBM's dump. Gains, counts and weights are for
 # inspection only, and would more than double the file.
@@ -224,10 +229,55 @@ def _forest(path: str) -> Forest | None:
     return Forest.load(file) if file.is_file() else None
 
 
+def active_model(switch: Path | None = None) -> Path:
+    """The model the product scores with: the one ACTIVE names, else v1. A switch
+    naming a model that is not there is a broken release, not a fallback."""
+    file = switch or ACTIVE
+    if not file.is_file():
+        return DEFAULT_MODEL
+    name = file.read_text(encoding="utf-8").strip()
+    path = file.parent / name
+    if not name or Path(name).name != name or not path.is_file():
+        raise ValueError(f"{file} names {name!r}, which is not a model next to it")
+    return path
+
+
+@cache
+def _active() -> Path:
+    return active_model()
+
+
+def write_active(name: str, switch: Path | None = None) -> Path:
+    """Point the product at a model in the same folder (the walkthrough calls this
+    only when the model passed its decision rule)."""
+    file = switch or ACTIVE
+    if Path(name).name != name or not (file.parent / name).is_file():
+        raise ValueError(f"{name!r} is not a model in {file.parent}")
+    file.write_text(name + "\n", encoding="utf-8")
+    return file
+
+
 def score(x: np.ndarray, model: Path | None = None) -> np.ndarray:
-    """Higher is better. The trained critic when its file is present, the rule if not."""
-    forest = _forest(str(model or DEFAULT_MODEL))
+    """Higher is better. The active critic when its file is present, the rule if not."""
+    forest = _forest(str(model or _active()))
     return forest.predict(x) if forest is not None else heuristic(x)
 
 
-__all__ = ["DEFAULT_MODEL", "Forest", "heuristic", "save_model", "score"]
+def model_name() -> str:
+    """Which critic is scoring, for the record kept with every option."""
+    path = _active()
+    return path.stem if path.is_file() else "heuristic"
+
+
+__all__ = [
+    "ACTIVE",
+    "DEFAULT_MODEL",
+    "MODELS",
+    "Forest",
+    "active_model",
+    "heuristic",
+    "model_name",
+    "save_model",
+    "score",
+    "write_active",
+]

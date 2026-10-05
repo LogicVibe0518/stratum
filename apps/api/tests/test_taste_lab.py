@@ -7,7 +7,10 @@ The promises:
   same serving sent twice is one answer;
 - repeats come back to measure self-consistency; agreement on shared screens is
   measured between raters;
-- the export has every answer with the designs it was about.
+- the export has every answer with the designs it was about, and the critic's
+  measurements of each design;
+- a rater can tick every design they would send and say what they are (M15c): the
+  best is always one they would send, and a role must be one of three.
 """
 
 from __future__ import annotations
@@ -25,6 +28,7 @@ import pytest
 from fastapi.testclient import TestClient
 from stratum_api import main
 from stratum_worker.app import lab, service
+from stratum_worker.critic.features import FEATURES
 from stratum_worker.design import choose as chooser
 from stratum_worker.queue import fake, worker
 from stratum_worker.queue.fake import World
@@ -230,6 +234,67 @@ def test_the_export_has_every_answer_with_its_designs(lab_world: Lab) -> None:
     assert lines[0]["rater"] == 1 and lines[0]["you"] is True
     assert len(lines[0]["designs"]) == 4 and "spec" in lines[0]["designs"][0]
     assert {one["bucket"] for one in lines[0]["designs"]} <= {"top", "middle", "any"}
+
+
+def test_would_send_ticks_and_a_role_are_kept_and_exported(lab_world: Lab) -> None:
+    screen = lab_world.http.get("/api/lab/next").json()
+    out = answer(lab_world.http, screen, 2, send=[0], never=[3], role="designer")
+    assert out.status_code == 200, out.text
+    detail = lab_world.answers()[0]["detail"]
+    assert detail["send"] == [0, 2]  # the best is always one they would send
+    assert detail["role"] == "designer"
+    [line] = [json.loads(one) for one in lab_world.http.get("/api/lab/export").text.splitlines()]
+    assert line["send"] == [0, 2] and line["role"] == "designer" and line["never"] == [3]
+    assert len(line["features"]) == 4 and all(len(row) == len(FEATURES) for row in line["features"])
+
+
+def test_screens_made_before_measurements_are_measured_at_export(lab_world: Lab) -> None:
+    supa = lab_world.world.factory(lab_world.agency)
+    stored = {one["id"]: one["designs"] for one in asyncio.run(supa.select("lab_screens"))}
+    for screen_id, designs in stored.items():
+        bare = [{k: v for k, v in one.items() if k != "features"} for one in designs]
+        asyncio.run(supa.update("lab_screens", {"designs": bare}, id=f"eq.{screen_id}"))
+    screen = lab_world.http.get("/api/lab/next").json()
+    assert answer(lab_world.http, screen, 0).status_code == 200
+    [line] = [json.loads(one) for one in lab_world.http.get("/api/lab/export").text.splitlines()]
+    kept = [one["features"] for one in stored[screen["screen_id"]]]
+    assert len(line["features"]) == len(kept)
+    for again, before in zip(line["features"], kept, strict=True):
+        assert again == pytest.approx(before, abs=1e-5)
+
+
+def test_the_only_design_they_would_send_is_the_best(lab_world: Lab) -> None:
+    screen = lab_world.http.get("/api/lab/next").json()
+    assert answer(lab_world.http, screen, None, send=[1]).status_code == 200
+    detail = lab_world.answers()[0]["detail"]
+    assert detail["picked"] == 1 and detail["send"] == [1]
+
+
+def test_an_older_page_without_ticks_still_works(lab_world: Lab) -> None:
+    screen = lab_world.http.get("/api/lab/next").json()
+    assert answer(lab_world.http, screen, 1).status_code == 200
+    detail = lab_world.answers()[0]["detail"]
+    assert "send" not in detail and "role" not in detail
+    [line] = [json.loads(one) for one in lab_world.http.get("/api/lab/export").text.splitlines()]
+    assert line["send"] is None and line["role"] is None
+
+
+@pytest.mark.parametrize(
+    ("picked", "more", "said"),
+    [
+        (1, {"send": [9]}, "'would send' is not on this screen"),
+        (1, {"send": [0], "never": [0]}, "both 'would send' and 'never send'"),
+        (None, {"send": [0, 1]}, "Pick the best of the designs you would send."),
+        (1, {"role": "wizard"}, "Unknown role: wizard."),
+    ],
+)
+def test_ticks_and_roles_that_cannot_be_right_are_a_sentence(
+    lab_world: Lab, picked: int | None, more: dict[str, Any], said: str
+) -> None:
+    screen = lab_world.http.get("/api/lab/next").json()
+    out = answer(lab_world.http, screen, picked, **more)
+    assert out.status_code == 422 and said in out.text
+    assert lab_world.answers() == []
 
 
 def another_post(lab: Lab, slug: str) -> None:

@@ -27,6 +27,8 @@ renders/
 benchmarks/**/photos/raw/
 ml/**/checkpoints/
 ml/**/wandb/
+# Taste Lab exports hold client posts: they are trained on locally, never committed.
+ml/critic/labels/
 # OS / editors
 .DS_Store
 .idea/
