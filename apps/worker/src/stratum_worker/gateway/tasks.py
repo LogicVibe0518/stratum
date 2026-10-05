@@ -184,7 +184,9 @@ RESULT_TYPES: dict[TaskName, type[BaseModel]] = {
 # the budget is for the request with four changes in it, which writes several times
 # as much and must finish rather than time out on both providers.
 TIMEOUTS_S: dict[TaskName, float] = {
-    TaskName.POST_COPY: 25.0,
+    # Was 25 s. A post's words are written once per post and the model reasons first;
+    # the 5 Oct copy eval timed out at 25 s. Tweaks (edit.parse) stay fast.
+    TaskName.POST_COPY: 40.0,
     TaskName.CAPTION_GENERATE: 20.0,
     TaskName.EDIT_PARSE: 20.0,
     TaskName.BACKGROUND_CREATE: 60.0,

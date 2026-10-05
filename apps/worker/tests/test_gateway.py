@@ -212,3 +212,26 @@ def test_provider_call_defaults_are_zero() -> None:
     call = ProviderCall(model="x/y")
     assert call.cost_usd == 0.0
     assert call.tokens_in == 0
+
+
+@pytest.mark.asyncio
+async def test_a_cut_off_answer_is_not_retried_at_the_same_limit() -> None:
+    """5 Oct copy eval: an answer cut off at max_output_tokens was retried on the same
+    provider at the same limit and cut off again, four calls per brief. Move on."""
+    from stratum_worker.gateway.tasks import CUT_OFF, UNPARSEABLE
+
+    primary = FakeProvider(name="primary", results=[{UNPARSEABLE: CUT_OFF}, GOOD])
+    backup = FakeProvider(name="backup", results=[GOOD])
+    gateway = build(primary, backup)
+    result = await gateway.run(TASK, request(), agency_id="nimble")
+    assert isinstance(result, CaptionResult)
+    assert len(primary.calls) == 1 and len(backup.calls) == 1
+
+
+def test_post_copy_has_room_to_reason_and_answer() -> None:
+    from stratum_worker.gateway.config import default_config, load_config
+    from stratum_worker.gateway.tasks import TIMEOUTS_S
+
+    for config in (default_config(), load_config()):
+        assert config.max_output_tokens(TaskName.POST_COPY) >= 3000
+    assert TIMEOUTS_S[TaskName.POST_COPY] >= 40
