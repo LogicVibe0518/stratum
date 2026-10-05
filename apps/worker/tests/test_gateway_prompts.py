@@ -17,6 +17,8 @@ from stratum_worker.gateway.prompts import VERSION, load, read_text, render
 # VERSION[task] in prompts/__init__.py AND updating this table - never just one.
 PINNED: dict[tuple[TaskName, int], str] = {
     (TaskName.POST_COPY, 2): "6b5bb87294046691fb08c5edf54280472d5467e19c9202f07b6f08db2807cbaf",
+    (TaskName.POST_COPY, 3): "542d6e1f373e5817b0ef76b63a52762dc2b4fddbff50871b3f329bc582a2c2d0",
+    (TaskName.POST_COPY, 4): "e18cf08f98c46793e62399c08e70c6474537393e7a0297aa738bf40a15a29b43",
     (
         TaskName.CAPTION_GENERATE,
         1,

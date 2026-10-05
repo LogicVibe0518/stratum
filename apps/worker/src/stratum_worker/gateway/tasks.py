@@ -72,6 +72,10 @@ class PostCopyRequest(Frozen):
     offer_max_chars: int = Field(default=120, ge=10, le=200)
     cta_max_chars: int = Field(default=40, ge=6, le=80)
 
+    # Since post.copy v3 (M7b): why a previous draft was sent back (the offer line
+    # repeated the headline), so the second try knows what to fix. Empty first time.
+    feedback: str = Field(default="", max_length=600)
+
 
 class PostCopyResult(Frozen):
     headline: str = Field(min_length=1, max_length=120)
@@ -85,6 +89,9 @@ class PostCopyResult(Frozen):
     # Empty when the model has nothing better than the main headline.
     headline_short: str = Field(default="", max_length=120)
     headline_long: str = Field(default="", max_length=180)
+    # Since post.copy v3: questions for the business about details the brief does not
+    # give. Lenient on purpose (a fourth question is cut, not a failed call).
+    missing: tuple[str, ...] = Field(default=(), max_length=10)
 
 
 # --- caption.generate -------------------------------------------------------
@@ -177,7 +184,9 @@ RESULT_TYPES: dict[TaskName, type[BaseModel]] = {
 # the budget is for the request with four changes in it, which writes several times
 # as much and must finish rather than time out on both providers.
 TIMEOUTS_S: dict[TaskName, float] = {
-    TaskName.POST_COPY: 25.0,
+    # Was 25 s. A post's words are written once per post and the model reasons first;
+    # the 5 Oct copy eval timed out at 25 s. Tweaks (edit.parse) stay fast.
+    TaskName.POST_COPY: 40.0,
     TaskName.CAPTION_GENERATE: 20.0,
     TaskName.EDIT_PARSE: 20.0,
     TaskName.BACKGROUND_CREATE: 60.0,

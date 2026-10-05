@@ -205,7 +205,11 @@ class Gateway:
                         error=str(exc)[:500],
                     )
                     self.budget.record(agency_id, call.cost_usd)  # a bad answer still costs
-                    if attempt + 1 < policy.max_attempts_per_provider:
+                    # A cut-off answer is not the model misbehaving: it did not fit the
+                    # output limit, and a retry at the same limit is cut off again (four
+                    # doomed calls per brief in the 5 Oct copy eval). Move on instead.
+                    cut_off = reason == CUT_OFF
+                    if not cut_off and attempt + 1 < policy.max_attempts_per_provider:
                         continue  # models often fix themselves on a second pass
                     breaker.record_failure()
                     break

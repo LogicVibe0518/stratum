@@ -45,6 +45,7 @@ from stratum_worker.brand.names import WORDS, colour_name, nearest
 from stratum_worker.design import PLACEHOLDER, Copy, decode, is_design, lay_out
 from stratum_worker.design.choose import AUTO
 from stratum_worker.design.copyfit import best_copy, versions
+from stratum_worker.draft import copycheck
 from stratum_worker.draft.bindings import binding_for
 from stratum_worker.draft.capacity import measure
 from stratum_worker.draft.compose import ComposeError, build_spec
@@ -323,6 +324,43 @@ async def pick_photos(
     return assets, flags
 
 
+async def ask_for_copy(
+    gateway: Gateway, request: PostCopyRequest, *, agency_id: str, second_try: bool = True
+) -> tuple[PostCopyResult, int]:
+    """The words for one post, and how many calls it took (1 or 2).
+
+    The offer line must say something the headline does not, and no line may use a
+    phrase the client's rules ban, even when the brief does (post.copy v3/v4). Asking
+    is not enough, so both are checked in code; one second try is told exactly what
+    was wrong, and the second is kept only if it fixed more than it broke. Shared by
+    drafts and the copy eval, so the eval measures what the product does.
+    """
+    result = await gateway.run(TaskName.POST_COPY, request, agency_id=agency_id)
+    assert isinstance(result, PostCopyResult)
+    first = _sent_back(request, result)
+    sent_back = copycheck.feedback(
+        first, result.headline, result.offer_detail, request.banned_claims
+    )
+    if not sent_back or not second_try:
+        return result, 1
+    retry = request.model_copy(update={"feedback": sent_back})
+    second = await gateway.run(TaskName.POST_COPY, retry, agency_id=agency_id)
+    assert isinstance(second, PostCopyResult)
+    # Keep the second only if it fixed more than it broke.
+    return (second if len(_sent_back(request, second)) < len(first) else result), 2
+
+
+def _sent_back(request: PostCopyRequest, result: PostCopyResult) -> list[copycheck.Problem]:
+    found = copycheck.problems(
+        request.brief,
+        result.headline,
+        result.offer_detail,
+        result.cta,
+        banned=request.banned_claims,
+    )
+    return [one for one in found if one.code in copycheck.SENT_BACK]
+
+
 async def write_copy(
     ctx: Context, client: dict[str, Any], post: dict[str, Any], template: PosterSpec
 ) -> tuple[PostCopy, list[dict[str, Any]]]:
@@ -349,8 +387,7 @@ async def write_copy(
     )
     tracer = CollectingTracer(inner=ctx.gateway.tracer)
     gateway = Gateway(router=ctx.gateway.router, budget=ctx.gateway.budget, tracer=tracer)
-    result = await gateway.run(TaskName.POST_COPY, request, agency_id=ctx.agency_id)
-    assert isinstance(result, PostCopyResult)
+    result, _ = await ask_for_copy(gateway, request, agency_id=ctx.agency_id)
     words = PostCopy(
         headline=result.headline,
         offer_detail=result.offer_detail,
@@ -365,6 +402,7 @@ async def write_copy(
         headline_long=result.headline_long
         if len(result.headline_long) > len(result.headline)
         else "",
+        missing=tuple(one.strip()[:100] for one in result.missing if one.strip())[:3],
     )
     step = tracer.step("write_copy", TaskName.POST_COPY)
     return words, [step.model_dump()]
@@ -873,14 +911,35 @@ def brief_flags(post: dict[str, Any], spec: PosterSpec) -> list[Flag]:
     )
     words = post.get("words") or {}
     has_offer_line = "offer_detail" in binding_for(post["template_id"]).texts.values()
-    return list(
-        check_brief_on_poster(
+    return [
+        *check_brief_on_poster(
             post["brief"],
             shown,
             str(words.get("caption", "")),
             has_offer_line=has_offer_line,
+        ),
+        *repeated_lines(spec),
+    ]
+
+
+def repeated_lines(spec: PosterSpec) -> list[Flag]:
+    """The offer line, as the poster now shows it, saying the headline again. Checked
+    on every version, so the flag goes as soon as either line is changed."""
+    shown = {
+        one.id: one.content for one in spec.layers if isinstance(one, TextLayer) and one.visible
+    }
+    headline, offer = shown.get("headline", ""), shown.get("offer", "")
+    if not headline or not offer or copycheck.echo(headline, offer) <= copycheck.ECHO_MAX:
+        return []
+    return [
+        Flag(
+            code="copy_repeats",
+            message=(
+                "The offer line says the same as the headline. Give it a second detail: "
+                "a price, a date, what is included, or the area."
+            ),
         )
-    )
+    ]
 
 
 NOTHING_CHANGED = (
