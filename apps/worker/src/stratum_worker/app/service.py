@@ -27,6 +27,7 @@ from stratum_spec.models import Aspect, ImageLayer, LogoLayer, PosterSpec, TextL
 from stratum_spec.ops import EditOp, OpError, SetColor, apply_ops
 from stratum_spec.templates import Variants
 
+from stratum_worker.app import photo_search
 from stratum_worker.app.settings import Settings
 from stratum_worker.app.supa import Supa
 from stratum_worker.assets import AssetNotFound, AssetStore
@@ -65,6 +66,7 @@ from stratum_worker.edit.actions import (
     Choice,
     Restyle,
     Undo,
+    UsePhoto,
     split,
     undo_asked,
     without_logo_recolours,
@@ -91,6 +93,7 @@ from stratum_worker.gateway.tasks import (
     PostCopyResult,
     TaskName,
 )
+from stratum_worker.photo import understand
 from stratum_worker.photo.check import fitness, upload_check
 from stratum_worker.photo.frame import face_flags, frame_photos
 from stratum_worker.photo.read import PhotoRead, read_photo
@@ -258,7 +261,7 @@ PHOTO_FLOOR_PX = 320
 
 
 async def pick_photos(
-    ctx: Context, client_id: str, needed: dict[str, str]
+    ctx: Context, client_id: str, needed: dict[str, str], *, wish: str = ""
 ) -> tuple[dict[str, str], list[Flag]]:
     """Best photo first, by role. Only a background may be invented.
 
@@ -268,6 +271,10 @@ async def pick_photos(
     client's own business beats a generated one even when it is imperfect, and a
     designer can swap it in one click once the client sends a better one. Only
     thumbnails too small to fill a poster at all are never used.
+
+    With the photo model (M17a): a photo the model is sure is a graphic (a flyer, a
+    screenshot, a logo) goes last, and when `wish` (the post's photo note, else its
+    brief) clearly describes one of the photos, that photo comes first.
     """
     rows = await ctx.supa.select(
         "assets",
@@ -298,7 +305,8 @@ async def pick_photos(
         key=best,
         reverse=True,
     )
-    chosen = list(zip(needed, good + weak, strict=False))
+    ordered = await _understood(ctx, client_id, good, weak, wish)
+    chosen = list(zip(needed, ordered, strict=False))
     assets = {layer: row["sha256"] for layer, row in chosen}
 
     flags: list[Flag] = []
@@ -329,6 +337,29 @@ async def pick_photos(
             )
         )
     return assets, flags
+
+
+async def _understood(
+    ctx: Context,
+    client_id: str,
+    good: list[dict[str, Any]],
+    weak: list[dict[str, Any]],
+    wish: str,
+) -> list[dict[str, Any]]:
+    """`good + weak`, reordered by what is in the photos when this build has the model."""
+    model = understand.installed()
+    if model is None or not (good or weak):
+        return good + weak
+    photos = await photo_search.library(ctx, client_id, model)
+    kinds = dict(zip(photos.shas, photos.types, strict=True))
+    graphics = [row for row in good + weak if kinds.get(row["sha256"]) == photo_search.GRAPHIC]
+    ordered = [row for row in good + weak if row not in graphics] + graphics
+    if wish.strip():
+        found = photo_search.search(model, photos, wish)
+        if found.sure:
+            best = next(row for row in ordered if row["sha256"] == found.matches[0].sha)
+            ordered = [best, *(row for row in ordered if row is not best)]
+    return ordered
 
 
 async def ask_for_copy(
@@ -812,7 +843,9 @@ async def draft(ctx: Context, post: dict[str, Any], client: dict[str, Any]) -> d
 
     words, steps = await write_copy(ctx, client, post, template)
 
-    assets, flags = await pick_photos(ctx, client["id"], binding.photos)
+    assets, flags = await pick_photos(
+        ctx, client["id"], binding.photos, wish=post.get("photo_note") or post["brief"]
+    )
     missing = [layer for layer in binding.photos if layer not in assets]
     unfillable = [layer for layer in missing if binding.photos[layer] != "background"]
     if unfillable:
@@ -1149,6 +1182,7 @@ async def tweak(
         message=message,
         recent=list(reversed(recent)),
         pointed=target,
+        library=await _library_line(ctx, client),
     )
     tracer = CollectingTracer(inner=ctx.gateway.tracer)
     gateway = Gateway(router=ctx.gateway.router, budget=ctx.gateway.budget, tracer=tracer)
@@ -1180,17 +1214,19 @@ async def tweak(
     restyles = [one for one in service_ops if isinstance(one, Restyle)]
     undos = [one for one in service_ops if isinstance(one, Undo)]
     badges = [one for one in service_ops if isinstance(one, Badge)]
-    if undos and not ops and not restyles and not badges:
+    uses = [one for one in service_ops if isinstance(one, UsePhoto)]
+    more = bool(restyles or badges or uses)
+    if undos and not ops and not more:
         return await actions.undo(ctx, post, client, message, everything=undos[0].all)
     ops, font_refused = without_unknown_fonts(kit, ops)
-    if font_refused and not ops and not restyles and not badges:
+    if font_refused and not ops and not more:
         await record("needs_human", raw, step.cost_usd)
         return {"outcome": "needs_human", "why": font_refused}
     if font_refused:
         result = result.model_copy(
             update={"needs_human": " ".join(filter(None, [result.needs_human, font_refused]))}
         )
-    if not ops and not restyles and not badges:
+    if not ops and not more:
         await record("needs_human", raw, step.cost_usd)
         return {
             "outcome": "needs_human",
@@ -1201,13 +1237,30 @@ async def tweak(
         await record("needs_human", raw, step.cost_usd)
         return off_brand
     ops, logo_refused = without_logo_recolours(spec, ops)
-    if logo_refused and not ops and not restyles and not badges:
+    if logo_refused and not ops and not more:
         await record("needs_human", raw, step.cost_usd)
         return {"outcome": "needs_human", "why": logo_refused}
     if logo_refused:
         result = result.model_copy(
             update={"needs_human": " ".join(filter(None, [result.needs_human, logo_refused]))}
         )
+    wanted: WantedPhoto | None = None
+    if uses:
+        use = uses[-1]
+        found = await photo_search.find(ctx, client["id"], use.description)
+        refusal = _no_photo_search(client, found)
+        if refusal and not ops and not restyles and not badges:
+            await record("needs_human", raw, step.cost_usd)
+            return {"outcome": "needs_human", "why": refusal}
+        if refusal:
+            result = result.model_copy(
+                update={"needs_human": " ".join(filter(None, [result.needs_human, refusal]))}
+            )
+        elif found is not None and not found.sure:
+            await record("needs_human", raw, step.cost_usd)
+            return _photo_question(found, _photo_target(spec, use.layer, photos))
+        elif found is not None:
+            wanted = WantedPhoto(found.matches[0].sha, use.layer, use.add, use.description)
 
     return await commit_change(
         ctx,
@@ -1219,6 +1272,7 @@ async def tweak(
         ops=ops,
         changes=_merged(restyles),
         badge=badges[-1] if badges else None,
+        wanted=wanted,
         photos=photos,
         message=message,
         record=lambda outcome: record(outcome, raw, step.cost_usd),
@@ -1228,6 +1282,73 @@ async def tweak(
         started=started,
         step=step,
     )
+
+
+async def _library_line(ctx: Context, client: dict[str, Any]) -> str:
+    """The client's photos by kind, for the chat model; "" without the photo model."""
+    model = understand.installed()
+    if model is None:
+        return ""
+    shown = await photo_search.library(ctx, client["id"], model)
+    if not shown.shas:
+        return "no photos"
+    return f"{len(shown.shas)} photos: {photo_search.summary(shown)}"
+
+
+@dataclass(frozen=True)
+class WantedPhoto:
+    """A photo the photo model found for a use_photo (M17a), and where it goes."""
+
+    sha: str
+    layer: str | None
+    add: bool
+    description: str
+
+
+PHOTO_SEARCH_OFF = (
+    "Finding a photo by what is in it is not switched on yet. Pick the photo in the "
+    "panel, or say 'use the next photo'."
+)
+
+
+def _no_photo_search(client: dict[str, Any], found: photo_search.Found | None) -> str:
+    """Why a use_photo cannot be answered at all, or "" when it can."""
+    if found is None:
+        return PHOTO_SEARCH_OFF
+    if not found.matches:
+        return f"There are no photos of {client['name']}'s to choose from yet. Upload some first."
+    return ""
+
+
+def _photo_target(spec: PosterSpec, layer: str | None, photos: list[str]) -> str | None:
+    """The photo a use_photo replaces: the one named, else the main client photo."""
+    images = [one for one in spec.layers if isinstance(one, ImageLayer)]
+    named = next((one for one in images if one.id == layer), None)
+    if named is not None:
+        return named.id
+    own = next((one for one in images if one.asset in photos), None)
+    if own is not None:
+        return own.id
+    return images[0].id if images else None
+
+
+def _photo_question(found: photo_search.Found, layer: str | None) -> dict[str, Any]:
+    """No photo is a clear match: the closest ones, for the designer to pick (or not).
+
+    `photos` and `layer` let the page show the photos with a button that swaps one in
+    through the control panel (swap_asset): a click, no model."""
+    question = (
+        f'None of the photos clearly shows "{found.description}". These are the closest: '
+        "pick one, or upload a photo that does."
+    )
+    return {
+        "outcome": "needs_human",
+        "why": question,
+        "question": question,
+        "choices": [],
+        "photos": [{"sha256": one.sha, "probability": one.probability} for one in found.matches],
+        "layer": layer,
+    }
 
 
 def _merged(restyles: list[Restyle]) -> dict[str, str] | None:
@@ -1262,6 +1383,7 @@ async def commit_change(
     step: Any = None,
     authorised: str = "",
     badge: Badge | None = None,
+    wanted: WantedPhoto | None = None,
 ) -> dict[str, Any]:
     """Make a change the next version: a typed tweak's ops, or a control panel's.
 
@@ -1277,6 +1399,9 @@ async def commit_change(
     notes, unable = list(notes), list(unable)
     base, template_id = spec, post["template_id"]
     restyled = None
+    if wanted is not None:
+        # A restyle that brings in another photo takes the one asked for (M17a).
+        photos = [wanted.sha, *(sha for sha in photos if sha != wanted.sha)]
     if changes:
         try:
             restyled = await actions.restyle(ctx, post, client, spec, kit, changes, photos)
@@ -1289,7 +1414,7 @@ async def commit_change(
             base, template_id = restyled.spec, restyled.design_id
             if not notes:
                 notes.append(restyled.note)
-            if restyled.added_photo:
+            if restyled.added_photo and not (wanted and wanted.add):
                 notes.append(f"Added another of {client['name']}'s photos for the second space.")
 
     if badge is not None:
@@ -1305,6 +1430,9 @@ async def commit_change(
                 await record("needs_human")
                 return {"outcome": "needs_human", "why": str(exc)}
             unable.append(str(exc))
+    if wanted is not None:
+        ops, said = _with_wanted_photo(base, ops, wanted, photos)
+        (notes if said.startswith(("Used", "Added")) else unable).append(said)
     try:
         changed = apply_ops(base, ops)
     except OpError as exc:
@@ -1314,7 +1442,8 @@ async def commit_change(
         # Nothing moved, so there is no new version and it is not called "applied":
         # a designer who asked for a second photo was told it was done, and it wasn't.
         await record("needs_human")
-        return {"outcome": "needs_human", "why": unchanged}
+        said = " ".join(unable) if wanted is not None and unable else unchanged
+        return {"outcome": "needs_human", "why": said}
 
     shaped = {**post, "template_id": template_id}
     variants = file_variants(ctx, template_id)
@@ -1395,6 +1524,28 @@ async def commit_change(
     return version
 
 
+def _with_wanted_photo(
+    base: PosterSpec, ops: list[EditOp], wanted: WantedPhoto, photos: list[str]
+) -> tuple[list[EditOp], str]:
+    """The ops with the found photo swapped in, and what to tell the designer."""
+    from stratum_spec.ops import SwapAsset
+
+    shown = {one.asset for one in base.layers if isinstance(one, ImageLayer)}
+    about = f'the photo that best matches "{wanted.description}"'
+    if wanted.sha in shown:
+        return ops, f"Added {about}." if wanted.add else "That photo is already on the poster."
+    if wanted.add:
+        spaces = sum(1 for one in base.layers if isinstance(one, ImageLayer))
+        return ops, (
+            f"This design has room for {spaces} photo{'' if spaces == 1 else 's'}. Say "
+            "'two photos' to switch to a design with room for another."
+        )
+    target = _photo_target(base, wanted.layer, photos[1:] if photos else [])
+    if target is None:
+        return ops, "This design has no photo to replace."
+    return [SwapAsset(layer=target, asset=wanted.sha), *ops], f"Used {about}."
+
+
 # --- the control panel (M10d): by hand, no model ---------------------------------------
 
 
@@ -1423,6 +1574,8 @@ EDITOR_OPS = frozenset(
         "reorder",
         "set_opacity",
         "align",
+        # One of the client's own photos, picked from the closest matches (M17a).
+        "swap_asset",
     }
 )
 
@@ -1474,7 +1627,17 @@ def editor_note(
 ) -> str:
     """What a change made in the control panel did, for History: "Headline gold; photo
     darker". Made here from the ops, not taken from the page."""
-    from stratum_spec.ops import Dim, Move, Pan, Scale, SetColor, SetText, SetVisible, Zoom
+    from stratum_spec.ops import (
+        Dim,
+        Move,
+        Pan,
+        Scale,
+        SetColor,
+        SetText,
+        SetVisible,
+        SwapAsset,
+        Zoom,
+    )
 
     said: list[str] = ["new style"] if changes else []
     for op in ops:
@@ -1496,12 +1659,29 @@ def editor_note(
             said.append(f"zoomed the {part} {'in' if op.factor > 1 else 'out'}")
         elif isinstance(op, Dim):
             said.append(f"{part} darkness {round(op.amount * 100)}%")
+        elif isinstance(op, SwapAsset):
+            said.append(f"another {part}")
         else:
             said.append(_new_op_note(op, part))
     if badge is not None:
         said.append("removed the badge" if badge.remove else f"badge {badge.text.upper()}")
     text = "; ".join(dict.fromkeys(said)) or "no change"
     return f"Editor: {text}"[:200]
+
+
+async def _own_photos_only(ctx: Context, client: dict[str, Any], ops: list[EditOp]) -> None:
+    """A photo swapped in by hand must be one of this client's photos: another client's
+    photo on this poster would be a leak between the agency's clients."""
+    from stratum_spec.ops import SwapAsset
+
+    asked = {op.asset for op in ops if isinstance(op, SwapAsset)}
+    if not asked:
+        return
+    rows = await ctx.supa.select(
+        "assets", client_id=f"eq.{client['id']}", kind="eq.photo", select="sha256"
+    )
+    if asked - {row["sha256"] for row in rows}:
+        raise DraftError(f"That photo is not one of {client['name']}'s photos.")
 
 
 async def edit(
@@ -1546,6 +1726,7 @@ async def edit(
         added = Badge.model_validate({**badge, "op": "badge"}) if badge else None
     except ValidationError as exc:
         raise DraftError("That change is outside what the editor allows.") from exc
+    await _own_photos_only(ctx, client, ops)
     spec = load_spec(latest["spec"])
     kit = await kit_for(ctx, client, spec.brand_kit_version)
     off_brand = off_brand_colour(ops, kit, client)

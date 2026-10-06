@@ -131,6 +131,9 @@ class EditParseRequest(Frozen):
     # Since v6 (M10h): the part the designer pointed at before typing, as
     # "<layer id>: <its description>", or "" when they did not point.
     pointed: str = Field(default="", max_length=400)
+    # Since v8 (M17a): the client's photos, how many and of what kind when the photo
+    # model knows ("12 photos: 4 people working, 3 place, ..."), or "".
+    library: str = Field(default="", max_length=400)
 
 
 class EditParseResult(Frozen):

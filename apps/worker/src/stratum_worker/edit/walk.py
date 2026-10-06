@@ -43,6 +43,7 @@ from stratum_spec.ops import (
     SetOpacity,
     SetText,
     SetVisible,
+    SwapAsset,
     Zoom,
 )
 
@@ -97,6 +98,8 @@ WALK: tuple[Step, ...] = (
     Step("logo top centre", "type", (Align(layer="logo", x="center", y="top"),)),
     Step("offer badge", "panel", change=lambda spec, kit: badge.place(spec, kit, "20% off")),
     Step("collage design", "collage"),
+    # Photos by what is in them (M17a): the closest photo, picked in the panel.
+    Step("another photo", "panel", (SwapAsset(layer="bg", asset="b" * 64),)),
 )
 
 TILE_H = 220

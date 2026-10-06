@@ -103,7 +103,12 @@ async def draft_options(
     as_reference = {**post, "template_id": REFERENCE}
     words, steps = await service.write_copy(ctx, client, as_reference, reference)
 
-    picked, flags = await service.pick_photos(ctx, client["id"], {"a": "photo", "b": "photo"})
+    picked, flags = await service.pick_photos(
+        ctx,
+        client["id"],
+        {"a": "photo", "b": "photo"},
+        wish=post.get("photo_note") or post["brief"],
+    )
     photos = tuple(picked[key] for key in ("a", "b") if key in picked)
     background: str | None = None
     if not photos:

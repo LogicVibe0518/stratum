@@ -1,7 +1,8 @@
 """The chat eval (M10h): typed changes, read by the real model, scored in code.
 
-    make chat-eval                      # every case in ml/chat/cases.jsonl, real model
-    make chat-eval ARGS="--baseline"    # the chat before M10i: prompt v6, with pointing
+    make chat-eval                        # every case in ml/chat/cases.jsonl, real model
+    make chat-eval ARGS="--baseline"      # the chat before M17a: prompt v7, with pointing
+    make chat-eval ARGS="--baseline 6"    # the chat before M10i: prompt v6
 
 Each case is a message a designer might type about one of a few fixed posters, made
 offline from the design space for a fictional client (the same posters every run),
@@ -50,6 +51,7 @@ from stratum_worker.edit.actions import (
     Badge,
     Restyle,
     Undo,
+    UsePhoto,
     split,
     without_logo_recolours,
 )
@@ -63,10 +65,18 @@ from stratum_worker.gateway.tasks import EditParseResult, TaskName
 REPO = Path(__file__).resolve().parents[5]
 CASES = REPO / "ml" / "chat" / "cases.jsonl"
 REPORTS = REPO / "ml" / "chat" / "reports"
-# The chat before M10i (the first editing set): prompt v6, with pointing. M10h's own
-# baseline (v5, no pointing) is kept in ml/chat/edit_parse_v5.md for its report.
-BASELINE = REPO / "ml" / "chat" / "edit_parse_v6.md"
-BASELINE_VERSION = 6
+# The chat before a module, to compare with: v7 is the chat before M17a (finding a
+# photo by what is in it), v6 the chat before M10i (the first editing set), which did
+# not know the short pointed words M10i added. M10h's own baseline (v5, no pointing)
+# is kept in ml/chat/edit_parse_v5.md for its report.
+BASELINES: dict[int, tuple[Path, bool]] = {
+    7: (REPO / "ml" / "chat" / "edit_parse_v7.md", True),
+    6: (REPO / "ml" / "chat" / "edit_parse_v6.md", False),
+}
+BASELINE_VERSION = 7
+BASELINE = BASELINES[BASELINE_VERSION][0]
+# What the fixed posters' client has, as the product would say it (M17a).
+LIBRARY = "8 photos: 3 people working, 2 place, 1 people posing, 1 vehicle, 1 unsure"
 OPS = TypeAdapter(list[EditOp])
 
 # The fixed posters: a fictional client's words in one design of each family.
@@ -161,8 +171,9 @@ def matches(want: dict[str, Any], got: dict[str, Any]) -> bool:
             allowed = rule if isinstance(rule, list) else [rule]
             if got.get("layer") not in allowed:
                 return False
-        elif key == "text_has":
-            text = str(got.get("text", "")).casefold()
+        elif key in ("text_has", "description_has"):
+            field_name = "text" if key == "text_has" else "description"
+            text = str(got.get(field_name, "")).casefold()
             if not all(part.casefold() in text for part in rule):
                 return False
         elif key == "changes":
@@ -216,9 +227,11 @@ def answer_of(result: EditParseResult, spec: PosterSpec | None = None) -> Answer
         except OpError:
             return Answer("invalid", raw, True)
     kept = [op.model_dump(mode="json") for op in ops] + [
-        dict(one) for one in raw if one.get("op") in ("restyle", "undo", "badge")
+        dict(one) for one in raw if one.get("op") in ("restyle", "undo", "badge", "use_photo")
     ]
-    if not ops and not any(isinstance(one, Restyle | Undo | Badge) for one in service_ops):
+    if not ops and not any(
+        isinstance(one, Restyle | Undo | Badge | UsePhoto) for one in service_ops
+    ):
         return Answer("refuse", kept, True, refused or result.needs_human or "")
     return Answer("change", kept, True, result.note or "")
 
@@ -286,6 +299,7 @@ async def respond(
             for line in case.recent
         ],
         pointed=pointed,
+        library=LIBRARY,
     )
     traced = Gateway(router=gateway.router, budget=gateway.budget, tracer=tracer)
     result = await traced.run(TaskName.EDIT_PARSE, request, agency_id="chat-eval")
@@ -332,14 +346,20 @@ class Report:
 
 
 async def run(
-    gateway: Gateway, cases: list[Case], *, baseline: bool = False, root: Path = REPO
+    gateway: Gateway,
+    cases: list[Case],
+    *,
+    baseline: bool | int = False,
+    root: Path = REPO,
 ) -> Report:
-    """Every case; with `baseline`, as the chat was before M10i: prompt v6, and the
-    short pointed instructions it knew then."""
+    """Every case; with `baseline`, as the chat was before: prompt v7 (True), or the
+    version given, with the short pointed instructions it knew then."""
     if baseline:
-        with prompts.overridden(TaskName.EDIT_PARSE, BASELINE.read_text("utf-8"), BASELINE_VERSION):
+        version = BASELINE_VERSION if baseline is True else int(baseline)
+        path, newer = BASELINES[version]
+        with prompts.overridden(TaskName.EDIT_PARSE, path.read_text("utf-8"), version):
             return await _run(
-                gateway, cases, version=BASELINE_VERSION, pointing=True, root=root, newer=False
+                gateway, cases, version=version, pointing=True, root=root, newer=newer
             )
     return await _run(
         gateway, cases, version=VERSION[TaskName.EDIT_PARSE], pointing=True, root=root
@@ -416,7 +436,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--cases", type=Path, default=CASES)
     parser.add_argument("--out", type=Path, default=REPORTS)
     parser.add_argument("--limit", type=int, default=0)
-    parser.add_argument("--baseline", action="store_true", help="prompt v5, no pointing")
+    parser.add_argument(
+        "--baseline",
+        nargs="?",
+        type=int,
+        const=BASELINE_VERSION,
+        default=0,
+        choices=sorted(BASELINES),
+        help=f"an earlier prompt (default v{BASELINE_VERSION})",
+    )
     args = parser.parse_args(argv)
 
     from stratum_worker.gateway.config import load_config
@@ -430,7 +458,7 @@ def main(argv: list[str] | None = None) -> int:
     cases = load_cases(args.cases)
     cases = cases[: args.limit] if args.limit else cases
     gateway = Gateway(router=router, tracer=tracer_from_env())
-    report = asyncio.run(run(gateway, cases, baseline=args.baseline))
+    report = asyncio.run(run(gateway, cases, baseline=args.baseline or False))
     args.out.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
     name = f"edit-parse-v{report.version}{'' if report.pointing else '-nopoint'}-{stamp}.json"
@@ -447,7 +475,9 @@ if __name__ == "__main__":
 
 __all__ = [
     "BASELINE",
+    "BASELINES",
     "CASES",
+    "LIBRARY",
     "POSTERS",
     "Answer",
     "Case",

@@ -48,3 +48,7 @@ clients/*/out/
 /design-sheet.png
 /feature-walk.png
 .ipynb_checkpoints/
+
+# The photo model (M17a): downloaded at build time, checked against
+# photo/model/siglip.lock.json, never committed (about 200 MB).
+apps/worker/src/stratum_worker/photo/model/siglip/

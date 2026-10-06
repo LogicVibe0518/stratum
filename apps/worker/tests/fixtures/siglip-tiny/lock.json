@@ -1,0 +1,12 @@
+{
+ "model": "siglip-tiny-test",
+ "revision": "test",
+ "licence": "generated for tests, no rights reserved",
+ "files": {
+  "image.onnx": "8eff17d1143b01fb3973d600790ebf82718fd0c1d05936c67d1e989b524ee842",
+  "text.onnx": "b47ceaed46618dbad149d15f3f2415896f094a93c376abf5ed83239381ff080b",
+  "spiece.model": "ef7013a0dd9ff2900ba3fd3291783934de5662ad5c52dae9ab2dd6def4ee2e01",
+  "settings.json": "f297d01e88d8882b0e4d20295cc34342f4dda57b048303c39de473eda3ef668d",
+  "types.json": "01b265ac9f98e99a682d90f978397c9f42321490cc54c6a47521b69d0768193c"
+ }
+}
