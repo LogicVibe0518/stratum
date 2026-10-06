@@ -46,4 +46,5 @@ clients/*/out/
 # which may be a real person: never commit it.
 /frames.png
 /design-sheet.png
+/feature-walk.png
 .ipynb_checkpoints/

@@ -72,7 +72,7 @@ def test_a_text_layer_says_where_its_colour_and_its_room(kit: BrandKit) -> None:
     line = layer_line(layer, kit, (1080, 1350), fits=40)
     assert line == (
         "text (headline), bottom centre, very dark brown (palette.text), "
-        "fits 40 characters: Summer meditation camp"
+        "fits 40 characters, font display: Summer meditation camp"
     )
 
 
@@ -167,4 +167,4 @@ def test_the_prompt_carries_every_part(kit: BrandKit) -> None:
     ):
         assert part in rendered.user
     assert '"op": "restyle"' in rendered.system and '"op": "ask"' in rendered.system
-    assert "@v6" in rendered.id
+    assert "@v7" in rendered.id

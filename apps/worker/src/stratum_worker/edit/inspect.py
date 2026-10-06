@@ -26,7 +26,7 @@ from typing import Any
 
 from stratum_spec import BrandKit, PosterSpec
 from stratum_spec.colour import blend, contrast_ratio, min_contrast_for
-from stratum_spec.models import ImageLayer, Layer, LogoLayer, ShapeLayer, TextLayer
+from stratum_spec.models import Adjust, ImageLayer, Layer, LogoLayer, ShapeLayer, TextLayer
 
 from stratum_worker.brand.names import colour_name
 from stratum_worker.design import FAMILIES, decode, is_design
@@ -118,6 +118,8 @@ def _layer(
         "where": where(layer.box),
         "box": {key: _r(value, 4) for key, value in layer.box.model_dump().items()},
         "px": {"x": _r(x), "y": _r(y), "w": _r(w), "h": _r(h)},
+        "opacity": layer.opacity,
+        "order": next(i for i, one in enumerate(spec.layers) if one.id == layer.id),
     }
     if isinstance(layer, TextLayer):
         drawn = _ink(layer, spec, kit, root)
@@ -126,11 +128,18 @@ def _layer(
             "fits": fits.get(layer.id),
             "colour": colour(kit, layer.color),
             "align": layer.align,
+            "font": layer.font,
+            "uppercase": layer.uppercase,
+            "effect": layer.effect.model_dump() if layer.effect else None,
             **drawn,
             "contrast": _contrast(spec, layer, kit, drawn["size_px"]),
         }
     elif isinstance(layer, ShapeLayer):
-        out |= {"colour": colour(kit, layer.fill), "opacity": layer.opacity}
+        out |= {
+            "colour": colour(kit, layer.fill),
+            "shape": layer.shape,
+            "fades": [one.model_dump() for one in layer.fades],
+        }
     elif isinstance(layer, ImageLayer):
         crop = layer.crop
         size = photo_sizes.get(layer.asset) if layer.asset else None
@@ -144,6 +153,9 @@ def _layer(
             },
             "dim": layer.dim,
             "can_move": photo_axes(layer, spec.canvas.size, size),
+            "flip": layer.flip,
+            "fades": [one.model_dump() for one in layer.fades],
+            "adjust": (layer.adjust or Adjust()).model_dump(),
         }
     elif isinstance(layer, LogoLayer):
         out |= {"asset": layer.asset}
@@ -281,6 +293,9 @@ def inspect(
         "canvas": {"width": width, "height": height},
         "layers": layers,
         "palette": palette(spec, kit),
+        "fonts": [
+            {"token": f"font.{name}", "family": face.family} for name, face in kit.fonts.items()
+        ],
         "measure": measure(layers, spec),
     }
 

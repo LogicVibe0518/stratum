@@ -4,10 +4,12 @@ from stratum_spec.brand import BrandKit, FontFace, UnknownToken
 from stratum_spec.migrate import UnknownSchemaVersion, load, upgrade
 from stratum_spec.models import (
     SCHEMA_VERSION,
+    Adjust,
     Box,
     Canvas,
     Crop,
     CutoutLayer,
+    Fade,
     ImageLayer,
     Layer,
     LayoutOverride,
@@ -15,6 +17,7 @@ from stratum_spec.models import (
     LogoPlate,
     PosterSpec,
     ShapeLayer,
+    TextEffect,
     TextLayer,
 )
 from stratum_spec.ops import (
@@ -43,6 +46,7 @@ from stratum_spec.templates import (
 
 __all__ = [
     "SCHEMA_VERSION",
+    "Adjust",
     "Box",
     "BrandKit",
     "Canvas",
@@ -50,6 +54,7 @@ __all__ = [
     "CutoutLayer",
     "Dim",
     "EditOp",
+    "Fade",
     "FontFace",
     "ImageLayer",
     "Layer",
@@ -67,6 +72,7 @@ __all__ = [
     "SetVisible",
     "ShapeLayer",
     "SwapAsset",
+    "TextEffect",
     "TextLayer",
     "UnknownSchemaVersion",
     "UnknownToken",

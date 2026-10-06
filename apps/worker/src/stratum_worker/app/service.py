@@ -58,14 +58,17 @@ from stratum_worker.draft.preflight import (
     check_copy,
     check_layout,
 )
+from stratum_worker.edit import badge as badges
 from stratum_worker.edit.actions import (
     Ask,
+    Badge,
     Choice,
     Restyle,
     Undo,
     split,
     undo_asked,
     without_logo_recolours,
+    without_unknown_fonts,
 )
 from stratum_worker.edit.context import (
     edit_request,
@@ -1176,9 +1179,18 @@ async def tweak(
         return _asking(asks[0].question, asks[0].choices)
     restyles = [one for one in service_ops if isinstance(one, Restyle)]
     undos = [one for one in service_ops if isinstance(one, Undo)]
-    if undos and not ops and not restyles:
+    badges = [one for one in service_ops if isinstance(one, Badge)]
+    if undos and not ops and not restyles and not badges:
         return await actions.undo(ctx, post, client, message, everything=undos[0].all)
-    if not ops and not restyles:
+    ops, font_refused = without_unknown_fonts(kit, ops)
+    if font_refused and not ops and not restyles and not badges:
+        await record("needs_human", raw, step.cost_usd)
+        return {"outcome": "needs_human", "why": font_refused}
+    if font_refused:
+        result = result.model_copy(
+            update={"needs_human": " ".join(filter(None, [result.needs_human, font_refused]))}
+        )
+    if not ops and not restyles and not badges:
         await record("needs_human", raw, step.cost_usd)
         return {
             "outcome": "needs_human",
@@ -1189,7 +1201,7 @@ async def tweak(
         await record("needs_human", raw, step.cost_usd)
         return off_brand
     ops, logo_refused = without_logo_recolours(spec, ops)
-    if logo_refused and not ops and not restyles:
+    if logo_refused and not ops and not restyles and not badges:
         await record("needs_human", raw, step.cost_usd)
         return {"outcome": "needs_human", "why": logo_refused}
     if logo_refused:
@@ -1206,6 +1218,7 @@ async def tweak(
         kit=kit,
         ops=ops,
         changes=_merged(restyles),
+        badge=badges[-1] if badges else None,
         photos=photos,
         message=message,
         record=lambda outcome: record(outcome, raw, step.cost_usd),
@@ -1248,6 +1261,7 @@ async def commit_change(
     started: float,
     step: Any = None,
     authorised: str = "",
+    badge: Badge | None = None,
 ) -> dict[str, Any]:
     """Make a change the next version: a typed tweak's ops, or a control panel's.
 
@@ -1278,6 +1292,19 @@ async def commit_change(
             if restyled.added_photo:
                 notes.append(f"Added another of {client['name']}'s photos for the second space.")
 
+    if badge is not None:
+        # The badge first (edit/badge.py), so the ops may move or recolour it.
+        try:
+            base = (
+                badges.remove(base)
+                if badge.remove
+                else badges.place(base, kit, badge.text, badge.corner)
+            )
+        except badges.BadgeError as exc:
+            if not ops and not changes:
+                await record("needs_human")
+                return {"outcome": "needs_human", "why": str(exc)}
+            unable.append(str(exc))
     try:
         changed = apply_ops(base, ops)
     except OpError as exc:
@@ -1376,11 +1403,75 @@ class PosterChanged(Exception):
 
 
 EDITOR_OPS = frozenset(
-    {"set_text", "set_color", "move", "scale", "set_visible", "pan", "zoom", "dim"}
+    {
+        "set_text",
+        "set_color",
+        "move",
+        "scale",
+        "set_visible",
+        "pan",
+        "zoom",
+        "dim",
+        # The first editing set (M10i).
+        "fade",
+        "flip",
+        "adjust",
+        "set_align",
+        "set_font",
+        "set_case",
+        "text_effect",
+        "reorder",
+        "set_opacity",
+        "align",
+    }
 )
 
 
-def editor_note(ops: list[EditOp], changes: dict[str, str] | None, kit: BrandKit) -> str:
+def _new_op_note(op: EditOp, part: str) -> str:
+    """History's words for the first editing set's ops (M10i)."""
+    from stratum_spec.ops import (
+        AdjustPhoto,
+        Align,
+        Flip,
+        Reorder,
+        SetAlign,
+        SetCase,
+        SetEffect,
+        SetFade,
+        SetFont,
+        SetOpacity,
+    )
+
+    if isinstance(op, SetFade):
+        return f"{part} faded at the {op.edge}" if op.length else f"no fade at the {part} {op.edge}"
+    if isinstance(op, Flip):
+        return f"flipped the {part}"
+    if isinstance(op, AdjustPhoto):
+        return f"{part} light and colour"
+    if isinstance(op, SetAlign):
+        return f"{part} {op.align}-aligned"
+    if isinstance(op, SetFont):
+        return f"{part} in {op.font.removeprefix('font.').replace('_', ' ')}"
+    if isinstance(op, SetCase):
+        return f"{part} in {'capitals' if op.upper else 'normal case'}"
+    if isinstance(op, SetEffect):
+        return f"{part} {op.kind}" if op.kind != "none" else f"no effect on the {part}"
+    if isinstance(op, Reorder):
+        return f"{part} to the {op.to}"
+    if isinstance(op, SetOpacity):
+        return f"{part} {round(op.opacity * 100)}% see-through"[:60]
+    if isinstance(op, Align):
+        where = " ".join(one for one in (op.y, op.x) if one)
+        return f"{part} to the {where}"
+    return part
+
+
+def editor_note(
+    ops: list[EditOp],
+    changes: dict[str, str] | None,
+    kit: BrandKit,
+    badge: Badge | None = None,
+) -> str:
     """What a change made in the control panel did, for History: "Headline gold; photo
     darker". Made here from the ops, not taken from the page."""
     from stratum_spec.ops import Dim, Move, Pan, Scale, SetColor, SetText, SetVisible, Zoom
@@ -1405,6 +1496,10 @@ def editor_note(ops: list[EditOp], changes: dict[str, str] | None, kit: BrandKit
             said.append(f"zoomed the {part} {'in' if op.factor > 1 else 'out'}")
         elif isinstance(op, Dim):
             said.append(f"{part} darkness {round(op.amount * 100)}%")
+        else:
+            said.append(_new_op_note(op, part))
+    if badge is not None:
+        said.append("removed the badge" if badge.remove else f"badge {badge.text.upper()}")
     text = "; ".join(dict.fromkeys(said)) or "no change"
     return f"Editor: {text}"[:200]
 
@@ -1417,6 +1512,7 @@ async def edit(
     version: int,
     raw_ops: list[dict[str, Any]],
     restyle: dict[str, str] | None,
+    badge: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """A change made by hand in the control panel: instant, free, no model.
 
@@ -1442,11 +1538,12 @@ async def edit(
     unknown = sorted({str(one.get("op")) for one in raw_ops} - EDITOR_OPS)
     if unknown:
         raise DraftError(f"The editor cannot make that change ({', '.join(unknown)}).")
-    if not raw_ops and not restyle:
+    if not raw_ops and not restyle and not badge:
         raise DraftError("Nothing to change.")
     try:
         ops = OPS.validate_python(raw_ops)
         changes = Restyle(changes=restyle).changes if restyle else None
+        added = Badge.model_validate({**badge, "op": "badge"}) if badge else None
     except ValidationError as exc:
         raise DraftError("That change is outside what the editor allows.") from exc
     spec = load_spec(latest["spec"])
@@ -1454,10 +1551,20 @@ async def edit(
     off_brand = off_brand_colour(ops, kit, client)
     if off_brand is not None:
         raise DraftError(off_brand["question"])
+    _, font_refused = without_unknown_fonts(kit, ops)
+    if font_refused:
+        raise DraftError(font_refused)
     photos = await actions.client_photos(ctx, client) if changes else []
-    message = editor_note(ops, changes, kit)
-    logged = [*raw_ops, *([{"op": "restyle", "changes": changes}] if changes else [])]
-    typed = " ".join(str(one.get("text", "")) for one in raw_ops if one.get("op") == "set_text")
+    message = editor_note(ops, changes, kit, added)
+    logged = [
+        *raw_ops,
+        *([{"op": "restyle", "changes": changes}] if changes else []),
+        *([added.model_dump(mode="json")] if added else []),
+    ]
+    typed = " ".join(
+        [str(one.get("text", "")) for one in raw_ops if one.get("op") == "set_text"]
+        + ([added.text] if added else [])
+    )
 
     async def record(outcome: str) -> None:
         await ctx.supa.insert(
@@ -1491,6 +1598,7 @@ async def edit(
         unable=[],
         started=started,
         authorised=typed,
+        badge=added,
     )
 
 

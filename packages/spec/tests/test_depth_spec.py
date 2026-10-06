@@ -67,7 +67,7 @@ def test_a_version_5_poster_upgrades_with_every_word_in_front() -> None:
         layer.pop("behind", None)
         layer.pop("subject", None)
     upgraded = load(data)
-    assert upgraded.schema_version == 6
+    assert upgraded.schema_version == 7
     assert upgraded == make_spec()
 
 

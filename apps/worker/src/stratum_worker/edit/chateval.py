@@ -1,7 +1,7 @@
 """The chat eval (M10h): typed changes, read by the real model, scored in code.
 
     make chat-eval                      # every case in ml/chat/cases.jsonl, real model
-    make chat-eval ARGS="--baseline"    # the chat before M10h: prompt v5, no pointing
+    make chat-eval ARGS="--baseline"    # the chat before M10i: prompt v6, with pointing
 
 Each case is a message a designer might type about one of a few fixed posters, made
 offline from the design space for a fictional client (the same posters every run),
@@ -45,7 +45,14 @@ from stratum_worker.design.space import lay_out
 from stratum_worker.design.typeset import Copy
 from stratum_worker.draft.capacity import measure
 from stratum_worker.draft.pipeline import CollectingTracer
-from stratum_worker.edit.actions import Ask, Restyle, Undo, split, without_logo_recolours
+from stratum_worker.edit.actions import (
+    Ask,
+    Badge,
+    Restyle,
+    Undo,
+    split,
+    without_logo_recolours,
+)
 from stratum_worker.edit.context import edit_request
 from stratum_worker.edit.pointing import quick_ops
 from stratum_worker.gateway import prompts
@@ -56,7 +63,10 @@ from stratum_worker.gateway.tasks import EditParseResult, TaskName
 REPO = Path(__file__).resolve().parents[5]
 CASES = REPO / "ml" / "chat" / "cases.jsonl"
 REPORTS = REPO / "ml" / "chat" / "reports"
-BASELINE = REPO / "ml" / "chat" / "edit_parse_v5.md"  # the prompt before M10h
+# The chat before M10i (the first editing set): prompt v6, with pointing. M10h's own
+# baseline (v5, no pointing) is kept in ml/chat/edit_parse_v5.md for its report.
+BASELINE = REPO / "ml" / "chat" / "edit_parse_v6.md"
+BASELINE_VERSION = 6
 OPS = TypeAdapter(list[EditOp])
 
 # The fixed posters: a fictional client's words in one design of each family.
@@ -206,9 +216,9 @@ def answer_of(result: EditParseResult, spec: PosterSpec | None = None) -> Answer
         except OpError:
             return Answer("invalid", raw, True)
     kept = [op.model_dump(mode="json") for op in ops] + [
-        dict(one) for one in raw if one.get("op") in ("restyle", "undo")
+        dict(one) for one in raw if one.get("op") in ("restyle", "undo", "badge")
     ]
-    if not ops and not any(isinstance(one, Restyle | Undo) for one in service_ops):
+    if not ops and not any(isinstance(one, Restyle | Undo | Badge) for one in service_ops):
         return Answer("refuse", kept, True, refused or result.needs_human or "")
     return Answer("change", kept, True, result.note or "")
 
@@ -244,7 +254,12 @@ def score(case: Case, answer: Answer) -> dict[str, Any]:
 
 
 async def respond(
-    gateway: Gateway, case: Case, *, pointing: bool = True, root: Path = REPO
+    gateway: Gateway,
+    case: Case,
+    *,
+    pointing: bool = True,
+    root: Path = REPO,
+    newer: bool = True,
 ) -> tuple[Answer, CollectingTracer]:
     """What the product does with this message: a pointed short message is carried
     out without a model; anything else goes to the model."""
@@ -252,7 +267,7 @@ async def respond(
     tracer = CollectingTracer(inner=gateway.tracer)
     pointed = case.pointed if pointing else None
     if pointed is not None:
-        quick = quick_ops(shown.spec, pointed, case.message)
+        quick = quick_ops(shown.spec, pointed, case.message, newer=newer)
         if quick:
             ops = [one.model_dump(mode="json") for one in quick]
             return Answer("change", ops, False), tracer
@@ -319,24 +334,32 @@ class Report:
 async def run(
     gateway: Gateway, cases: list[Case], *, baseline: bool = False, root: Path = REPO
 ) -> Report:
-    """Every case; with `baseline`, as the chat was before M10h: prompt v5, and the
-    part pointed at is not passed on (there was no way to point)."""
+    """Every case; with `baseline`, as the chat was before M10i: prompt v6, and the
+    short pointed instructions it knew then."""
     if baseline:
-        with prompts.overridden(TaskName.EDIT_PARSE, BASELINE.read_text("utf-8"), 5):
-            return await _run(gateway, cases, version=5, pointing=False, root=root)
+        with prompts.overridden(TaskName.EDIT_PARSE, BASELINE.read_text("utf-8"), BASELINE_VERSION):
+            return await _run(
+                gateway, cases, version=BASELINE_VERSION, pointing=True, root=root, newer=False
+            )
     return await _run(
         gateway, cases, version=VERSION[TaskName.EDIT_PARSE], pointing=True, root=root
     )
 
 
 async def _run(
-    gateway: Gateway, cases: list[Case], *, version: int, pointing: bool, root: Path
+    gateway: Gateway,
+    cases: list[Case],
+    *,
+    version: int,
+    pointing: bool,
+    root: Path,
+    newer: bool = True,
 ) -> Report:
     report = Report(version, pointing, datetime.now(UTC).isoformat())
     for case in cases:
         began = time.perf_counter()
         try:
-            answer, tracer = await respond(gateway, case, pointing=pointing, root=root)
+            answer, tracer = await respond(gateway, case, pointing=pointing, root=root, newer=newer)
         except Exception as exc:
             answer, tracer = Answer("failed", [], True, f"{type(exc).__name__}: {exc}"), None
         step = tracer.step("chat", TaskName.EDIT_PARSE) if tracer else None
