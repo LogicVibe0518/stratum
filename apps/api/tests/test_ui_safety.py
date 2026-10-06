@@ -141,3 +141,22 @@ def test_the_brief_box_checks_while_you_type() -> None:
 def test_the_post_shows_questions_for_the_client() -> None:
     assert "words.missing" in PAGE
     assert "Ask the client" in PAGE
+
+
+def test_tweak_body_includes_pointed_only_when_set() -> None:
+    body = _function_body("tweakBody")
+    assert "pointed" in body
+    assert "if (POINTING)" in body
+    assert "message" in body
+
+
+def test_pointing_chip_uses_text_content() -> None:
+    body = _function_body("paintPointing")
+    assert "textContent" in body
+    assert "innerHTML" not in body
+
+
+def test_escape_clears_the_pointing() -> None:
+    keys = PAGE.split('$("tweak").addEventListener("keydown"')[1].split("});")[0]
+    assert "Escape" in keys
+    assert "clearPointing" in keys
