@@ -187,7 +187,26 @@ button.card:hover:not(:disabled) { border-color: var(--line-strong); background:
   border-radius: var(--radius-sm);
 }
 .layer-pick[aria-pressed="true"] { border-left-color: var(--focus); }
-.layer-eye { width: 36px; padding: 0; flex: none; height: auto; }
+.layer-row.pointed { outline: 2px solid var(--focus); outline-offset: -2px; border-radius: var(--radius-sm); }
+.layer-eye, .layer-point { width: 36px; padding: 0; flex: none; height: auto; }
+.layer-point { width: auto; padding: 0 8px; font-size: 12px; font-weight: 400; }
+.point-ring {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+  border: 2px solid var(--focus);
+  border-radius: 50%;
+  pointer-events: none;
+  box-sizing: border-box;
+}
+#pointchip { margin: 0 0 8px; }
+.point-chip-row { display: flex; align-items: center; gap: 8px; }
+#pointlabel { font-size: 13px; }
+#pointclear { width: 28px; height: 28px; padding: 0; flex: none; }
+#pointops { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+#pointops:empty { display: none; }
+#pointops button { height: auto; min-height: 28px; padding: 2px 8px; font-size: 12px; font-weight: 400; }
 .editor-tools { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
 .nudge-row { display: flex; flex-wrap: wrap; gap: 6px; }
 .nudge-row button { min-width: 36px; }
@@ -210,7 +229,7 @@ button.card:hover:not(:disabled) { border-color: var(--line-strong); background:
 .editor-setting { display: flex; flex-direction: column; gap: 4px; }
 .measure-list { display: flex; flex-direction: column; gap: 6px; }
 .measure-list p { margin: 0; font-size: 13px; }
-.hero .render-hit { position: relative; }
+.hero .render-hit { position: relative; cursor: crosshair; }
 .measure-overlay {
   position: absolute;
   left: 12px;
@@ -1173,6 +1192,13 @@ button, input, select, textarea, .card, .badge, .drop, .switch-ui, .toast {
           <div class="quick-grid" id="quick"></div>
           <p class="field-error" id="quickerr" role="alert"></p>
         </section>
+        <div id="pointchip" class="hide">
+          <div class="point-chip-row">
+            <span id="pointlabel"></span>
+            <button type="button" class="ghost" id="pointclear" aria-label="Clear pointing">✕</button>
+          </div>
+          <div id="pointops"></div>
+        </div>
         <section class="card">
           <h2>Change something</h2>
           <p class="muted">Plain English. "Make the logo bigger", "shorter headline", "use the other photo", "darker background".</p>
@@ -1299,6 +1325,8 @@ let inspectGen = 0;
 let selectedLayer = null;
 let editorTab = "layers";
 let showMeasure = false;
+let POINTING = null;
+let pointingName = "";
 let briefTimer = null;
 let briefAbort = null;
 let LABSCREEN = null;
@@ -2851,6 +2879,13 @@ function renderFigure(render, hero, alone) {
   caption.className = "mono";
   caption.textContent = `${render.aspect} · ${render.width}×${render.height}`;
   figure.append(button, caption);
+  if (hero) {
+    img.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      pointAtImage(event, img, render.aspect);
+    });
+  }
   button.addEventListener("click", () => openLightbox(img, button));
   return figure;
 }
@@ -2915,7 +2950,11 @@ function paintStage(renders, fade) {
   const rest = renders.filter((render) => render !== hero);
   stage.append(renderFigure(hero, true, rest.length === 0));
   for (const render of rest) stage.append(renderFigure(render, false, false));
-  loadPreviews(stage, fade, gen);
+  loadPreviews(stage, fade, gen).then(() => {
+    const img = stage.querySelector("figure.hero img");
+    if (img && !img.complete) img.addEventListener("load", drawPointRing, { once: true });
+    else drawPointRing();
+  });
 }
 
 function findRender(renders, aspect) {
@@ -3281,6 +3320,8 @@ function insertAtCursor(input, word) {
 function layerRow(layer) {
   const row = document.createElement("div");
   row.className = "layer-row";
+  row.dataset.layer = layer.id;
+  if (POINTING && POINTING.layer === layer.id) row.classList.add("pointed");
   const pick = document.createElement("button");
   pick.type = "button";
   pick.className = "layer-pick";
@@ -3301,6 +3342,13 @@ function layerRow(layer) {
     selectedLayer = layer.id;
     paintEditor();
   });
+  const point = document.createElement("button");
+  point.type = "button";
+  point.className = "secondary layer-point";
+  point.textContent = "Point";
+  point.addEventListener("click", () => {
+    setPointing({ layer: layer.id }, layer.name || layer.id || "");
+  });
   const eye = document.createElement("button");
   eye.type = "button";
   eye.className = "layer-eye ghost";
@@ -3310,7 +3358,7 @@ function layerRow(layer) {
   eye.addEventListener("click", () => {
     sendEdit({ ops: [{ op: "set_visible", layer: layer.id, visible: !layer.visible }] });
   });
-  row.append(pick, eye);
+  row.append(pick, point, eye);
   return row;
 }
 
@@ -3835,6 +3883,7 @@ async function openPost(id, options) {
   POST = id;
   INSPECT = null;
   selectedLayer = null;
+  clearPointing();
   paintTweakPalette();
   stickScroll = null;
   show("post");
@@ -3970,16 +4019,95 @@ function openBrandFromTweak() {
   });
 }
 
-async function applyTweak() {
+function tweakBody(message) {
+  const body = { message };
+  if (POINTING) body.pointed = POINTING;
+  return body;
+}
+
+function clearPointing() {
+  POINTING = null;
+  pointingName = "";
+  paintPointing();
+}
+
+function setPointing(pointed, name) {
+  POINTING = pointed;
+  pointingName = name || "";
+  paintPointing();
+  $("tweak").focus();
+}
+
+function pointAtImage(event, img, aspect) {
+  const box = img.getBoundingClientRect();
+  if (!box.width || !box.height) return;
+  const x = (event.clientX - box.left) / box.width;
+  const y = (event.clientY - box.top) / box.height;
+  if (x < 0 || x > 1 || y < 0 || y > 1) return;
+  setPointing({ x, y, aspect: aspect || firstAspect() }, "");
+}
+
+function drawPointRing() {
+  for (const node of document.querySelectorAll(".point-ring")) node.remove();
+  if (!POINTING || POINTING.layer || POINTING.x == null || POINTING.y == null) return;
+  const img = document.querySelector("#stage figure.hero .render-hit img");
+  if (!img || !img.clientWidth) return;
+  const ring = document.createElement("span");
+  ring.className = "point-ring";
+  ring.style.left = `${img.offsetLeft + POINTING.x * img.clientWidth}px`;
+  ring.style.top = `${img.offsetTop + POINTING.y * img.clientHeight}px`;
+  img.parentElement.append(ring);
+}
+
+function pointOpWords(kind) {
+  if (kind === "photo") return ["Bigger", "Smaller", "Hide", "Darker"];
+  if (kind === "text" || kind === "logo" || kind === "shape") {
+    return ["Bigger", "Smaller", "Hide", "Up", "Down", "Left", "Right"];
+  }
+  return ["Bigger", "Smaller", "Hide", "Up", "Down", "Left", "Right", "Darker"];
+}
+
+function paintPointing() {
+  const chip = $("pointchip");
+  const label = $("pointlabel");
+  const ops = $("pointops");
+  ops.replaceChildren();
+  for (const row of document.querySelectorAll(".layer-row")) {
+    row.classList.toggle("pointed", Boolean(POINTING && POINTING.layer && row.dataset.layer === POINTING.layer));
+  }
+  if (!POINTING) {
+    chip.classList.add("hide");
+    label.textContent = "";
+    drawPointRing();
+    return;
+  }
+  chip.classList.remove("hide");
+  label.textContent = POINTING.layer
+    ? `Pointing at: ${pointingName || POINTING.layer}`
+    : "Pointing at this spot";
+  const layer = POINTING.layer ? layerById(POINTING.layer) : null;
+  for (const word of pointOpWords(layer && layer.kind)) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "secondary";
+    button.textContent = word;
+    button.addEventListener("click", () => { applyTweak(word); });
+    ops.append(button);
+  }
+  drawPointRing();
+}
+
+async function applyTweak(preset) {
   if (changing || !POST) return;
-  const message = $("tweak").value.trim();
+  const fromInput = preset == null;
+  const message = String(preset ?? $("tweak").value).trim();
   if (!message) return;
   changing = true;
   clearTweakAnswer();
   busy($("dotweak"), true);
   const started = performance.now();
   try {
-    const out = await api(`/posts/${POST}/tweak`, { method: "POST", json: { message } });
+    const out = await api(`/posts/${POST}/tweak`, { method: "POST", json: tweakBody(message) });
     const seconds = (performance.now() - started) / 1000;
     const asking = Array.isArray(out.choices) && out.choices.length;
     const declined = out.outcome && out.outcome !== "applied";
@@ -3993,7 +4121,8 @@ async function applyTweak() {
       $("tweakwhy").className = "why bad";
       await refreshPost({ fade: false, keepScroll: true, lastChange: seconds });
     } else {
-      $("tweak").value = "";
+      if (fromInput) $("tweak").value = "";
+      clearPointing();
       showAppliedTweak(out);
       await refreshPost({ fade: true, keepScroll: true, lastChange: seconds });
       if (POSTDATA && POSTDATA.latest) toast(`v${POSTDATA.latest.version} · ${seconds.toFixed(1)}s`);
@@ -4018,11 +4147,17 @@ $("tweakform").addEventListener("submit", (event) => {
   applyTweak();
 });
 $("tweak").addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    event.preventDefault();
+    clearPointing();
+    return;
+  }
   if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
     event.preventDefault();
     $("tweakform").requestSubmit();
   }
 });
+$("pointclear").addEventListener("click", () => { clearPointing(); });
 
 const ASPECT_LABEL = {
   "4:5": "4:5 feed",
