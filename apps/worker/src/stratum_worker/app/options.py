@@ -21,7 +21,8 @@ from PIL import Image
 from stratum_spec import load as load_spec
 
 from stratum_worker.app import service
-from stratum_worker.design import decode
+from stratum_worker.critic.ranker import model_name
+from stratum_worker.design import decode, repair
 from stratum_worker.design.choose import AUTO, Material, NothingFits, candidates, choose, seed_for
 from stratum_worker.draft.models import Flag
 from stratum_worker.draft.pipeline import DraftError
@@ -126,6 +127,14 @@ async def draft_options(
         ranked = await asyncio.to_thread(candidates, material, post["aspects"], root, seed=seed)
     except NothingFits as exc:
         raise DraftError(str(exc)) from exc
+    # The quality bar (M15c): designs good enough to send go first; if none is, the
+    # repair steps run and, failing those, the post is flagged for a closer look.
+    outcome = await asyncio.to_thread(
+        repair.improve, material, post["aspects"], root, seed=seed, ranked=ranked
+    )
+    ranked = outcome.ranked
+    if outcome.flag is not None:
+        flags.append(outcome.flag)
     options = choose(ranked, seed=seed)
     specs = [await service.with_mattes(ctx, o.candidate.spec, asset_paths) for o in options]
 
@@ -148,6 +157,8 @@ async def draft_options(
                     **option.candidate.parts,
                     "family": option.candidate.family,
                     "candidates": len(ranked),
+                    "critic_model": model_name(),
+                    **({"repairs": [one.step for one in outcome.tried]} if outcome.tried else {}),
                 },
             }
             for option, spec in zip(options, specs, strict=True)
