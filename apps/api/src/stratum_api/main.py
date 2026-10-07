@@ -840,6 +840,8 @@ class LabAnswer(BaseModel):
     reasons: list[str] = Field(default_factory=list, max_length=8)
     ms: int = Field(ge=0)
     repeat: bool = False
+    send: list[int] | None = Field(default=None, max_length=6)  # "would send" ticks
+    role: str | None = Field(default=None, max_length=32)  # designer, design_student, other
 
 
 @app.post("/api/lab/screens")
@@ -874,6 +876,8 @@ async def lab_answer(
         reasons=body.reasons,
         ms=body.ms,
         repeat=body.repeat,
+        send=body.send,
+        role=body.role,
     )
 
 

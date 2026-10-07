@@ -1,4 +1,4 @@
-.PHONY: setup sync check lint fmt type test live api notebook design-sheet frame-sheet copy-eval chat-eval
+.PHONY: setup sync check lint fmt type test live api notebook notebook-v2 design-sheet frame-sheet copy-eval chat-eval
 
 # Git hooks are shared by every worktree of a repo, and pre-commit writes the path of
 # THIS checkout's Python into them. Installing from a worktree would point the main
@@ -42,6 +42,12 @@ api: sync
 # only and are not project dependencies.
 notebook: sync
 	uv run --with jupyterlab --with pandas --with matplotlib jupyter lab ml/critic/walkthrough.ipynb
+
+# Critic v2 and the quality bar (M15c), from Taste Lab answers saved as
+# ml/critic/labels/taste-lab.jsonl (git-ignored: it holds client posts). Without that
+# file the notebook runs on made-up answers and saves nothing.
+notebook-v2: sync
+	uv run --with jupyterlab --with pandas --with matplotlib jupyter lab ml/critic/walkthrough-v2.ipynb
 
 # A contact sheet of design-space candidates for one fictional client.
 design-sheet: sync

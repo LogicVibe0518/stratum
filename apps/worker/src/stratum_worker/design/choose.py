@@ -225,12 +225,23 @@ def _judge(
 
 
 def candidates(
-    material: Material, aspects: Sequence[Aspect], root: Path, *, seed: int
+    material: Material,
+    aspects: Sequence[Aspect],
+    root: Path,
+    *,
+    seed: int,
+    limit: int | None = None,
+    photo_penalty: float | None = None,
 ) -> list[Candidate]:
-    """Every candidate that survived both rounds, best first."""
+    """Every candidate that survived both rounds, best first.
+
+    `limit` (default MAX_CANDIDATES) and `photo_penalty` (default NO_PHOTO_SHOWN) are
+    for the repair steps (design/repair.py): a wider search, and words-only designs
+    on equal terms."""
     rng = random.Random(seed)  # noqa: S311 - reproducible draws, not a secret
     logos = {material.logo: material.ink} if material.ink is not None else {}
-    ids = sample(eligible(material), rng, MAX_CANDIDATES)
+    penalty = NO_PHOTO_SHOWN if photo_penalty is None else photo_penalty
+    ids = sample(eligible(material), rng, MAX_CANDIDATES if limit is None else limit)
     filled: list[tuple[str, PosterSpec]] = []
     for design_id in ids:
         spec = fill(design_id, material, aspects, root)
@@ -245,7 +256,7 @@ def candidates(
     base = filled[0][1].canvas.aspect
     critic, cost, blocked = _judge([spec for _, spec in filled], base, material, root, logos)
     unused = np.array([_hides_photos(design_id, material) for design_id, _ in filled])
-    first = _z(critic) - PHOTO_WEIGHT * cost - NO_PHOTO_SHOWN * unused
+    first = _z(critic) - PHOTO_WEIGHT * cost - penalty * unused
     first[blocked] = -np.inf
     order = [int(i) for i in np.argsort(-first, kind="stable") if np.isfinite(first[i])]
     if not order:
@@ -269,7 +280,7 @@ def candidates(
         cost_mean += cost / len(sizes)
         out_of_play |= blocked
     totals /= len(sizes)
-    totals -= NO_PHOTO_SHOWN * np.array([_hides_photos(filled[i][0], material) for i in keep])
+    totals -= penalty * np.array([_hides_photos(filled[i][0], material) for i in keep])
     ranked = [
         Candidate(
             design_id=filled[i][0],
