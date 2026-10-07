@@ -244,7 +244,11 @@ async def test_a_draft_below_the_bar_is_flagged_and_says_what_was_tried(
     for row in rows:
         assert row["detail"]["critic_model"] == "critic-v1"
         assert row["detail"]["repairs"][0] == "as drafted"
-        assert row["detail"]["p_bad"] > 0.5
+    # Only the top of the ranking is measured against the bar; an explored option (the
+    # seed comes from the post's random id) may come from further down (I-38).
+    [best] = [row for row in rows if row["slot"] == 1]
+    assert best["detail"]["p_bad"] > 0.5
+    assert all(row["detail"]["p_bad"] > 0.5 for row in rows if "p_bad" in row["detail"])
 
 
 async def test_a_draft_with_no_bar_records_the_critic_and_nothing_else(
