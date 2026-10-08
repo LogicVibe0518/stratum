@@ -11,9 +11,16 @@ in the same stacking order and named after the layer:
                 a dim is a separate black rectangle so it can be deleted
     cutout   -> a picture, never cropped, transparency kept
     logo     -> the client's original file, never cropped, never recoloured
-    shape    -> a native rectangle, rounded rectangle or oval in the brand colour
+    shape    -> a native rectangle, rounded rectangle, oval, pill or 16-point star
+                in the brand colour; a faded band is a picture of that colour
+                fading out, since PowerPoint has no fade that Canva imports
     text     -> a text box at the size and line breaks the renderer chose, so the
-                file opens looking like the approved poster and stays editable
+                file opens looking like the approved poster and stays editable,
+                with its outline or shadow as PowerPoint's own
+
+A photo the poster fades, mirrors or changes the light of (M10i) is baked: exactly
+the part shown, at its box, with those changes in the pixels (and its darkening, so
+the fade covers both). The original photo is untouched in Stratum.
 
 Geometry and text fitting come from render/layout.py, the code the renderer uses.
 Pixels map to EMU at 96 dpi and to points at 0.75 pt per pixel, which is how Canva
@@ -27,7 +34,8 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from PIL import Image, ImageFilter
+import numpy as np
+from PIL import Image, ImageFilter, ImageOps
 from pptx import Presentation
 from pptx.dml.color import RGBColor
 from pptx.enum.shapes import MSO_SHAPE
@@ -46,7 +54,13 @@ from stratum_spec import (
 )
 
 from stratum_worker.render.layout import box_px, contained, crop_window, place_text, plated
-from stratum_worker.render.svg import BLUR_SCALE, DIM_FILL, PLACEHOLDER_FILL
+from stratum_worker.render.svg import (
+    BLUR_SCALE,
+    DIM_FILL,
+    PLACEHOLDER_FILL,
+    WARM_SHIFT,
+    effect_colour,
+)
 
 EMU_PER_PX = 9525  # 914400 EMU per inch / 96 px per inch
 PT_PER_PX = 0.75  # 72 pt per inch / 96 px per inch
@@ -59,6 +73,8 @@ SHAPES = {
     "rect": MSO_SHAPE.RECTANGLE,
     "rounded": MSO_SHAPE.ROUNDED_RECTANGLE,
     "ellipse": MSO_SHAPE.OVAL,
+    "pill": MSO_SHAPE.ROUNDED_RECTANGLE,
+    "burst": MSO_SHAPE.STAR_16_POINT,
 }
 AnyImage = ImageLayer | CutoutLayer | LogoLayer
 Geom = tuple[float, float, float, float]
@@ -171,6 +187,96 @@ def _cover(slide: Any, layer: ImageLayer, spec: PosterSpec, image: Image.Image, 
     return picture
 
 
+def _ramp(length: int) -> np.ndarray:
+    """1 to 0 over `length` steps, eased as the renderer eases a fade (smoothstep)."""
+    t = np.linspace(0.0, 1.0, max(length, 1))
+    out: np.ndarray = 1.0 - t * t * (3.0 - 2.0 * t)
+    return out
+
+
+def _fade_alpha(size: tuple[int, int], fades: Any) -> np.ndarray:
+    """The shown share of every pixel of a faded box (1 = all there)."""
+    width, height = size
+    alpha = np.ones((height, width))
+    for fade in fades:
+        span = round(fade.length * (height if fade.edge in ("top", "bottom") else width))
+        ramp = _ramp(span)  # from shown (inside) to gone (at the edge)
+        if fade.edge == "bottom":
+            alpha[height - span :, :] *= ramp[:, None]
+        elif fade.edge == "top":
+            alpha[:span, :] *= ramp[::-1][:, None]
+        elif fade.edge == "right":
+            alpha[:, width - span :] *= ramp[None, :]
+        else:
+            alpha[:, :span] *= ramp[::-1][None, :]
+    return alpha
+
+
+def _baked(layer: ImageLayer, spec: PosterSpec, image: Image.Image, geom: Geom) -> Image.Image:
+    """Exactly what the poster shows in this photo's box, with its fades, mirroring,
+    light and colour, blur and darkening in the pixels."""
+    _, _, w, h = geom
+    shape: Image.Image | None = None  # where a "contain" photo is, in its box
+    if layer.fit == "cover":
+        win_x, win_y, win_w, win_h = crop_window(image.size, (w, h), layer.crop)
+        image = image.crop((round(win_x), round(win_y), round(win_x + win_w), round(win_y + win_h)))
+    else:  # the whole photo, centred in the box, as "contain" draws it
+        ratio = min(w / image.width, h / image.height)
+        size = (max(1, round(image.width * ratio)), max(1, round(image.height * ratio)))
+        canvas = Image.new("RGB", (max(1, round(w)), max(1, round(h))))
+        shape = Image.new("L", canvas.size, 0)
+        at = ((canvas.width - size[0]) // 2, (canvas.height - size[1]) // 2)
+        canvas.paste(image.convert("RGB").resize(size), at)
+        shape.paste(255, (*at, at[0] + size[0], at[1] + size[1]))
+        image = canvas
+    scale = min(MAX_SCALE, max(1.0, image.width / w))
+    out_w, out_h = max(1, round(w * scale)), max(1, round(h * scale))
+    shown = image.convert("RGB").resize((out_w, out_h), Image.Resampling.LANCZOS)
+    if shape is not None:
+        shape = shape.resize((out_w, out_h))
+    if layer.flip:
+        shown = ImageOps.mirror(shown)
+        shape = ImageOps.mirror(shape) if shape is not None else None
+    if layer.blur > 0:
+        sigma = layer.blur * BLUR_SCALE * min(spec.canvas.size) * scale
+        shown = shown.filter(ImageFilter.GaussianBlur(sigma))
+    pixels = np.asarray(shown, dtype=np.float64) / 255.0
+    if layer.adjust is not None:
+        adjust = layer.adjust
+        grey = pixels @ np.array([0.2126, 0.7152, 0.0722])  # the SVG saturate weights
+        pixels = grey[..., None] + (pixels - grey[..., None]) * (1.0 + adjust.saturation)
+        slope = 1.0 + adjust.contrast
+        intercept = 0.5 * (1.0 - slope) + adjust.brightness
+        warm = WARM_SHIFT * adjust.warmth
+        slopes = np.array([slope * (1 + warm), slope, slope * (1 - warm)])
+        pixels = pixels * slopes + intercept
+    if layer.dim > 0:
+        pixels = pixels * (1.0 - layer.dim)
+    rgb = np.clip(pixels * 255.0, 0, 255).astype(np.uint8)
+    baked = Image.fromarray(rgb, "RGB")
+    if layer.fades or shape is not None:
+        alpha = _fade_alpha((out_w, out_h), layer.fades)
+        if shape is not None:
+            alpha = alpha * (np.asarray(shape, dtype=np.float64) / 255.0)
+        baked.putalpha(Image.fromarray(np.clip(alpha * 255.0, 0, 255).astype(np.uint8), "L"))
+    return baked
+
+
+def _faded_band(slide: Any, layer: ShapeLayer, kit: BrandKit, geom: Geom) -> Any:
+    """A band of colour that fades out, as a picture: PowerPoint's gradient fills do
+    not survive Canva's import."""
+    x, y, w, h = geom
+    width, height = max(1, round(w)), max(1, round(h))
+    colour = Image.new("RGB", (width, height), kit.color(layer.fill))
+    alpha = _fade_alpha((width, height), layer.fades) * layer.opacity * 255.0
+    colour.putalpha(Image.fromarray(np.clip(alpha, 0, 255).astype(np.uint8), "L"))
+    picture = slide.shapes.add_picture(
+        io.BytesIO(_encode(colour)), _emu(x), _emu(y), _emu(w), _emu(h)
+    )
+    picture.name = layer.id
+    return picture
+
+
 def _contain(slide: Any, image: Image.Image, geom: Geom) -> Any:
     """The whole image, as large as fits, centred in the box. Logos and cutouts always."""
     x, y, shown_w, shown_h = contained(geom, image.size)
@@ -225,14 +331,21 @@ def _image_layer(
     if isinstance(layer, LogoLayer) and layer.plate is not None:
         geom, panel, radius = plated(geom, image.size, layer.plate)
         made.append(_plate(slide, layer, kit, panel, radius))
-    if isinstance(layer, ImageLayer) and layer.fit == "cover":
+    baked = isinstance(layer, ImageLayer) and (
+        layer.fades or layer.flip or layer.adjust is not None
+    )
+    if isinstance(layer, ImageLayer) and baked:
+        x, y, w, h = geom
+        data = io.BytesIO(_encode(_baked(layer, spec, image, geom)))
+        picture = slide.shapes.add_picture(data, _emu(x), _emu(y), _emu(w), _emu(h))
+    elif isinstance(layer, ImageLayer) and layer.fit == "cover":
         picture = _cover(slide, layer, spec, image, geom)
     else:
         picture = _contain(slide, image, geom)
     picture.name = layer.id
     _picture_alpha(picture, layer.opacity)
     made.append(picture)
-    if isinstance(layer, ImageLayer) and layer.dim > 0:
+    if isinstance(layer, ImageLayer) and layer.dim > 0 and not baked:
         dim = _rectangle(slide, geom, DIM_FILL, layer.dim * layer.opacity)
         dim.name = f"{layer.id} dim"
         made.append(dim)
@@ -240,11 +353,15 @@ def _image_layer(
 
 
 def _shape_layer(slide: Any, layer: ShapeLayer, kit: BrandKit, geom: Geom) -> Any:
+    if layer.fades:
+        return _faded_band(slide, layer, kit, geom)
     x, y, w, h = geom
     shape = slide.shapes.add_shape(SHAPES[layer.shape], _emu(x), _emu(y), _emu(w), _emu(h))
     if layer.shape == "rounded":
         # Both formats measure the corner as a fraction of the shorter side.
         shape.adjustments[0] = min(0.5, layer.radius)
+    elif layer.shape == "pill":
+        shape.adjustments[0] = 0.5
     shape.fill.solid()
     shape.fill.fore_color.rgb = _rgb(kit.color(layer.fill))
     _alpha(shape._element.spPr, layer.opacity)
@@ -317,8 +434,48 @@ def _text_layer(slide: Any, layer: TextLayer, spec: PosterSpec, kit: BrandKit, r
         font.bold = placed.weight >= 600
         font.color.rgb = _rgb(placed.color)
         _alpha(run._r, layer.opacity)
+        _text_effect(run, layer, kit, placed.size_px)
     box.name = layer.id
     return box
+
+
+def _text_effect(run: Any, layer: TextLayer, kit: BrandKit, size_px: float) -> None:
+    """The words' outline or shadow (M10i) as PowerPoint's own, so it stays editable."""
+    effect = layer.effect
+    if effect is None:
+        return
+    colour = effect_colour(layer, kit).lstrip("#").upper()
+    properties = run._r.get_or_add_rPr()
+    if effect.kind == "outline":
+        width = round(size_px * 0.1 * effect.strength * EMU_PER_PX)
+        line = OxmlElement("a:ln")
+        line.set("w", str(width))
+        fill = OxmlElement("a:solidFill")
+        rgb = OxmlElement("a:srgbClr")
+        rgb.set("val", colour)
+        fill.append(rgb)
+        line.append(fill)
+        properties.insert(0, line)  # an outline comes before the fill in a run
+        return
+    shadow_list = OxmlElement("a:effectLst")
+    shadow = OxmlElement("a:outerShdw")
+    shadow.set("blurRad", str(round(size_px * 0.16 * effect.strength * EMU_PER_PX)))
+    shadow.set("dist", str(round(size_px * 0.04 * EMU_PER_PX)))
+    shadow.set("dir", "5400000")  # straight down
+    shadow.set("algn", "t")
+    shadow.set("rotWithShape", "0")
+    rgb = OxmlElement("a:srgbClr")
+    rgb.set("val", colour)
+    alpha = OxmlElement("a:alpha")
+    alpha.set("val", str(round((0.35 + 0.5 * effect.strength) * 100000)))
+    rgb.append(alpha)
+    shadow.append(rgb)
+    shadow_list.append(shadow)
+    fill = properties.find(qn("a:solidFill"))
+    if fill is not None:
+        fill.addnext(shadow_list)
+    else:
+        properties.append(shadow_list)
 
 
 def export_pptx(

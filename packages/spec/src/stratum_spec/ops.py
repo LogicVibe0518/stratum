@@ -13,17 +13,23 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from stratum_spec.models import (
+    Adjust,
     AssetRef,
     Box,
+    Canvas,
     ColorToken,
     Crop,
     CutoutLayer,
+    Edge,
+    Fade,
+    FontToken,
     ImageLayer,
     LayerId,
     LayoutOverride,
     LogoLayer,
     PosterSpec,
     ShapeLayer,
+    TextEffect,
     TextLayer,
 )
 
@@ -31,6 +37,13 @@ MIN_SCALE = 0.2
 MAX_SCALE = 5.0
 MAX_ZOOM = 3.0  # the same limit as Crop.zoom
 MAX_DIM = 0.8  # darker than this and the photo is no longer a photo
+MIN_OPACITY = 0.1  # fainter than this is hidden: use set_visible
+# Where "align left" puts a part: the margin every design keeps, as a share of the
+# shorter side (design/frame.MARGIN), and in a story, inside the band Instagram
+# leaves clear (draft/preflight.STORY_SAFE_*). A test keeps these equal to those.
+ALIGN_MARGIN = 0.074
+STORY_SAFE_TOP = 0.14
+STORY_SAFE_BOTTOM = 0.80
 
 
 class OpError(ValueError):
@@ -107,6 +120,90 @@ class Dim(BaseOp):
     amount: float = Field(ge=0.0, le=MAX_DIM)
 
 
+class SetFade(BaseOp):
+    """Fade a photo, or a band of colour, into what is behind it at one edge; length 0
+    takes the fade away."""
+
+    op: Literal["fade"] = "fade"
+    layer: LayerId
+    edge: Edge
+    length: float = Field(ge=0.0, le=1.0)
+
+
+class Flip(BaseOp):
+    """Mirror a photo left to right (again to undo): a person then faces the words."""
+
+    op: Literal["flip"] = "flip"
+    layer: LayerId
+
+
+class AdjustPhoto(BaseOp):
+    """Set a photo's light and colour; a field left out keeps its value. 0 is as taken."""
+
+    op: Literal["adjust"] = "adjust"
+    layer: LayerId
+    brightness: float | None = Field(default=None, ge=-0.4, le=0.4)
+    contrast: float | None = Field(default=None, ge=-0.4, le=0.4)
+    saturation: float | None = Field(default=None, ge=-1.0, le=0.5)
+    warmth: float | None = Field(default=None, ge=-0.4, le=0.4)
+
+
+class SetAlign(BaseOp):
+    """Line the words up left, centred or right, inside their own box."""
+
+    op: Literal["set_align"] = "set_align"
+    layer: LayerId
+    align: Literal["left", "center", "right"]
+
+
+class SetFont(BaseOp):
+    """Another of the brand's own fonts (the service checks the brand has it)."""
+
+    op: Literal["set_font"] = "set_font"
+    layer: LayerId
+    font: FontToken
+
+
+class SetCase(BaseOp):
+    op: Literal["set_case"] = "set_case"
+    layer: LayerId
+    upper: bool
+
+
+class SetEffect(BaseOp):
+    """A shadow or an outline behind the words, or none."""
+
+    op: Literal["text_effect"] = "text_effect"
+    layer: LayerId
+    kind: Literal["shadow", "outline", "none"]
+    color: ColorToken | None = None
+    strength: float = Field(default=0.5, gt=0.0, le=1.0)
+
+
+class Reorder(BaseOp):
+    """In front of or behind the other parts."""
+
+    op: Literal["reorder"] = "reorder"
+    layer: LayerId
+    to: Literal["front", "back", "forward", "backward"]
+
+
+class SetOpacity(BaseOp):
+    op: Literal["set_opacity"] = "set_opacity"
+    layer: LayerId
+    opacity: float = Field(ge=MIN_OPACITY, le=1.0)
+
+
+class Align(BaseOp):
+    """Put a part against the margin (left, right, top, bottom) or in the middle, in
+    every size: each size works out its own position."""
+
+    op: Literal["align"] = "align"
+    layer: LayerId
+    x: Literal["left", "center", "right"] | None = None
+    y: Literal["top", "middle", "bottom"] | None = None
+
+
 class NeedsHuman(BaseOp):
     """The request was understood but is not mechanical ("make it pop")."""
 
@@ -115,7 +212,26 @@ class NeedsHuman(BaseOp):
 
 
 EditOp = Annotated[
-    SetText | SetColor | Move | Scale | SwapAsset | SetVisible | Pan | Zoom | Dim | NeedsHuman,
+    SetText
+    | SetColor
+    | Move
+    | Scale
+    | SwapAsset
+    | SetVisible
+    | Pan
+    | Zoom
+    | Dim
+    | SetFade
+    | Flip
+    | AdjustPhoto
+    | SetAlign
+    | SetFont
+    | SetCase
+    | SetEffect
+    | Reorder
+    | SetOpacity
+    | Align
+    | NeedsHuman,
     Field(discriminator="op"),
 ]
 
@@ -228,6 +344,90 @@ def _photo(target: object, layer_id: str) -> ImageLayer:
     return target
 
 
+def _text(target: object, layer_id: str) -> TextLayer:
+    if not isinstance(target, TextLayer):
+        raise OpError(f"layer {layer_id!r} is not a text layer")
+    return target
+
+
+def _faded(fades: list[Fade], edge: str, length: float) -> list[Fade]:
+    kept = [one for one in fades if one.edge != edge]
+    return [*kept, Fade(edge=edge, length=length)] if length > 0 else kept  # type: ignore[arg-type]
+
+
+def _following(field: str, value: object) -> Callable[[LayoutOverride], LayoutOverride]:
+    """A size that set this field its own way follows the person's explicit ask."""
+
+    def apply(override: LayoutOverride) -> LayoutOverride:
+        if getattr(override, field) is None:
+            return override
+        return override.model_copy(update={field: value})
+
+    return apply
+
+
+def _band(aspect: str, base_width: int) -> tuple[float, float, float, float]:
+    """(left, top, right, bottom) a part may be aligned to, as fractions of a size."""
+    from stratum_spec.templates import base_width_for  # no cycle: templates does not import ops
+
+    width, height = Canvas(aspect=aspect, base_width=base_width_for(base_width, aspect)).size  # type: ignore[arg-type]
+    short = min(width, height)
+    mx, my = ALIGN_MARGIN * short / width, ALIGN_MARGIN * short / height
+    top, bottom = my, 1.0 - my
+    if aspect == "9:16":
+        top, bottom = max(top, STORY_SAFE_TOP), min(bottom, STORY_SAFE_BOTTOM)
+    return mx, top, 1.0 - mx, bottom
+
+
+def _aligned(box: Box, band: tuple[float, float, float, float], op: Align) -> Box:
+    left, top, right, bottom = band
+    x, y = box.x, box.y
+    if op.x == "left":
+        x = left
+    elif op.x == "right":
+        x = right - box.w
+    elif op.x == "center":
+        x = 0.5 - box.w / 2
+    if op.y == "top":
+        y = top
+    elif op.y == "bottom":
+        y = bottom - box.h
+    elif op.y == "middle":
+        y = (top + bottom) / 2 - box.h / 2
+    return box.model_copy(update={"x": _clamp(x, -1.0, 2.0), "y": _clamp(y, -1.0, 2.0)})
+
+
+def _reordered(spec: PosterSpec, layer_id: str, to: str) -> PosterSpec:
+    layers = list(spec.layers)
+    index = next(i for i, one in enumerate(layers) if one.id == layer_id)
+    moving = layers.pop(index)
+    # Nothing goes behind a backdrop that covers the whole poster: it would vanish.
+    first = layers[0] if layers else None
+    floor = int(
+        first is not None
+        and first.box.x <= 0.0
+        and first.box.y <= 0.0
+        and first.box.x + first.box.w >= 1.0
+        and first.box.y + first.box.h >= 1.0
+    )
+    where = {
+        "front": len(layers),
+        "back": floor,
+        "forward": min(index + 1, len(layers)),
+        "backward": max(index - 1, floor),
+    }[to]
+    layers.insert(where, moving)
+    try:
+        return PosterSpec.model_validate(
+            {**spec.model_dump(), "layers": [one.model_dump() for one in layers]}
+        )
+    except ValueError as exc:
+        raise OpError(
+            f"layer {layer_id!r} cannot go there: words that sit behind a photo's "
+            f"subject must stay above that photo"
+        ) from exc
+
+
 def apply_op(spec: PosterSpec, op: EditOp) -> PosterSpec:
     """Apply one op, returning a new spec. Never mutates the input."""
     if isinstance(op, NeedsHuman):
@@ -236,6 +436,10 @@ def apply_op(spec: PosterSpec, op: EditOp) -> PosterSpec:
         target = spec.layer(op.layer)
     except KeyError as exc:
         raise OpError(f"unknown layer {op.layer!r}") from exc
+    if isinstance(op, SetFade | Flip | AdjustPhoto | SetAlign | SetFont | SetCase | SetEffect):
+        return _apply_new(spec, op, target)
+    if isinstance(op, Reorder | SetOpacity | Align):
+        return _apply_place(spec, op, target)
 
     if isinstance(op, SetText):
         if not isinstance(target, TextLayer):
@@ -321,6 +525,87 @@ def apply_op(spec: PosterSpec, op: EditOp) -> PosterSpec:
         return override.model_copy(update={"visible": visible})
 
     return _replace(spec, op.layer, sized=shown, visible=visible)
+
+
+def _apply_new(
+    spec: PosterSpec,
+    op: SetFade | Flip | AdjustPhoto | SetAlign | SetFont | SetCase | SetEffect,
+    target: object,
+) -> PosterSpec:
+    """The photo and text ops of the first editing set (M10i, schema 7)."""
+    if isinstance(op, SetFade):
+        if not isinstance(target, ImageLayer | ShapeLayer):
+            raise OpError(f"layer {op.layer!r} is not a photo or a shape, so it cannot fade")
+        edge, length = op.edge, op.length
+
+        def sized(override: LayoutOverride) -> LayoutOverride:
+            if override.fades is None:
+                return override
+            return override.model_copy(update={"fades": _faded(override.fades, edge, length)})
+
+        return _replace(spec, op.layer, sized=sized, fades=_faded(target.fades, edge, length))
+    if isinstance(op, Flip):
+        photo = _photo(target, op.layer)
+        return _replace(spec, op.layer, flip=not photo.flip)
+    if isinstance(op, AdjustPhoto):
+        photo = _photo(target, op.layer)
+        given = {
+            name: value
+            for name in ("brightness", "contrast", "saturation", "warmth")
+            if (value := getattr(op, name)) is not None
+        }
+        if not given:
+            raise OpError("adjust names no setting to change")
+        adjusted = (photo.adjust or Adjust()).model_copy(update=given)
+        return _replace(spec, op.layer, adjust=None if adjusted.neutral else adjusted)
+    text = _text(target, op.layer)
+    if isinstance(op, SetAlign):
+        return _replace(spec, op.layer, sized=_following("align", op.align), align=op.align)
+    if isinstance(op, SetFont):
+        return _replace(spec, op.layer, font=op.font)
+    if isinstance(op, SetCase):
+        upper = op.upper
+        return _replace(spec, op.layer, sized=_following("uppercase", upper), uppercase=upper)
+    if op.kind == "none":
+        return _replace(spec, op.layer, effect=None) if text.effect is not None else spec
+    effect = TextEffect(kind=op.kind, color=op.color, strength=op.strength)
+    return _replace(spec, op.layer, effect=effect)
+
+
+def _apply_place(spec: PosterSpec, op: Reorder | SetOpacity | Align, target: object) -> PosterSpec:
+    """Order, see-through and alignment (M10i)."""
+    if getattr(target, "locked", False):
+        raise OpError(f"layer {op.layer!r} is locked")
+    if isinstance(op, Reorder):
+        return _reordered(spec, op.layer, op.to)
+    if isinstance(op, SetOpacity):
+        opacity = round(op.opacity, 4)
+        return _replace(spec, op.layer, sized=_following("opacity", opacity), opacity=opacity)
+    if op.x is None and op.y is None:
+        raise OpError("align names no direction")
+    canvas = spec.canvas
+    layers = [
+        one.model_copy(
+            update={"box": _aligned(one.box, _band(canvas.aspect, canvas.base_width), op)}
+        )
+        if one.id == op.layer
+        else one
+        for one in spec.layers
+    ]
+    variants = {
+        aspect: {
+            one: (
+                override.model_copy(
+                    update={"box": _aligned(override.box, _band(aspect, canvas.base_width), op)}
+                )
+                if one == op.layer and override.box is not None
+                else override
+            )
+            for one, override in overrides.items()
+        }
+        for aspect, overrides in spec.variants.items()
+    }
+    return spec.model_copy(update={"layers": layers, "variants": variants})
 
 
 def apply_ops(spec: PosterSpec, ops: list[EditOp]) -> PosterSpec:

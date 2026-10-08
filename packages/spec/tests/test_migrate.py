@@ -49,7 +49,7 @@ def test_a_version_1_poster_upgrades_to_the_current_schema_unchanged(spec: Poste
         layer.pop("crop", None)
         layer.pop("wrap", None)
     upgraded = load(data)
-    assert upgraded.schema_version == SCHEMA_VERSION == 6
+    assert upgraded.schema_version == SCHEMA_VERSION == 7
     assert upgraded.model_dump(exclude={"schema_version"}) == as_approved(spec).model_dump(
         exclude={"schema_version"}
     )

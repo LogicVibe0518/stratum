@@ -21,7 +21,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from stratum_spec import (
     BrandKit,
@@ -33,7 +33,21 @@ from stratum_spec import (
     retarget,
 )
 from stratum_spec.models import Aspect
-from stratum_spec.ops import MAX_DIM, Dim, EditOp, Move, Scale, SetVisible, Zoom
+from stratum_spec.ops import (
+    MAX_DIM,
+    Align,
+    Dim,
+    EditOp,
+    Flip,
+    Move,
+    Reorder,
+    Scale,
+    SetAlign,
+    SetCase,
+    SetEffect,
+    SetVisible,
+    Zoom,
+)
 
 from stratum_worker.photo.depth import letters
 from stratum_worker.render.layout import box_px
@@ -117,6 +131,7 @@ _FILLER = {
     "make", "can", "you", "could", "just", "bit", "little", "tiny", "slightly", "lil",
     "move", "go", "put", "be", "is", "should", "more", "much", "somewhat", "abit",
     "thanks", "thank", "ty", "one", "part", "thing", "get", "of", "to", "too",
+    "bring", "send", "all", "way", "at",
 }  # fmt: skip
 _SAY = {
     "bigger": "bigger", "larger": "bigger", "enlarge": "bigger", "grow": "bigger",
@@ -128,25 +143,63 @@ _SAY = {
     "lighter": "lighter", "brighter": "lighter", "lighten": "lighter",
     "closer": "closer", "zoom": "closer", "in": "",
 }  # fmt: skip
+# The first editing set (M10i): one word each, also done without a model.
+_SAY_NEWER = {
+    "flip": "flip", "mirror": "flip",
+    "centre": "centre", "center": "centre", "centred": "centre", "centered": "centre",
+    "caps": "caps", "capitals": "caps", "uppercase": "caps",
+    "lowercase": "nocaps",
+    "front": "front", "forward": "front",
+    "back": "back", "behind": "back", "backward": "back",
+    "shadow": "shadow", "outline": "outline",
+}  # fmt: skip
 
 
-def said(message: str) -> str | None:
+def said(message: str, *, newer: bool = True) -> str | None:
     """The one instruction a short message gives, or None when it says more than one
-    thing (or anything this does not know): "make this a bit bigger" -> "bigger"."""
+    thing (or anything this does not know): "make this a bit bigger" -> "bigger".
+    `newer` False knows only the words from before M10i (the chat eval's baseline)."""
+    known = {**_SAY, **_SAY_NEWER} if newer else _SAY
     words = re.findall(r"[a-z]+", message.lower())
     if not words or len(words) > 7:
         return None
-    meant = {_SAY[word] for word in words if word in _SAY} - {""}
-    rest = [word for word in words if word not in _SAY and word not in _FILLER]
+    meant = {known[word] for word in words if word in known} - {""}
+    rest = [word for word in words if word not in known and word not in _FILLER]
     if rest or len(meant) != 1:
         return None
     return meant.pop()
 
 
-def quick_ops(spec: PosterSpec, layer_id: str, message: str) -> list[EditOp] | None:
+def _newer_ops(target: object, layer_id: str, instruction: str) -> list[EditOp] | None:
+    """The M10i one-word instructions, for the part pointed at."""
+    if instruction == "front":
+        return [Reorder(layer=layer_id, to="front")]
+    if instruction == "back":
+        return [Reorder(layer=layer_id, to="back")]
+    if instruction == "flip" and isinstance(target, ImageLayer):
+        return [Flip(layer=layer_id)]
+    if instruction == "centre":
+        if isinstance(target, TextLayer):
+            return [SetAlign(layer=layer_id, align="center")]
+        if isinstance(target, LogoLayer | ShapeLayer):
+            return [Align(layer=layer_id, x="center")]
+    if isinstance(target, TextLayer):
+        if instruction == "caps" and not target.uppercase:
+            return [SetCase(layer=layer_id, upper=True)]
+        if instruction == "nocaps" and target.uppercase:
+            return [SetCase(layer=layer_id, upper=False)]
+        if instruction in ("shadow", "outline"):
+            kind: Literal["shadow", "outline"] = "shadow" if instruction == "shadow" else "outline"
+            return [SetEffect(layer=layer_id, kind=kind)]
+    return None
+
+
+def quick_ops(
+    spec: PosterSpec, layer_id: str, message: str, *, newer: bool = True
+) -> list[EditOp] | None:
     """The change a short message asks of the part pointed at, made without a model.
     None when the message is not one of these, or does not suit that part."""
-    instruction = said(message)
+    instruction = said(message, newer=newer)
     if instruction is None:
         return None
     target = next((one for one in spec.layers if one.id == layer_id), None)
@@ -170,7 +223,10 @@ def quick_ops(spec: PosterSpec, layer_id: str, message: str) -> list[EditOp] | N
             return [Dim(layer=layer_id, amount=round(max(0.0, target.dim - DARKER), 3))]
         if instruction in ("closer", "bigger") and target.fit == "cover":
             return [Zoom(layer=layer_id, factor=BIGGER)]
-    return None
+    return _newer_ops(target, layer_id, instruction) if instruction in _NEWER else None
+
+
+_NEWER = frozenset(_SAY_NEWER.values())
 
 
 __all__ = ["Pointing", "layer_at", "pointed_layer", "quick_ops", "said"]

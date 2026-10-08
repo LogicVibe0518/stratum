@@ -16,8 +16,8 @@ from __future__ import annotations
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, TypeAdapter
-from stratum_spec import LogoLayer, PosterSpec
-from stratum_spec.ops import EditOp, SetColor
+from stratum_spec import BrandKit, LogoLayer, PosterSpec
+from stratum_spec.ops import EditOp, SetColor, SetFont
 
 
 class _Action(BaseModel):
@@ -62,6 +62,20 @@ def without_logo_recolours(spec: PosterSpec, ops: list[EditOp]) -> tuple[list[Ed
     return kept, LOGO_NEVER_RECOLOURED if len(kept) < len(ops) else ""
 
 
+def without_unknown_fonts(kit: BrandKit, ops: list[EditOp]) -> tuple[list[EditOp], str]:
+    """The ops, minus any font the brand does not have, and the sentence saying why.
+    A font is part of the brand like a colour: new ones are added to the brand kit."""
+
+    def unknown(op: EditOp) -> bool:
+        return isinstance(op, SetFont) and op.font.removeprefix("font.") not in kit.fonts
+
+    kept = [op for op in ops if not unknown(op)]
+    if len(kept) == len(ops):
+        return kept, ""
+    names = ", ".join(sorted(kit.fonts))
+    return kept, f"That font is not one of the brand's. Its fonts are: {names}."
+
+
 Setting = Annotated[
     str, BeforeValidator(_plain), Field(min_length=1, max_length=24, pattern=r"^[a-z_]+$")
 ]
@@ -97,9 +111,19 @@ class Undo(_Action):
     all: bool = False  # back to the first draft, not one step
 
 
-Action = Annotated[Restyle | Ask | Undo, Field(discriminator="op")]
+class Badge(_Action):
+    """An offer badge in a corner (edit/badge.py), or `remove` it. Its words come from
+    the designer or the poster's own offer, never invented."""
+
+    op: Literal["badge"] = "badge"
+    text: Annotated[str, _shortened(40), Field(default="", max_length=40)]
+    corner: Literal["auto", "top_left", "top_right", "bottom_left", "bottom_right"] = "auto"
+    remove: bool = False
+
+
+Action = Annotated[Restyle | Ask | Undo | Badge, Field(discriminator="op")]
 ACTIONS: TypeAdapter[list[Action]] = TypeAdapter(list[Action])
-NAMES = frozenset({"restyle", "ask", "undo"})
+NAMES = frozenset({"restyle", "ask", "undo", "badge"})
 
 
 def split(raw: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[Action]]:
@@ -153,6 +177,7 @@ __all__ = [
     "NAMES",
     "Action",
     "Ask",
+    "Badge",
     "Choice",
     "Restyle",
     "Undo",
@@ -160,4 +185,5 @@ __all__ = [
     "split",
     "undo_asked",
     "without_logo_recolours",
+    "without_unknown_fonts",
 ]

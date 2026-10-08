@@ -104,16 +104,27 @@ def test_a_pointed_short_message_is_answered_without_the_model() -> None:
     json.dumps(report.as_dict())
 
 
-def test_the_baseline_runs_prompt_v5_with_no_pointing_then_restores_v6() -> None:
-    cases = [one for one in chateval.load_cases() if one.id == "pt-bigger"]
+def test_the_baseline_runs_prompt_v6_without_the_newer_words_then_restores_v7() -> None:
+    # The chat before M10i: prompt v6, pointing on, and "flip" was not a word the
+    # quick path knew, so the model is asked.
+    cases = [one for one in chateval.load_cases() if one.id == "pointed-flip"]
     gate, provider = gateway([{"ops": [], "needs_human": "Which part?"}])
     report = asyncio.run(chateval.run(gate, cases, baseline=True))
-    assert report.version == 5 and not report.pointing
+    assert report.version == 6 and report.pointing
     [(_, request)] = provider.calls
-    assert isinstance(request, EditParseRequest) and request.pointed == ""
+    assert isinstance(request, EditParseRequest) and request.pointed.startswith("bg: ")
     assert report.rows[0]["score"]["outcome"] == "refuse" and not report.rows[0]["score"]["passed"]
-    assert load(TaskName.EDIT_PARSE).version == 6
-    assert "edit.parse v5 (pointing off)" in chateval.table(report)
+    assert load(TaskName.EDIT_PARSE).version == 7
+    assert "edit.parse v6" in chateval.table(report)
+
+
+def test_the_newer_words_are_answered_without_a_model() -> None:
+    cases = [one for one in chateval.load_cases() if one.id.startswith("pointed-")]
+    gate, provider = gateway([{"ops": [], "needs_human": "The logo is never mirrored."}])
+    report = asyncio.run(chateval.run(gate, cases))
+    assert report.summary()["without_a_model"] == len(cases) - 1  # all but the logo
+    assert all(row["score"]["passed"] for row in report.rows), report.rows
+    assert len(provider.calls) == 1
 
 
 def test_a_case_that_fails_is_scored_and_the_run_goes_on() -> None:

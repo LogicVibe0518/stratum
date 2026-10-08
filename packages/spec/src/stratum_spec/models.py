@@ -23,7 +23,10 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 #    the greedy wrap they were approved with.
 # 6: ImageLayer.subject and TextLayer.behind (M10g). Words can go behind the photo's
 #    subject. Older posters have neither and upgrade unchanged.
-SCHEMA_VERSION = 6
+# 7: the first editing set (M10i): ImageLayer.fades, .flip and .adjust;
+#    TextLayer.effect; ShapeLayer.fades, "pill" and "burst"; LayoutOverride.fades. Older
+#    posters have none of them and upgrade unchanged.
+SCHEMA_VERSION = 7
 
 # A coordinate may sit slightly outside the canvas (full-bleed art, deliberate crops).
 Coord = Annotated[float, Field(ge=-1.0, le=2.0)]
@@ -80,6 +83,60 @@ class Crop(Frozen):
     zoom: float = Field(default=1.0, ge=1.0, le=3.0)
 
 
+Edge = Literal["top", "bottom", "left", "right"]
+
+
+class Fade(Frozen):
+    """A photo melting into whatever is behind it, at one edge (schema 7).
+
+    `length` is the share of the photo's box the fade crosses: 0.3 on the bottom
+    edge means the bottom 30% goes from the photo to nothing. Two photos laid over
+    each other with a fade between them blend with no hard seam (the collage
+    family); a photo fading at its foot melts into the panel below it.
+    """
+
+    edge: Edge
+    length: float = Field(gt=0.0, le=1.0)
+
+
+# A list, like layers, so a spec read back from JSON compares equal to the one written.
+Fades = Annotated[list[Fade], Field(max_length=4)]
+
+
+def _one_per_edge(fades: list[Fade]) -> None:
+    edges = [one.edge for one in fades]
+    if len(edges) != len(set(edges)):
+        raise ValueError("a photo fades at most once at each edge")
+
+
+class Adjust(Frozen):
+    """Light and colour, changed when drawn, never in the photo itself (schema 7).
+
+    0 is the photo as taken. The ranges stop well short of what turns a real photo
+    into something the client did not take.
+    """
+
+    brightness: float = Field(default=0.0, ge=-0.4, le=0.4)
+    contrast: float = Field(default=0.0, ge=-0.4, le=0.4)
+    saturation: float = Field(default=0.0, ge=-1.0, le=0.5)  # -1: black and white
+    warmth: float = Field(default=0.0, ge=-0.4, le=0.4)
+
+    @property
+    def neutral(self) -> bool:
+        return not any((self.brightness, self.contrast, self.saturation, self.warmth))
+
+
+class TextEffect(Frozen):
+    """A shadow or an outline that keeps words readable on a photo (schema 7).
+
+    `color` None means the renderer picks black or white, whichever stands out more
+    from the text's own colour."""
+
+    kind: Literal["shadow", "outline"]
+    color: ColorToken | None = None
+    strength: float = Field(default=0.5, gt=0.0, le=1.0)
+
+
 class ImageLayer(BaseLayer):
     """A photo: the client's own, licensed stock, or a generated background."""
 
@@ -95,6 +152,15 @@ class ImageLayer(BaseLayer):
     # white where the subject is. Made from this photo only; swapping the photo drops
     # it. Used by text layers drawn `behind` this photo's subject.
     subject: AssetRef | None = None
+    # Schema 7 (M10i): fades at its edges, mirrored left to right, light and colour.
+    fades: Fades = Field(default_factory=list)
+    flip: bool = False
+    adjust: Adjust | None = None
+
+    @model_validator(mode="after")
+    def _fades_distinct(self) -> Self:
+        _one_per_edge(self.fades)
+        return self
 
 
 class CutoutLayer(BaseLayer):
@@ -134,9 +200,18 @@ class LogoLayer(BaseLayer):
 
 class ShapeLayer(BaseLayer):
     type: Literal["shape"] = "shape"
-    shape: Literal["rect", "rounded", "ellipse"] = "rect"
+    # "pill" and "burst" (schema 7) are for offer badges: "20% OFF" in a starburst.
+    shape: Literal["rect", "rounded", "ellipse", "pill", "burst"] = "rect"
     fill: ColorToken = "palette.primary"
     radius: Unit = 0.0
+    # Schema 7: a band of colour can fade too, over photos (a gradient overlay): the
+    # collage melts both photos into the words' colour with one faded band.
+    fades: Fades = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _fades_distinct(self) -> Self:
+        _one_per_edge(self.fades)
+        return self
 
 
 class TextLayer(BaseLayer):
@@ -160,6 +235,8 @@ class TextLayer(BaseLayer):
     # front of the letters, as on a magazine cover. Where the photo has no subject
     # mask, or is hidden, the text is drawn in front as usual.
     behind: LayerId | None = None
+    # Schema 7 (M10i): a shadow or outline, for words on a photo.
+    effect: TextEffect | None = None
 
     @model_validator(mode="after")
     def _size_range_ordered(self) -> Self:
@@ -196,6 +273,15 @@ class LayoutOverride(Frozen):
     safe_area: Unit | None = None
     uppercase: bool | None = None
     crop: Crop | None = None
+    # Schema 7: a size can fade a photo at other edges (a collage fades toward the
+    # words, which sit below the photos in a post and beside them in a banner).
+    fades: Fades | None = None
+
+    @model_validator(mode="after")
+    def _fades_distinct(self) -> Self:
+        if self.fades is not None:
+            _one_per_edge(self.fades)
+        return self
 
     def changes(self) -> dict[str, object]:
         """The fields this override sets, ready to lay over a layer's own."""

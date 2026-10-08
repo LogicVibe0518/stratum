@@ -396,6 +396,84 @@ def _pair(
     ]
 
 
+# --- 3b. collage: two photos blended, melting into the words' colour (M10i) ------------
+
+# The band where the photos melt into the colour under the words, as a share of the
+# shorter side: a band of that colour, fading in from nothing, laid over both photos
+# at once (fading each photo on its own leaves a step where they overlap).
+MELT = 0.16
+# The band runs this far past the photos' end (shorter side), so no sliver of photo
+# edge shows through where the two would otherwise meet on one pixel.
+MELT_OVER = 0.01
+
+
+def _fade(edge: str, length: float) -> dict[str, Any]:
+    return {"edge": edge, "length": round(min(1.0, max(0.01, length)), 4)}
+
+
+def _collage(
+    frame: Frame, choice: Choice, copy: Copy, kit: BrandKit, root: Path, logo_aspect: float
+) -> Layers | None:
+    """Two photos with no hard seam: the second fades into the first across `seam` of
+    the width (of the height, in a banner), and a band of the words' colour melts
+    them both into the area under the words. A feed post has the photos above the
+    words; a banner has them on the left, so each size fades its own way."""
+    share = float(choice["share"]) + PAIR_SHIFT[frame.aspect]
+    seam = float(choice["seam"])
+    page, m, short = frame.page, frame.margin, frame.short
+    melt = MELT * short
+    fill, ink = FILL[choice["fill"]]
+    if frame.landscape:
+        cut = page.w * share
+        half = page.h * (1 + seam) / 2
+        photo_a = Rect(0, 0, cut, half)
+        photo_b = Rect(0, page.h - half, cut, half)
+        b_fade = _fade("top", seam * page.h / half)
+        over = MELT_OVER * short
+        band = Rect(cut - melt, 0, melt + over, page.h)
+        band_fade = _fade("left", melt / (melt + over))
+        text_area = Rect(cut + over, 0, page.w - cut - over, page.h)
+        logo_room = Rect(0, 0, cut - melt, half)
+    else:
+        cut = page.h * share
+        half = page.w * (1 + seam) / 2
+        photo_a = Rect(0, 0, half, cut)
+        photo_b = Rect(page.w - half, 0, half, cut)
+        b_fade = _fade("left", seam * page.w / half)
+        over = MELT_OVER * short
+        band = Rect(0, cut - melt, page.w, melt + over)
+        band_fade = _fade("top", melt / (melt + over))
+        text_area = Rect(0, cut + over, page.w, page.h - cut - over)
+        logo_room = Rect(0, 0, half, cut - melt)
+    zone = _clip_to_safe(frame, text_area.inset(m, 0, m, m))
+    if zone is None:
+        return None
+    laid = _logo_then_words(
+        frame,
+        copy,
+        kit,
+        root,
+        zone,
+        logo_room,
+        choice,
+        logo_aspect,
+        logo_with_words=choice["logo"] == "text",
+        photo_align="left",
+    )
+    if laid is None:
+        return None
+    placed, logo_x, logo_y = laid
+    return [
+        _shape("base", frame, page, fill),
+        _image("photo_a", frame, photo_a, source="client", fit="cover"),
+        _image("photo_b", frame, photo_b, source="client", fit="cover", fades=[b_fade]),
+        _shape("melt", frame, band, fill, fades=[band_fade]),
+        _rule(frame, placed),
+        *_texts(frame, placed, ink, choice["align"]),
+        _logo(frame, logo_x, logo_y, logo_aspect),
+    ]
+
+
 # --- 4. type: no photo, the words are the design --------------------------------------
 
 
@@ -557,6 +635,22 @@ FAMILIES: dict[str, Family] = {
             ),
             photos={"photo_a": "photo", "photo_b": "photo"},
             build=_pair,
+        ),
+        Family(
+            name="collage",
+            title="Two photos, blended",
+            params=(
+                ("share", ("0.5", "0.58")),
+                ("seam", ("0.24", "0.4")),
+                ("fill", ("surface", "primary", "dark")),
+                ("align", ("left", "center")),
+                ("accent", ("rule", "none")),
+                ("logo", ("text", "photo")),
+                ("scale", ("bold", "calm")),
+            ),
+            photos={"photo_a": "photo", "photo_b": "photo"},
+            build=_collage,
+            notes="The second photo fades into the first; both melt into the words' colour.",
         ),
         Family(
             name="type",

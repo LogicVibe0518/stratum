@@ -1,4 +1,4 @@
-.PHONY: setup sync check lint fmt type test live api notebook notebook-v2 design-sheet frame-sheet copy-eval chat-eval
+.PHONY: setup sync check lint fmt type test live api notebook notebook-v2 design-sheet frame-sheet copy-eval chat-eval feature-walk
 
 # Git hooks are shared by every worktree of a repo, and pre-commit writes the path of
 # THIS checkout's Python into them. Installing from a worktree would point the main
@@ -48,6 +48,11 @@ notebook: sync
 # file the notebook runs on made-up answers and saves nothing.
 notebook-v2: sync
 	uv run --with jupyterlab --with pandas --with matplotlib jupyter lab ml/critic/walkthrough-v2.ipynb
+
+# Every editing feature once, on fixed posters, in every size, on one sheet (M10i).
+# Prints any feature that failed or changed nothing. No keys, no network.
+feature-walk: sync
+	uv run python -m stratum_worker.edit.walk --out feature-walk.png
 
 # A contact sheet of design-space candidates for one fictional client.
 design-sheet: sync
