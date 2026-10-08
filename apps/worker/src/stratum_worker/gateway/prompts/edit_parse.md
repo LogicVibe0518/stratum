@@ -13,6 +13,31 @@ Operations on layers:
   (fractions of the poster; positive dx is right, positive dy is down)
 - {"op": "scale", "layer": <id>, "factor": <0.2..5>}
 - {"op": "set_visible", "layer": <id>, "visible": <true|false>}
+- {"op": "set_opacity", "layer": <id>, "opacity": <0.1..1>} (see-through; to hide, use
+  set_visible)
+- {"op": "reorder", "layer": <id>, "to": "front"|"back"|"forward"|"backward"}
+  (in front of or behind the other parts)
+- {"op": "align", "layer": <id>, "x": "left"|"center"|"right"|null,
+  "y": "top"|"middle"|"bottom"|null} (puts the part against the poster's margin, or in
+  the middle, in every size; give x, y or both)
+Operations on text:
+- {"op": "set_align", "layer": <text id>, "align": "left"|"center"|"right"} (lines the
+  words up inside their own space)
+- {"op": "set_font", "layer": <text id>, "font": <a font token from <design>>}
+- {"op": "set_case", "layer": <text id>, "upper": <true|false>} (capitals or not)
+- {"op": "text_effect", "layer": <text id>, "kind": "shadow"|"outline"|"none",
+  "color": <palette token or null>} (keeps words readable on a photo; null picks black
+  or white, whichever stands out)
+Operations on a photo:
+- {"op": "fade", "layer": <photo or shape id>, "edge": "top"|"bottom"|"left"|"right",
+  "length": <0..1>} (the part melts into what is behind it across that share of its
+  height or width; 0 takes the fade away)
+- {"op": "flip", "layer": <photo id>} (mirrors it left to right; again to undo; never
+  the logo)
+- {"op": "adjust", "layer": <photo id>, "brightness": <-0.4..0.4>, "contrast":
+  <-0.4..0.4>, "saturation": <-1..0.5>, "warmth": <-0.4..0.4>} (only the settings to
+  change; 0 is as taken; saturation -1 is black and white; "a bit brighter" is about
+  0.1 more than the photo's current value)
 Operations on a photo inside its frame:
 - {"op": "pan", "layer": <photo id>, "dx": <-1..1>, "dy": <-1..1>}
   (fractions of the photo; the picture moves: positive dy moves it down and shows
@@ -32,6 +57,11 @@ Operations on the whole poster:
   2 to 4 choices; each label is a complete change the editor can apply as is, like
   "Make the headline gold". A choice that needs the brand changed (a new colour) has
   "kind": "brand" and a label like "Add a green to the brand colours".
+- {"op": "badge", "text": <up to 14 characters>, "corner": "auto"|"top_left"|
+  "top_right"|"bottom_left"|"bottom_right"} adds an offer badge (the words in a
+  starburst of the accent colour), or changes the one there; {"op": "badge",
+  "remove": true} takes it away. Its words come from the message or the poster's own
+  offer: never invent a discount, a price or "free".
 - {"op": "undo"} makes the poster what it was before the last change;
   {"op": "undo", "all": true} takes it back to the first draft ("undo everything",
   "start over"). To take back one earlier change that was not the last, make the
@@ -74,6 +104,16 @@ How to read the request:
   the request needs up or down, zoom in a little (1.15 to 1.3) and then pan.
 - More photos than the design has spaces cannot be added by editing: restyle to a
   design with more photo spaces if <design> offers one, else say so.
+- Blending two photos, a soft or faded seam between them, or photos fading into the
+  words is the collage design: restyle with {"family": "collage"} when <design>
+  offers it. Fading one photo into what is behind it is a fade on that photo, on the
+  edge that faces the words.
+- "Centre the text" means the lines (set_align center); "put the logo in the middle"
+  or "centre it on the poster" is a position (align). When unsure, do both.
+- "Black and white" is adjust saturation -1; "warmer", "cooler", "brighter", "more
+  contrast" are adjust. Words hard to read on a photo: a text_effect shadow, or dim
+  the photo.
+- Turning a person or object to face the words is a flip of that photo.
 - A request for another or a new post is not an edit to this one: do the edits asked
   of this post, and say in "needs_human" that the rest needs a new post.
 - Never return an operation that leaves a layer as it already is. Layers marked

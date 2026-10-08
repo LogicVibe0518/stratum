@@ -25,6 +25,7 @@ PINNED: dict[tuple[TaskName, int], str] = {
     ): "9d7292ec7d2c51bde6d9cb19c422c180f91dfd7b90c4e9bfc002db90b33fe1ec",
     (TaskName.EDIT_PARSE, 5): "f572f3fd6c5d5bc8d02dbfd7157f728f44b1c37e856dbceece18a858555d8c6f",
     (TaskName.EDIT_PARSE, 6): "6cf371f5a92f6d8de51b3e9a06ab4e6e92a04cfad8efe869ddd7e5c2b89f49e9",
+    (TaskName.EDIT_PARSE, 7): "cc5fb22fd474d847832809f4fa24259a2d5d0d29bbdc9f8a431028b677120401",
     (
         TaskName.BACKGROUND_CREATE,
         1,

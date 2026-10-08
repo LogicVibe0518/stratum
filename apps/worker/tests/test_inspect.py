@@ -162,3 +162,25 @@ def test_style_options_are_dropdowns_with_brand_names() -> None:
 
 def test_a_fixed_template_has_no_style_options() -> None:
     assert style_options("full_bleed", KIT, photos=3) is None
+
+
+def test_the_panel_sees_the_first_editing_sets_settings_and_the_brands_fonts() -> None:
+    from stratum_spec import Fade, apply_ops
+    from stratum_spec.ops import AdjustPhoto, Flip, SetEffect, SetFade
+
+    spec = apply_ops(
+        poster(),
+        [
+            SetFade(layer="bg", edge="bottom", length=0.3),
+            Flip(layer="bg"),
+            AdjustPhoto(layer="bg", warmth=0.2),
+            SetEffect(layer="headline", kind="shadow"),
+        ],
+    )
+    out = panel(spec)
+    photo, headline = by_id(out, "bg"), by_id(out, "headline")
+    assert photo["flip"] and photo["fades"] == [Fade(edge="bottom", length=0.3).model_dump()]
+    assert photo["adjust"]["warmth"] == 0.2 and photo["adjust"]["brightness"] == 0.0
+    assert headline["effect"]["kind"] == "shadow" and headline["font"].startswith("font.")
+    assert [one["order"] for one in out["layers"]] == list(range(len(out["layers"])))
+    assert {one["token"] for one in out["fonts"]} >= {"font.display", "font.body"}

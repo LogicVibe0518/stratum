@@ -7,6 +7,7 @@ this markup; every value comes from the spec or the brand kit.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from pathlib import Path
 from xml.sax.saxutils import escape
@@ -22,6 +23,8 @@ from stratum_spec import (
     ShapeLayer,
     TextLayer,
 )
+from stratum_spec.colour import contrast_ratio
+from stratum_spec.models import Adjust, Fade
 
 from stratum_worker.render.layout import box_px, crop_window, place_text, plated
 
@@ -30,6 +33,14 @@ PLACEHOLDER_STROKE = "#b4b4b4"
 DIM_FILL = "#000000"
 # blur=1.0 means a standard deviation of 4% of the canvas's shorter side.
 BLUR_SCALE = 0.04
+# A fade eases in and out (smoothstep) rather than ramping straight: a straight ramp
+# shows a visible band where it starts.
+FADE_STOPS = 9
+# Warmth moves red up and blue down by this much at warmth 1.
+WARM_SHIFT = 0.15
+# A burst (offer badge) has this many points, the inner ones this far in.
+BURST_POINTS = 16
+BURST_INNER = 0.84
 
 
 def _open_group(layer: Layer, x: float, y: float, w: float, h: float) -> str:
@@ -131,12 +142,77 @@ def _in_front(text: TextLayer, spec: PosterSpec, assets: Mapping[str, str], kit:
         attrs.append(
             f'transform="rotate({photo.box.rotation:.3f} {x + w / 2:.2f} {y + h / 2:.2f})"'
         )
+    matte_image = (
+        f'<image x="{ix:.2f}" y="{iy:.2f}" width="{iw:.2f}" height="{ih:.2f}" '
+        f'href="{_href(matte)}" preserveAspectRatio="none"/>'
+    )
+    if photo.flip:
+        matte_image = _mirrored(geom, matte_image)
     return (
         f'<defs><mask id="{mask_id}" maskUnits="userSpaceOnUse" x="{x:.2f}" y="{y:.2f}" '
-        f'width="{w:.2f}" height="{h:.2f}"><image x="{ix:.2f}" y="{iy:.2f}" '
-        f'width="{iw:.2f}" height="{ih:.2f}" href="{_href(matte)}" '
-        f'preserveAspectRatio="none"/></mask></defs>'
+        f'width="{w:.2f}" height="{h:.2f}">{matte_image}</mask></defs>'
         f"<g {' '.join(attrs)}>{_image_svg(again, spec, geom, picture, kit)}</g>"
+    )
+
+
+def _faded(layer: ImageLayer | ShapeLayer, geom: tuple[float, ...], body: str) -> str:
+    """The photo going to nothing at each faded edge: one luminance mask per edge,
+    a gradient from white (shown) to black (gone), eased."""
+    x, y, w, h = geom
+    for fade in layer.fades:
+        body = _fade_mask(f"fade-{layer.id}-{fade.edge}", fade, x, y, w, h, body)
+    return body
+
+
+def _fade_mask(mask_id: str, fade: Fade, x: float, y: float, w: float, h: float, body: str) -> str:
+    span_w, span_h = fade.length * w, fade.length * h
+    # From where the fade starts (fully shown) to the edge (gone).
+    x1, y1, x2, y2 = {
+        "bottom": (x, y + h - span_h, x, y + h),
+        "top": (x, y + span_h, x, y),
+        "left": (x + span_w, y, x, y),
+        "right": (x + w - span_w, y, x + w, y),
+    }[fade.edge]
+    stops = []
+    for i in range(FADE_STOPS):
+        t = i / (FADE_STOPS - 1)
+        shown = 1.0 - t * t * (3.0 - 2.0 * t)  # smoothstep from 1 to 0
+        stops.append(f'<stop offset="{t:.3f}" stop-color="#ffffff" stop-opacity="{shown:.4f}"/>')
+    grad = f"{mask_id}-g"
+    return (
+        f'<defs><linearGradient id="{grad}" gradientUnits="userSpaceOnUse" x1="{x1:.2f}" '
+        f'y1="{y1:.2f}" x2="{x2:.2f}" y2="{y2:.2f}">{"".join(stops)}</linearGradient>'
+        f'<mask id="{mask_id}" maskUnits="userSpaceOnUse" x="{x:.2f}" y="{y:.2f}" '
+        f'width="{w:.2f}" height="{h:.2f}"><rect x="{x:.2f}" y="{y:.2f}" width="{w:.2f}" '
+        f'height="{h:.2f}" fill="url(#{grad})"/></mask></defs>'
+        f'<g mask="url(#{mask_id})">{body}</g>'
+    )
+
+
+def _mirrored(geom: tuple[float, ...], body: str) -> str:
+    """Mirrored left to right about the middle of its box."""
+    x, _, w, _ = geom
+    return f'<g transform="matrix(-1 0 0 1 {2 * x + w:.2f} 0)">{body}</g>'
+
+
+def _adjusted(layer: ImageLayer, adjust: Adjust, geom: tuple[float, ...], body: str) -> str:
+    """Light and colour as an SVG filter: the photo file itself never changes."""
+    x, y, w, h = geom
+    slope = 1.0 + adjust.contrast
+    intercept = 0.5 * (1.0 - slope) + adjust.brightness
+    warm = WARM_SHIFT * adjust.warmth
+    filter_id = f"adjust-{layer.id}"
+    channel = '<feFunc{c} type="linear" slope="{s:.4f}" intercept="{i:.4f}"/>'
+    funcs = "".join(
+        channel.format(c=c, s=slope * (1.0 + shift), i=intercept)
+        for c, shift in (("R", warm), ("G", 0.0), ("B", -warm))
+    )
+    return (
+        f'<defs><filter id="{filter_id}" filterUnits="userSpaceOnUse" x="{x:.2f}" '
+        f'y="{y:.2f}" width="{w:.2f}" height="{h:.2f}" color-interpolation-filters="sRGB">'
+        f'<feColorMatrix type="saturate" values="{1.0 + adjust.saturation:.4f}"/>'
+        f"<feComponentTransfer>{funcs}</feComponentTransfer></filter></defs>"
+        f'<g filter="url(#{filter_id})">{body}</g>'
     )
 
 
@@ -184,6 +260,10 @@ def _image_svg(
                 f'<image x="{x:.2f}" y="{y:.2f}" width="{w:.2f}" height="{h:.2f}" '
                 f'href="{_href(href)}" preserveAspectRatio="{preserve}"/>'
             )
+        if isinstance(layer, ImageLayer) and layer.flip:
+            body = _mirrored(geom, body)
+        if isinstance(layer, ImageLayer) and layer.adjust is not None:
+            body = _adjusted(layer, layer.adjust, geom, body)
         if isinstance(layer, ImageLayer) and layer.blur > 0:
             body = _blurred(layer, spec, geom, body)
         elif framed is not None:
@@ -199,12 +279,34 @@ def _image_svg(
             f'<rect x="{x:.2f}" y="{y:.2f}" width="{w:.2f}" height="{h:.2f}" '
             f'fill="{DIM_FILL}" opacity="{layer.dim:.4f}"/>'
         )
+    if isinstance(layer, ImageLayer) and layer.fades:
+        # The darkening fades with the photo, or a grey edge would show where it went.
+        body = _faded(layer, geom, body)
     return body
+
+
+def _burst(x: float, y: float, w: float, h: float) -> str:
+    """A starburst inside the box: points alternate between the edge and BURST_INNER."""
+    cx, cy, rx, ry = x + w / 2, y + h / 2, w / 2, h / 2
+    points = []
+    for i in range(2 * BURST_POINTS):
+        reach = 1.0 if i % 2 == 0 else BURST_INNER
+        angle = math.pi * i / BURST_POINTS - math.pi / 2
+        px, py = cx + rx * reach * math.cos(angle), cy + ry * reach * math.sin(angle)
+        points.append(f"{px:.2f},{py:.2f}")
+    return " ".join(points)
 
 
 def _shape_svg(layer: ShapeLayer, kit: BrandKit, geom: tuple[float, ...]) -> str:
     x, y, w, h = geom
     fill = kit.color(layer.fill)
+    if layer.shape == "burst":
+        return f'<polygon points="{_burst(x, y, w, h)}" fill="{fill}"/>'
+    if layer.shape == "pill":
+        return (
+            f'<rect x="{x:.2f}" y="{y:.2f}" width="{w:.2f}" height="{h:.2f}" '
+            f'rx="{min(w, h) / 2:.2f}" fill="{fill}"/>'
+        )
     if layer.shape == "ellipse":
         return (
             f'<ellipse cx="{x + w / 2:.2f}" cy="{y + h / 2:.2f}" rx="{w / 2:.2f}" '
@@ -217,12 +319,48 @@ def _shape_svg(layer: ShapeLayer, kit: BrandKit, geom: tuple[float, ...]) -> str
     )
 
 
+def effect_colour(layer: TextLayer, kit: BrandKit) -> str:
+    """The shadow or outline colour: the one asked for, else black or white, whichever
+    stands out more from the words themselves."""
+    effect = layer.effect
+    if effect is not None and effect.color is not None:
+        return kit.color(effect.color)
+    ink = kit.color(layer.color)
+    darker = contrast_ratio(ink, "#000000") >= contrast_ratio(ink, "#ffffff")
+    return "#000000" if darker else "#ffffff"
+
+
+def _effect(layer: TextLayer, kit: BrandKit, size_px: float) -> tuple[str, str]:
+    """(defs, attributes) for the text's shadow or outline; empty for none."""
+    effect = layer.effect
+    if effect is None:
+        return "", ""
+    colour = effect_colour(layer, kit)
+    if effect.kind == "outline":
+        width = size_px * 0.1 * effect.strength
+        return "", (
+            f' stroke="{colour}" stroke-width="{width:.2f}" stroke-linejoin="round" '
+            f'paint-order="stroke"'
+        )
+    filter_id = f"shadow-{layer.id}"
+    offset, spread = size_px * 0.04, size_px * 0.08 * effect.strength
+    opacity = 0.35 + 0.5 * effect.strength
+    return (
+        f'<defs><filter id="{filter_id}" x="-20%" y="-20%" width="140%" height="160%">'
+        f'<feDropShadow dx="0" dy="{offset:.2f}" stdDeviation="{spread:.2f}" '
+        f'flood-color="{colour}" flood-opacity="{opacity:.3f}"/></filter></defs>',
+        f' filter="url(#{filter_id})"',
+    )
+
+
 def _text_svg(layer: TextLayer, spec: PosterSpec, kit: BrandKit, root: Path) -> str:
     placed = place_text(layer, spec, kit, root)
     anchor = {"left": "start", "center": "middle", "right": "end"}[placed.align]
+    defs, extra = _effect(layer, kit, placed.size_px)
     parts = [
+        defs,
         f'<text font-family="{escape(placed.family)}" font-size="{placed.size_px:.2f}" '
-        f'font-weight="{placed.weight}" fill="{placed.color}" text-anchor="{anchor}">'
+        f'font-weight="{placed.weight}" fill="{placed.color}" text-anchor="{anchor}"{extra}>',
     ]
     for index, line in enumerate(placed.lines):
         x, y = placed.anchor_x, placed.baseline(index)
@@ -261,7 +399,8 @@ def build_svg(
         if isinstance(layer, TextLayer):
             body.append(_text_svg(layer, spec, kit, root))
         elif isinstance(layer, ShapeLayer):
-            body.append(_shape_svg(layer, kit, geom))
+            shape = _shape_svg(layer, kit, geom)
+            body.append(_faded(layer, geom, shape) if layer.fades else shape)
         else:
             href = assets.get(layer.asset) if layer.asset else None
             body.append(_image_svg(layer, spec, geom, href, kit))

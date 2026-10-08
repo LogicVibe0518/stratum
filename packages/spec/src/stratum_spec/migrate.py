@@ -48,6 +48,12 @@ def _v5_to_v6(data: dict[str, Any]) -> dict[str, Any]:
     return {**data, "schema_version": 6}
 
 
+def _v6_to_v7(data: dict[str, Any]) -> dict[str, Any]:
+    """Schema 7 added fades, flip and light/colour to photos, an effect to text, and
+    badge shapes. A version-6 poster has none of them: unchanged."""
+    return {**data, "schema_version": 7}
+
+
 # version N -> function producing version N+1.
 UPGRADERS: dict[int, Upgrader] = {
     1: _v1_to_v2,
@@ -55,6 +61,7 @@ UPGRADERS: dict[int, Upgrader] = {
     3: _v3_to_v4,
     4: _v4_to_v5,
     5: _v5_to_v6,
+    6: _v6_to_v7,
 }
 
 

@@ -661,6 +661,9 @@ class PanelEdit(BaseModel):
     version: int = Field(ge=1)  # the version the person was looking at
     ops: list[dict[str, Any]] = Field(default_factory=list, max_length=12)
     restyle: dict[str, str] | None = None
+    # M10i: {"text": "20% OFF", "corner": "auto"} adds or changes the offer badge;
+    # {"remove": true} takes it away.
+    badge: dict[str, Any] | None = None
 
 
 @app.get("/api/posts/{post_id}/inspect")
@@ -681,7 +684,13 @@ async def edit_post(
     has a newer version than `version`."""
     post, client = await _post_and_client(ctx, post_id)
     return await service.edit(
-        ctx, post, client, version=body.version, raw_ops=body.ops, restyle=body.restyle
+        ctx,
+        post,
+        client,
+        version=body.version,
+        raw_ops=body.ops,
+        restyle=body.restyle,
+        badge=body.badge,
     )
 
 

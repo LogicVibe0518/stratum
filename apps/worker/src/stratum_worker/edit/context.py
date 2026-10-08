@@ -43,6 +43,9 @@ FRIENDLY: dict[str, str] = {
     "bg": "photo",
     "photo_a": "first photo",
     "photo_b": "second photo",
+    "melt": "fade from the photos into the words' colour",
+    "badge": "offer badge",
+    "badge_text": "offer badge words",
 }
 
 
@@ -106,6 +109,38 @@ def _photo_room(layer: ImageLayer, canvas: tuple[int, int], size: tuple[int, int
     return f", {room}"
 
 
+def _faded_words(layer: ImageLayer | ShapeLayer) -> list[str]:
+    return [f"fades out at the {one.edge} ({round(one.length * 100)}%)" for one in layer.fades]
+
+
+def _look(layer: Layer) -> list[str]:
+    """The first editing set's settings (M10i), in words, where they differ from plain."""
+    out: list[str] = []
+    if isinstance(layer, ImageLayer):
+        out += _faded_words(layer)
+        if layer.flip:
+            out.append("mirrored")
+        if layer.adjust is not None:
+            out += [
+                f"{name} {getattr(layer.adjust, name):+.2f}"
+                for name in ("brightness", "contrast", "saturation", "warmth")
+                if getattr(layer.adjust, name)
+            ]
+    elif isinstance(layer, ShapeLayer):
+        out += _faded_words(layer)
+    elif isinstance(layer, TextLayer):
+        if layer.align != "left":
+            out.append("centred" if layer.align == "center" else "right-aligned")
+        out.append(f"font {layer.font.removeprefix('font.')}")
+        if layer.uppercase:
+            out.append("in capitals")
+        if layer.effect is not None:
+            out.append(f"with a {layer.effect.kind}")
+    if layer.opacity < 1.0:
+        out.append(f"{round(layer.opacity * 100)}% opaque")
+    return out
+
+
 def layer_line(
     layer: Layer,
     kit: BrandKit,
@@ -130,6 +165,7 @@ def layer_line(
             parts.append(f"darkened {layer.dim:.2f}")
     elif isinstance(layer, LogoLayer):
         parts[0] = "the client's logo"
+    parts += _look(layer)
     if not layer.visible:
         parts.append("hidden")
     line = ", ".join(parts)
@@ -213,6 +249,7 @@ SETTING_HELP: dict[str, str] = {
     "treatment": "what the words sit on over the photo: scrim = a dark fade "
     "({dark_name}), band = a solid {primary} band, card = a {surface} card",
     "gutter": "a thin line between the two photos, or none",
+    "seam": "how wide the blend between the two photos is (a larger number is softer)",
 }
 
 
@@ -233,10 +270,13 @@ def style_menu(template_id: str, kit: BrandKit, photos: int) -> str:
     `photos` is how many of the client's own photos could be used: a design with two
     photo spaces is only offered when there are two.
     """
+    fonts = "The brand's fonts (for set_font): " + ", ".join(
+        f"font.{name} ({face.family})" for name, face in kit.fonts.items()
+    )
     if not is_design(template_id):
         return (
             "This poster was made from a fixed template, so it has no style settings "
-            "and restyle is not available."
+            "and restyle is not available.\n" + fonts
         )
     design = decode(template_id)
     lines = [f'This poster is the "{design.title}" design. Its style settings:']
@@ -257,6 +297,7 @@ def style_menu(template_id: str, kit: BrandKit, photos: int) -> str:
             )
         else:
             lines.append(f"- {family.name}: {family.title}")
+    lines.append(fonts)
     return "\n".join(lines)
 
 

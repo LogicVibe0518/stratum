@@ -1,14 +1,15 @@
 # The chat eval
 
-79 changes a designer might type, about five fixed posters (one of each design family,
+118 changes a designer might type (79 from M10h, 39 for the first editing set, M10i), about five fixed posters (one of each design family,
 made offline for the fictional Kowalski Plumbing), read by the real model through the
 same code tweaks use (`edit_request`, the op schema, and `quick_ops` for a short
 message about a pointed part), then scored in code (`stratum_worker/edit/chateval.py`).
-Built for M10h (`docs/modules/M10h-smarter-chat.md`).
+Built for M10h (`docs/modules/M10h-smarter-chat.md`); extended in M10i
+(`docs/modules/M10i-editing-set.md`).
 
 ```bash
-make chat-eval ARGS="--baseline"  # the chat before M10h: prompt v5, no pointing
-make chat-eval                    # now: prompt v6, pointing
+make chat-eval ARGS="--baseline"  # the chat before M10i: prompt v6, pointing, older short words
+make chat-eval                    # now: prompt v7 (the first editing set)
 ```
 
 About a cent or two per run.

@@ -59,7 +59,7 @@ def test_switching_family_with_a_setting_of_that_family() -> None:
     [
         ({"colour": "gold"}, "has no colour setting"),
         ({"fill": "gold"}, "fill can be primary, surface, dark; not gold"),
-        ({"family": "collage"}, "There is no collage design"),
+        ({"family": "mosaic"}, "There is no mosaic design"),
         ({"fill": "surface"}, "already has that style"),
         ({}, "Say which style setting"),
     ],
