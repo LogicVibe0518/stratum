@@ -141,7 +141,8 @@ def test_a_change_made_on_an_old_version_is_refused(desk: Desk) -> None:
 @pytest.mark.parametrize(
     ("ops", "said"),
     [
-        ([{"op": "swap_asset", "layer": "bg", "asset": "a" * 64}], "cannot make that change"),
+        # A photo the client does not have (M17a: the panel may swap in the client's own).
+        ([{"op": "swap_asset", "layer": "bg", "asset": "a" * 64}], "is not one of"),
         ([{"op": "needs_human", "reason": "x"}], "cannot make that change"),
         ([{"op": "scale", "layer": "logo", "factor": 9}], "outside what the editor allows"),
         ([], "Nothing to change."),

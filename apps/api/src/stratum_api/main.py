@@ -267,10 +267,14 @@ async def list_assets(
     rows = await ctx.supa.select(
         "assets",
         client_id=f"eq.{client_id}",
-        select="id,sha256,kind,width,height,flags,storage_path",
+        select="id,sha256,kind,width,height,flags,storage_path,quality",
     )
     for row in rows:
         row["url"] = await ctx.supa.signed_url(row["storage_path"], 3600)
+        # What the photo model saw (M17a), once a draft or tweak has read the photo:
+        # its kind, or null. The vector itself stays on the server.
+        quality = row.pop("quality", None) or {}
+        row["photo_type"] = quality.get("photo_type")
     return rows
 
 

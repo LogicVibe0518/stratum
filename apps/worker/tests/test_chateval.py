@@ -104,18 +104,27 @@ def test_a_pointed_short_message_is_answered_without_the_model() -> None:
     json.dumps(report.as_dict())
 
 
-def test_the_baseline_runs_prompt_v6_without_the_newer_words_then_restores_v7() -> None:
+def test_baseline_6_runs_prompt_v6_without_the_newer_words_then_restores_v8() -> None:
     # The chat before M10i: prompt v6, pointing on, and "flip" was not a word the
     # quick path knew, so the model is asked.
     cases = [one for one in chateval.load_cases() if one.id == "pointed-flip"]
     gate, provider = gateway([{"ops": [], "needs_human": "Which part?"}])
-    report = asyncio.run(chateval.run(gate, cases, baseline=True))
+    report = asyncio.run(chateval.run(gate, cases, baseline=6))
     assert report.version == 6 and report.pointing
     [(_, request)] = provider.calls
     assert isinstance(request, EditParseRequest) and request.pointed.startswith("bg: ")
     assert report.rows[0]["score"]["outcome"] == "refuse" and not report.rows[0]["score"]["passed"]
-    assert load(TaskName.EDIT_PARSE).version == 7
+    assert load(TaskName.EDIT_PARSE).version == 8
     assert "edit.parse v6" in chateval.table(report)
+
+
+def test_the_default_baseline_is_v7_which_knew_the_newer_words() -> None:
+    cases = [one for one in chateval.load_cases() if one.id == "pointed-flip"]
+    gate, provider = gateway([])
+    report = asyncio.run(chateval.run(gate, cases, baseline=True))
+    assert report.version == 7 and report.rows[0]["score"]["passed"]
+    assert provider.calls == []
+    assert load(TaskName.EDIT_PARSE).version == 8
 
 
 def test_the_newer_words_are_answered_without_a_model() -> None:

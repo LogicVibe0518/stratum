@@ -1,0 +1,27 @@
+{
+ "model": "siglip-tiny-test",
+ "logit_scale": 10.0,
+ "logit_bias": -2.0,
+ "image": {
+  "size": [
+   224,
+   224
+  ],
+  "resample": 3,
+  "rescale": 0.00392156862745098,
+  "mean": [
+   0.5,
+   0.5,
+   0.5
+  ],
+  "std": [
+   0.5,
+   0.5,
+   0.5
+  ]
+ },
+ "text": {
+  "max_length": 64,
+  "template": "a photo of {}."
+ }
+}
