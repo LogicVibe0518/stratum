@@ -317,6 +317,7 @@ def edit_request(
     message: str,
     recent: Sequence[Mapping[str, object]] = (),
     pointed: str | None = None,
+    library: str = "",
 ) -> EditParseRequest:
     """Everything the model is told about a tweak: the poster as a designer would
     describe it, the brand's colours by name, the colours the message names, this
@@ -332,6 +333,7 @@ def edit_request(
         asked=asked_colours(message, kit),
         design=style_menu(template_id, kit, photos),
         recent=recent_lines(recent),
+        library=library,
     )
 
 

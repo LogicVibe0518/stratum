@@ -32,7 +32,7 @@ from stratum_worker.gateway.tasks import (
 VERSION: dict[TaskName, int] = {
     TaskName.POST_COPY: 4,
     TaskName.CAPTION_GENERATE: 1,
-    TaskName.EDIT_PARSE: 7,
+    TaskName.EDIT_PARSE: 8,
     TaskName.BACKGROUND_CREATE: 1,
 }
 
@@ -156,6 +156,7 @@ def _values(task: TaskName, request: BaseModel) -> dict[str, str]:
             "design": request.design or "(no style settings)",
             "recent": "\n".join(request.recent) or "(none)",
             "pointed": request.pointed or "(nothing)",
+            "photos": request.library or "(not known)",
             "message": request.message,
         }
     if task is TaskName.BACKGROUND_CREATE and isinstance(request, BackgroundRequest):

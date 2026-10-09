@@ -1,11 +1,14 @@
 """Ops the service carries out itself, rather than stratum_spec.
 
 Spec ops (set_text, move, pan, ...) change a poster in place and are pure. These
-three need more than the poster:
+need more than the poster:
 - restyle: lays the post out again as a neighbouring design (the words, the photos,
   the logo, the brand kit), and changes the post's design;
 - ask: changes nothing, and puts a question to the designer with choices to click;
-- undo: makes the version before the last one the poster again.
+- undo: makes the version before the last one the poster again;
+- badge: an offer badge in a corner (M10i);
+- use_photo: one of the client's photos, found by what is in it (M17a). The model
+  says what to look for; the photo model finds it. A model never names a file.
 
 They arrive from the model in the same "ops" list as the spec ops and are validated
 here, just as strictly, before anything happens.
@@ -17,6 +20,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, TypeAdapter
 from stratum_spec import BrandKit, LogoLayer, PosterSpec
+from stratum_spec.models import LayerId
 from stratum_spec.ops import EditOp, SetColor, SetFont
 
 
@@ -121,9 +125,22 @@ class Badge(_Action):
     remove: bool = False
 
 
-Action = Annotated[Restyle | Ask | Undo | Badge, Field(discriminator="op")]
+class UsePhoto(_Action):
+    """One of the client's photos, by what is in it (M17a, `app/photo_search.py`).
+
+    `layer` is the photo to replace (None: the poster's main photo). `add` keeps the
+    photos already on the poster and brings this one in too - with a restyle to a
+    design with one more photo space, in the same answer."""
+
+    op: Literal["use_photo"] = "use_photo"
+    description: Annotated[str, _shortened(120), Field(min_length=2, max_length=120)]
+    layer: LayerId | None = None
+    add: bool = False
+
+
+Action = Annotated[Restyle | Ask | Undo | Badge | UsePhoto, Field(discriminator="op")]
 ACTIONS: TypeAdapter[list[Action]] = TypeAdapter(list[Action])
-NAMES = frozenset({"restyle", "ask", "undo", "badge"})
+NAMES = frozenset({"restyle", "ask", "undo", "badge", "use_photo"})
 
 
 def split(raw: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[Action]]:
@@ -181,6 +198,7 @@ __all__ = [
     "Choice",
     "Restyle",
     "Undo",
+    "UsePhoto",
     "is_undo",
     "split",
     "undo_asked",

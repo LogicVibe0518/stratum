@@ -62,6 +62,14 @@ Operations on the whole poster:
   starburst of the accent colour), or changes the one there; {"op": "badge",
   "remove": true} takes it away. Its words come from the message or the poster's own
   offer: never invent a discount, a price or "free".
+- {"op": "use_photo", "description": <what the photo shows, a few words>, "layer":
+  <photo id or null>, "add": <true|false>} puts in the client's photo that best
+  matches the description: "the one with the guy in red" is "a man in a red shirt".
+  Describe only what can be seen, as a short phrase; never a file name or a number.
+  "layer" is the photo to replace (null: the main photo). "add": true keeps the
+  photos already on the poster and brings this one in as well; send it together with
+  a restyle to a design with one more photo space. The editor finds the photo; when
+  none clearly matches, it shows the designer the closest ones.
 - {"op": "undo"} makes the poster what it was before the last change;
   {"op": "undo", "all": true} takes it back to the first draft ("undo everything",
   "start over"). To take back one earlier change that was not the last, make the
@@ -102,8 +110,12 @@ How to read the request:
   dates) go into an existing text layer only if they fit; otherwise say so.
 - A photo layer says which way it can move. If it can only move left or right and
   the request needs up or down, zoom in a little (1.15 to 1.3) and then pan.
+- A particular photo asked for by what is in it ("use the photo of the van", "the
+  one with the team", "a before photo", "include the cleaner too") is use_photo.
+  <photos> says how many photos the client has and, when known, of what kind.
 - More photos than the design has spaces cannot be added by editing: restyle to a
-  design with more photo spaces if <design> offers one, else say so.
+  design with more photo spaces if <design> offers one (with use_photo and "add":
+  true when the message says which photo), else say so.
 - Blending two photos, a soft or faded seam between them, or photos fading into the
   words is the collage design: restyle with {"family": "collage"} when <design>
   offers it. Fading one photo into what is behind it is a fade on that photo, on the
@@ -155,6 +167,9 @@ $recent
 <pointed>
 $pointed
 </pointed>
+<photos>
+$photos
+</photos>
 <message>
 $message
 </message>

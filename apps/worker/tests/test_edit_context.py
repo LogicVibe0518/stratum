@@ -156,6 +156,7 @@ def test_the_prompt_carries_every_part(kit: BrandKit) -> None:
         asked=["green: NOT a brand colour"],
         design=style_menu(PANEL, kit, photos=1),
         recent=["make the logo bigger -> applied"],
+        library="3 photos: 2 people working, 1 place",
     )
     rendered = render(TaskName.EDIT_PARSE, request)
     for part in (
@@ -164,7 +165,9 @@ def test_the_prompt_carries_every_part(kit: BrandKit) -> None:
         "Photo and panel",
         "make the logo bigger -> applied",
         "make the text green",
+        "3 photos: 2 people working, 1 place",
     ):
         assert part in rendered.user
     assert '"op": "restyle"' in rendered.system and '"op": "ask"' in rendered.system
-    assert "@v7" in rendered.id
+    assert '"op": "use_photo"' in rendered.system
+    assert "@v8" in rendered.id

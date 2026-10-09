@@ -170,3 +170,13 @@ def test_a_file_that_cannot_be_used_gets_a_sentence_not_a_500(
     )
     assert res.status_code == status, res.text
     assert said in res.json()["detail"]
+
+
+def test_the_photo_list_says_each_photos_kind_and_never_its_vector(
+    api: tuple[TestClient, str],
+) -> None:
+    # M17a: the photo model's kind once a draft or tweak has read the photo, else null.
+    http, client = api
+    rows = http.get(f"/api/clients/{client}/assets").json()
+    assert rows and all("photo_type" in row and "quality" not in row for row in rows)
+    assert {row["photo_type"] for row in rows} == {None}

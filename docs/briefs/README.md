@@ -45,3 +45,4 @@ and the hard logic; Cursor does the rest; Claude reviews before anything merges.
 | C3 | Brand panel and sheet, new-client form asks for the logo | Cursor | M9, C1b |
 | M10–M12 | Real photos, layout variants, top three with a ranker | Claude, Cursor on adapters | C1 |
 | M16 | The ranker learns the team's picks | Claude | M12 in use |
+| M17a | Photos by what is in them: SigLIP plumbing, use_photo, drafts (model built by Rushil in `ml/photos`) | Claude, Rushil | M10i |
