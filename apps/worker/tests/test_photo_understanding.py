@@ -10,7 +10,9 @@ What a reviewer should be able to repeat back:
 - the tokenizer gives exactly the token numbers transformers gave in the lab, for
   plain queries and for hard strings (capitals, punctuation, accents, tabs, a text
   longer than the model reads - cut, keeping the end-of-text token);
-- photo and text vectors match the lab's PyTorch reference to the int8 tolerance;
+- photo and text vectors match the lab's PyTorch reference (cosine at least 0.9999:
+  the stand-in is full precision, so no CPU can move it; int8 is measured on the real
+  model, in the lab and on CI);
 - a vector kept with its photo as text (float16) comes back within 0.001;
 - the photo-type probe answers in its own classes and says nothing below its line,
   and a probe trained on another model's numbers is refused;
@@ -73,7 +75,7 @@ def test_text_vectors_match_the_reference(model: understand.OnnxPhotoModel) -> N
     reference = np.asarray([row["embedding"] for row in PARITY["queries"]], dtype=np.float32)
     ours = model.embed_texts(texts)
     assert np.allclose(np.linalg.norm(ours, axis=1), 1.0, atol=1e-3)
-    assert float((ours * reference).sum(axis=1).min()) >= 0.99
+    assert float((ours * reference).sum(axis=1).min()) >= 0.9999
 
 
 def test_photo_vectors_match_the_reference(model: understand.OnnxPhotoModel) -> None:
@@ -81,7 +83,7 @@ def test_photo_vectors_match_the_reference(model: understand.OnnxPhotoModel) -> 
     reference = np.asarray([row["embedding"] for row in PARITY["photos"]], dtype=np.float32)
     ours = model.embed_photos(images)
     assert ours.shape == reference.shape
-    assert float((ours * reference).sum(axis=1).min()) >= 0.98
+    assert float((ours * reference).sum(axis=1).min()) >= 0.9999
 
 
 def test_a_phone_photo_is_turned_upright_first(

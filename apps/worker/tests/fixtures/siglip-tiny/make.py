@@ -14,6 +14,13 @@ Run from this folder with the photo lab's environment (PyTorch, transformers):
 
 Everything is seeded, so a rebuild gives the same tokens; ONNX bytes may differ
 between library versions, which is why lock.json is rebuilt with them.
+
+The towers are kept in full precision (fp32), not int8. An int8 model's numbers depend
+on the CPU it runs on: x86 CPUs without VNNI instructions (GitHub's runners, for one)
+add int8 products in 16 bits and can saturate, while Apple chips and VNNI CPUs do not.
+The first version of this fixture was int8 and passed on a Mac and on a VNNI machine,
+then failed on CI. These tests check the plumbing, so they must not depend on the CPU;
+int8 accuracy is measured on the real model, in the lab and on CI (M17a, stitching).
 """
 
 from __future__ import annotations
@@ -27,7 +34,6 @@ from pathlib import Path
 import numpy as np
 import sentencepiece as spm
 import torch
-from onnxruntime.quantization import QuantType, quantize_dynamic
 from PIL import Image, ImageDraw
 from sklearn.linear_model import LogisticRegression
 from transformers import (
@@ -223,19 +229,16 @@ def main() -> None:
         ("image", ImageTower(model), pixels, "pixel_values"),
         ("text", TextTower(model), ids["input_ids"], "input_ids"),
     ):
-        fp32 = HERE / f"{name}-fp32.onnx"
         torch.onnx.export(
             tower,
             (example,),
-            fp32,
+            HERE / f"{name}.onnx",
             input_names=[input_name],
             output_names=["embedding"],
             dynamic_axes={input_name: {0: "batch"}, "embedding": {0: "batch"}},
             opset_version=17,
             dynamo=False,
         )
-        quantize_dynamic(fp32, HERE / f"{name}.onnx", weight_type=QuantType.QInt8)
-        fp32.unlink()
 
     image_config = processor.image_processor
     settings = {

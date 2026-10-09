@@ -3,8 +3,8 @@
  "revision": "test",
  "licence": "generated for tests, no rights reserved",
  "files": {
-  "image.onnx": "8eff17d1143b01fb3973d600790ebf82718fd0c1d05936c67d1e989b524ee842",
-  "text.onnx": "b47ceaed46618dbad149d15f3f2415896f094a93c376abf5ed83239381ff080b",
+  "image.onnx": "65f73f9b67076b6255db97e580b1e43bb5ad7fa8c0a250f14ac9d6c82cfbe8a5",
+  "text.onnx": "f91d343c53050d01470817a1e18afd6bf45210596210e450501e78ab6a6886c3",
   "spiece.model": "ef7013a0dd9ff2900ba3fd3291783934de5662ad5c52dae9ab2dd6def4ee2e01",
   "settings.json": "f297d01e88d8882b0e4d20295cc34342f4dda57b048303c39de473eda3ef668d",
   "types.json": "01b265ac9f98e99a682d90f978397c9f42321490cc54c6a47521b69d0768193c"

@@ -10,7 +10,8 @@ change here is switched off and Stratum behaves exactly as before.
 - **New dependency:** `sentencepiece` (Apache-2.0), SigLIP's tokenizer. Small wheel,
   no system libraries.
 - **New committed test fixture:** `apps/worker/tests/fixtures/siglip-tiny/`, about
-  0.5 MB: a SigLIP with random weights built by `make.py` (ours, no rights reserved),
+  0.7 MB: a SigLIP with random weights built by `make.py` (ours, no rights reserved),
+  in full precision,
   four drawn 80 px pictures, and the tokens transformers gave for them. No real photo
   and no real model.
 - No migration, no RLS, auth or token change, no spec change. The photo vectors live
@@ -119,6 +120,14 @@ shows it in the Cursor brief that follows (C12).
    location (Rushil's public Hugging Face repo, with SigLIP's Apache-2.0 licence and
    a note of the changes) and downloaded at build time, checked against the lock.
 5. CI downloads them too, or runs with the tiny fixture via `STRATUM_SIGLIP_DIR`.
+6. **int8 is checked on CI, not only on the Mac.** An int8 model's numbers depend on
+   the CPU. x86 CPUs without VNNI instructions (GitHub's runners are AMD EPYC without
+   them; Railway's may be too) add pairs of int8 products in 16 bits and can saturate;
+   Apple chips and VNNI CPUs cannot. The first tiny fixture was int8: it passed on the
+   Mac (Apple silicon) and in the cloud (Intel with VNNI) and failed on CI (worst cosine
+   0.91 against 0.99). So the parity test on the real files runs on CI too. If int8
+   falls below 0.99 there, quantize again with `reduce_range=True` (7-bit weights, no
+   saturation; ONNX Runtime's own advice), or ship that tower in fp32.
 
 ## Not in this module
 
@@ -131,11 +140,12 @@ shows it in the Cursor brief that follows (C12).
 
 ## Tests
 
-- `test_photo_understanding.py` (26, 16 of them token cases): the lock check, tokens identical to
-  transformers for queries and hard strings, photo and text vectors within int8
-  tolerance of the PyTorch reference, phone rotation, the caption template, the
-  probability formula, the kept vector's precision, the probe's classes and line, a
-  probe for another model refused, and this build without a model.
+- `test_photo_understanding.py` (26, 16 of them token cases): the lock check, tokens
+  identical to transformers for queries and hard strings, photo and text vectors
+  within 0.0001 of the PyTorch reference (full precision, so the same on every CPU),
+  phone rotation, the caption template, the probability formula, the kept vector's
+  precision, the probe's classes and line, a probe for another model refused, and this
+  build without a model.
 - `test_photo_search_service.py` (9), with a stand-in model that sees only colour:
   found and swapped, vectors kept and reused, no clear match asks with the closest
   two and the panel swap works, another client's photo refused, "include it too"
