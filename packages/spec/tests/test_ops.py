@@ -5,6 +5,7 @@ from conftest import make_spec
 from hypothesis import given
 from hypothesis import strategies as st
 from stratum_spec import (
+    Box,
     Move,
     NeedsHuman,
     OpError,
@@ -18,6 +19,7 @@ from stratum_spec import (
     apply_ops,
 )
 from stratum_spec.models import TextLayer
+from stratum_spec.ops import ALIGN_MARGIN
 
 ASSET_C = "c" * 64
 
@@ -52,11 +54,55 @@ def test_asset_swap_needs_an_asset_layer(spec: PosterSpec) -> None:
         apply_op(spec, SwapAsset(layer="headline", asset=ASSET_C))
 
 
-def test_scale_keeps_the_centre(spec: PosterSpec) -> None:
+def test_scale_keeps_the_centre_when_there_is_room(spec: PosterSpec) -> None:
+    middle = Box(x=0.4, y=0.4, w=0.2, h=0.1)
+    centred = spec.model_copy(
+        update={
+            "layers": [
+                one.model_copy(update={"box": middle}) if one.id == "logo" else one
+                for one in spec.layers
+            ]
+        }
+    )
+    after = apply_op(centred, Scale(layer="logo", factor=2.0)).layer("logo").box
+    assert after.w == pytest.approx(middle.w * 2)
+    assert (after.x + after.w / 2) == pytest.approx(middle.x + middle.w / 2)
+
+
+# I-37: "bigger" pushed a full-width headline past both edges, and a corner logo past
+# its corner. Words and logos now stay within the design's margins in every size.
+LEFT, RIGHT = ALIGN_MARGIN, 1 - ALIGN_MARGIN
+
+
+def test_bigger_words_stay_inside_the_margins_and_grow_taller(spec: PosterSpec) -> None:
+    before = spec.layer("headline").box
+    after = apply_op(spec, Scale(layer="headline", factor=1.3)).layer("headline").box
+    assert after.x >= LEFT - 1e-9 and after.x + after.w <= RIGHT + 1e-9
+    assert after.h == pytest.approx(before.h * 1.3)  # the words have more room to grow
+
+
+def test_a_bigger_corner_logo_grows_inwards_and_keeps_its_shape(spec: PosterSpec) -> None:
     before = spec.layer("logo").box
     after = apply_op(spec, Scale(layer="logo", factor=2.0)).layer("logo").box
-    assert after.w == pytest.approx(before.w * 2)
-    assert (after.x + after.w / 2) == pytest.approx(before.x + before.w / 2)
+    assert (after.w, after.h) == pytest.approx((before.w * 2, before.h * 2))
+    assert after.x + after.w == pytest.approx(RIGHT)
+    huge = apply_op(spec, Scale(layer="logo", factor=5.0)).layer("logo").box
+    assert huge.w / huge.h == pytest.approx(before.w / before.h)
+    assert huge.x >= LEFT - 1e-9 and huge.x + huge.w <= RIGHT + 1e-9
+
+
+def test_a_part_a_design_put_past_the_margin_is_not_pulled_in(spec: PosterSpec) -> None:
+    edge = Box(x=0.0, y=0.62, w=0.5, h=0.14)
+    flush = spec.model_copy(
+        update={
+            "layers": [
+                one.model_copy(update={"box": edge}) if one.id == "headline" else one
+                for one in spec.layers
+            ]
+        }
+    )
+    after = apply_op(flush, Scale(layer="headline", factor=1.2)).layer("headline").box
+    assert after.x == pytest.approx(0.0)  # back to the poster's edge, not to the margin
 
 
 def test_needs_human_changes_nothing(spec: PosterSpec) -> None:

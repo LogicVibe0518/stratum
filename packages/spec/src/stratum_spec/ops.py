@@ -303,6 +303,74 @@ def _scaled(box: Box, factor: float) -> Box:
     )
 
 
+def _inside(
+    box: Box, before: Box, band: tuple[float, float, float, float], *, keep_shape: bool
+) -> Box:
+    """A box that grew, kept within the design's margins (I-37).
+
+    Scaling about the centre pushed a full-width headline past both edges of the
+    poster, and a corner logo past its corner. The box first moves back inside;
+    only when it is wider or taller than the room does it shrink: words keep their
+    new height and wrap into it, a logo keeps its shape. Where a design put a part
+    further out than the margin on purpose, that edge stays allowed.
+    """
+    left, top, right, bottom = band
+    left, top = min(left, before.x), min(top, before.y)
+    right, bottom = max(right, before.x + before.w), max(bottom, before.y + before.h)
+    w, h = box.w, box.h
+    if keep_shape:
+        fit = min(1.0, (right - left) / w, (bottom - top) / h)
+        w, h = w * fit, h * fit
+    else:
+        w, h = min(w, right - left), min(h, bottom - top)
+    cx, cy = box.x + box.w / 2, box.y + box.h / 2
+    return box.model_copy(
+        update={
+            "w": w,
+            "h": h,
+            "x": _clamp(cx - w / 2, left, right - w),
+            "y": _clamp(cy - h / 2, top, bottom - h),
+        }
+    )
+
+
+def _scaled_inside(
+    spec: PosterSpec, layer_id: str, factor: float, *, keep_shape: bool
+) -> PosterSpec:
+    """Words or a logo made bigger or smaller about their centre, in every size,
+    each size within its own margins."""
+    canvas = spec.canvas
+    before = spec.layer(layer_id).box
+    base = _inside(
+        _scaled(before, factor),
+        before,
+        _band(canvas.aspect, canvas.base_width),
+        keep_shape=keep_shape,
+    )
+    changed = _replace(spec, layer_id, box=base)
+    variants = {
+        aspect: {
+            one: (
+                override.model_copy(
+                    update={
+                        "box": _inside(
+                            _scaled(override.box, factor),
+                            override.box,
+                            _band(aspect, canvas.base_width),
+                            keep_shape=keep_shape,
+                        )
+                    }
+                )
+                if one == layer_id and override.box is not None
+                else override
+            )
+            for one, override in overrides.items()
+        }
+        for aspect, overrides in changed.variants.items()
+    }
+    return changed.model_copy(update={"variants": variants})
+
+
 def _override_box(change: Callable[[Box], Box]) -> Callable[[LayoutOverride], LayoutOverride]:
     def apply(override: LayoutOverride) -> LayoutOverride:
         if override.box is None:
@@ -464,6 +532,8 @@ def apply_op(spec: PosterSpec, op: EditOp) -> PosterSpec:
 
     if isinstance(op, Scale):
         factor = _clamp(op.factor, MIN_SCALE, MAX_SCALE)
+        if isinstance(target, TextLayer | LogoLayer):
+            return _scaled_inside(spec, op.layer, factor, keep_shape=isinstance(target, LogoLayer))
         return _replace(
             spec,
             op.layer,
