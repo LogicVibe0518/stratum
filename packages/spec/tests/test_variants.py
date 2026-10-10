@@ -22,6 +22,7 @@ from stratum_spec import (
     embed,
     retarget,
 )
+from stratum_spec.ops import ALIGN_MARGIN
 
 STORY_LOGO = {"x": 0.7, "y": 0.2, "w": 0.2, "h": 0.06}
 TEMPLATE_VARIANTS: dict[str, dict[str, dict[str, object]]] = {
@@ -81,8 +82,10 @@ def test_make_the_logo_bigger_reaches_the_story(spec: PosterSpec) -> None:
     assert base.w == pytest.approx(0.3)
     assert story is not None
     assert story.w == pytest.approx(0.3) and story.h == pytest.approx(0.09)
-    # About its own centre, in its own place.
-    assert story.x + story.w / 2 == pytest.approx(STORY_LOGO["x"] + STORY_LOGO["w"] / 2)
+    # In its own place: the same height on the poster, and grown inwards from the
+    # story's right margin rather than past it (I-37).
+    assert story.y + story.h / 2 == pytest.approx(STORY_LOGO["y"] + STORY_LOGO["h"] / 2)
+    assert story.x + story.w == pytest.approx(1 - ALIGN_MARGIN)
     assert retarget(bigger, "9:16").layer("logo").box == story
 
 

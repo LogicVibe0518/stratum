@@ -283,7 +283,8 @@ text" (M10h) accepted only a restyle. They now also accept lining up each text l
 - **T2:** blur, shape masks, cut-out layer, icons, QR code, lock, duplicate, PDF,
   carousel.
 - **I-37:** "bigger" on a text box can push it past the canvas edge. Scale should keep
-  the box inside the margins.
+  the box inside the margins. *Fixed after M10i: words and logos now stay within the
+  margins in every size (`ops._scaled_inside`, test_bigger_stays_inside.py).*
 - **The page:** Cursor brief C11.
 
 ## Five things to be able to say
