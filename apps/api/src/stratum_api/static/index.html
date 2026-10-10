@@ -2456,6 +2456,9 @@ async function openClient(client) {
   ]);
   $("postlist").replaceChildren(skeletons(3, "card-skel"));
   $("assets").replaceChildren(skeletons(4, "asset-skel"));
+  // The upload list belongs to the client being shown (I-17): another client's
+  // uploads must not appear here.
+  $("uploads").replaceChildren();
   $("brandswatches").replaceChildren();
   $("brandmeta").textContent = "";
   paintBrandActions();
@@ -2475,9 +2478,18 @@ async function openClient(client) {
   }
 }
 
+// Words a short name can do without (I-25): "first-time-booking-is" read as cut off.
+const SLUG_FILLER = new Set([
+  "a", "an", "the", "is", "are", "was", "be", "of", "for", "to", "and", "or", "in", "on",
+  "at", "with", "about", "this", "that", "our", "we", "your", "it", "its", "my", "from", "by", "as",
+]);
+
 function postSlug(brief) {
   const typed = $("slug").value.trim();
-  const source = typed || brief.toLowerCase().split(/\s+/).slice(0, 4).join("-");
+  const plain = brief.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const words = plain.replace(/[^a-z0-9\s-]+/g, " ").split(/\s+/).filter(Boolean);
+  const meaningful = words.filter((word) => !SLUG_FILLER.has(word));
+  const source = typed || (meaningful.length ? meaningful : words).slice(0, 4).join("-");
   return slugify(source, 70);
 }
 
@@ -3890,6 +3902,8 @@ async function openPost(id, options) {
   window.scrollTo(0, 0);
   $("quickerr").textContent = "";
   clearTweakAnswer();
+  // A message typed about one post is not sent to the next one opened (I-18).
+  $("tweak").value = "";
   try {
     const data = await api(`/posts/${id}`);
     if (token !== viewToken) return;
