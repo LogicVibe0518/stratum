@@ -160,3 +160,26 @@ def test_escape_clears_the_pointing() -> None:
     keys = PAGE.split('$("tweak").addEventListener("keydown"')[1].split("});")[0]
     assert "Escape" in keys
     assert "clearPointing" in keys
+
+
+def body(name: str) -> str:
+    """The source of one top-level function on the page."""
+    start = PAGE.index(f"function {name}(")
+    return PAGE[start : PAGE.index("\n}\n", start)]
+
+
+def test_a_clients_page_shows_only_its_own_uploads() -> None:
+    # I-17: Sparkle Squad's page listed Lone Star's uploads.
+    assert '$("uploads").replaceChildren();' in body("openClient")
+
+
+def test_a_message_typed_on_one_post_is_not_left_on_the_next() -> None:
+    # I-18: "use 3 photos" typed for Lone Star showed on a Sparkle post.
+    assert '$("tweak").value = "";' in body("openPost")
+
+
+def test_a_short_name_skips_filler_words() -> None:
+    # I-25: "first-time-booking-is" read as cut off mid-phrase.
+    assert "SLUG_FILLER" in body("postSlug")
+    for word in ('"is"', '"the"', '"about"', '"we"'):
+        assert word in PAGE[PAGE.index("const SLUG_FILLER") : PAGE.index("function postSlug(")]
