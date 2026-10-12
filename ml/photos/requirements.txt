@@ -1,0 +1,17 @@
+# The photo lab's own environment. Exact versions: the guide was tested with these.
+jupyterlab==4.6.4
+numpy==2.4.4
+pandas==3.0.2
+matplotlib==3.10.9
+pillow==12.2.0
+scikit-learn==1.8.0
+torch==2.14.1
+torchvision==0.29.1
+transformers==5.18.0
+sentencepiece==0.2.2
+protobuf==7.34.1
+huggingface_hub==1.33.0
+onnx==1.23.2
+onnxscript==0.7.2
+onnxruntime==1.25.0
+peft==0.21.2
