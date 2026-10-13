@@ -14,9 +14,21 @@ from stratum_worker.assets.models import Flag
 
 # Variance of the 4-neighbour Laplacian (OpenCV's ksize=1 kernel) on 0-255 greyscale,
 # measured at web size so the score does not depend on the camera's resolution.
-# 100 is the widely used rule of thumb for this exact kernel. On our synthetic scene a
-# sharp image scores ~390, a 1px Gaussian blur ~25 and a 12px blur ~2.4.
+# 100 is the widely used rule of thumb for this exact kernel.
 MIN_SHARPNESS = 100.0
+
+# It is read from the sharpest part of the photo, not the whole frame (I-16). The photo
+# is cut into a GRID x GRID grid and the score is the SHARPEST_PART percentile of the
+# tiles' variances: about the 4th-sharpest of 36 tiles, so a subject covering a tenth
+# of the frame counts, while one noisy tile does not. Averaged over the whole frame, a
+# sharp face on a soft, out-of-focus background (a normal portrait) was called blurry
+# and drafts used it last, saying "ask for a sharper one".
+# Checked 13 Oct 2026 on the 24 CC0 starter photos (960 px, kept outside the repo) and
+# copies blurred with Pillow's GaussianBlur: every original scores over 130 (the
+# whole-frame score flagged 4 of them: 48, 67, 74, 99); radius 1 scores 19-190 (17 of
+# 24 flagged); radius 2 scores 22 or less and radius 3 scores 7 or less (all flagged).
+GRID = 6
+SHARPEST_PART = 90.0
 
 # Mean Rec.601 luma, 0-255. Well-exposed photos sit around 100-130; dim but usable
 # indoor shots around 50-90. Below 40 there is so little signal that brightening
@@ -46,11 +58,27 @@ def laplacian_variance(grey: NDArray[np.float64]) -> float:
     return float(edges.var())
 
 
+def sharpness(grey: NDArray[np.float64]) -> float:
+    """How sharp the sharpest part of a photo is (see SHARPEST_PART)."""
+    height, width = grey.shape
+    tiles = [
+        laplacian_variance(
+            grey[
+                row * height // GRID : (row + 1) * height // GRID,
+                col * width // GRID : (col + 1) * width // GRID,
+            ]
+        )
+        for row in range(GRID)
+        for col in range(GRID)
+    ]
+    return float(np.percentile(tiles, SHARPEST_PART))
+
+
 def measure(preview: Image.Image, full_size: tuple[int, int]) -> dict[str, float]:
     """Score `preview` (the web variant) and record the full image's smaller side."""
     grey = np.asarray(_on_white(preview).convert("L"), dtype=np.float64)
     return {
-        "sharpness": round(laplacian_variance(grey), 3),
+        "sharpness": round(sharpness(grey), 3),
         "brightness": round(float(grey.mean()), 3),
         "min_dimension": float(min(full_size)),
     }
