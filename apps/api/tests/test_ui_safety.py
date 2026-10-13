@@ -183,3 +183,21 @@ def test_a_short_name_skips_filler_words() -> None:
     assert "SLUG_FILLER" in body("postSlug")
     for word in ('"is"', '"the"', '"about"', '"we"'):
         assert word in PAGE[PAGE.index("const SLUG_FILLER") : PAGE.index("function postSlug(")]
+
+
+def test_options_say_when_the_current_design_is_none_of_them() -> None:
+    # I-04: after a restyle no option card is "Shown", and nothing said why.
+    painted = body("paintOptions")
+    assert "Your current design is none of these" in painted
+    assert "status.textContent = " in painted  # text, never markup
+
+
+def test_making_lab_screens_says_how_many_posts_are_left() -> None:
+    # I-29: the job reports posts it had no time for (`left`); the page dropped it.
+    note = body("labMadeNote")
+    assert "result.left" in note and "press Make more screens again" in note
+    assert "result.skipped" in note
+    assert "No posts with words and photos yet" not in PAGE  # wrong once every post had screens
+    made = body("makeLabScreens")
+    assert "labMadeNote(result)" in made and "openLab(note)" in made
+    assert '$("labstatus").textContent = note' in body("openLab")
