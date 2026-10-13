@@ -3822,6 +3822,11 @@ function paintOptions(data) {
   for (const option of choices) {
     strip.append(optionCard(option, option.design_id === shown));
   }
+  if (shown && !choices.some((option) => option.design_id === shown)) {
+    // After a restyle the poster is a neighbouring design, so no card is "Shown" (I-04).
+    status.textContent = "Your current design is none of these. Pick one to switch to it.";
+    status.classList.remove("hide");
+  }
   loadPreviews(strip, false, previewGen);
 }
 
@@ -4451,7 +4456,7 @@ async function paintLab(data) {
   labReadyAt = performance.now();
 }
 
-async function openLab() {
+async function openLab(note = "") {
   const token = ++viewToken;
   show("lab");
   setCrumbs([
@@ -4468,6 +4473,7 @@ async function openLab() {
     if (token !== viewToken) return;
     if (screen && !screen.progress) screen.progress = progress;
     await paintLab(screen);
+    if (note && token === viewToken) $("labstatus").textContent = note;
   } catch (err) {
     if (token !== viewToken) return;
     $("labstatus").textContent = sentence(err);
@@ -4513,6 +4519,28 @@ async function waitForLabJob(jobId) {
   }
 }
 
+function labMadeNote(result) {
+  // The job stops starting new posts after its time budget and reports the rest as
+  // `left` (M15b); without this line the page dropped that and looked finished (I-29).
+  const screens = Number(result.screens) || 0;
+  const posts = Number(result.posts) || 0;
+  const left = Number(result.left) || 0;
+  const skipped = Array.isArray(result.skipped) ? result.skipped.length : 0;
+  const count = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+  const parts = [];
+  if (screens) {
+    parts.push(`Made ${count(screens, "screen", "screens")} from ${count(posts, "post", "posts")}.`);
+  } else if (!left && !skipped) {
+    parts.push(
+      "No new posts to make screens from: every post with words already has screens, " +
+        "or there are none yet. Make a few posts first.",
+    );
+  }
+  if (left) parts.push(`${count(left, "post", "posts")} left: press Make more screens again for the rest.`);
+  if (skipped) parts.push(`${count(skipped, "post", "posts")} skipped: no design could be made with the client's photos.`);
+  return parts.join(" ");
+}
+
 async function makeLabScreens() {
   if (labBusy || !canMakeLabScreens()) return;
   setLabBusy(true);
@@ -4520,13 +4548,13 @@ async function makeLabScreens() {
   try {
     const out = await api("/lab/screens", { method: "POST", json: {} });
     const result = await waitForLabJob(out.job_id);
+    const note = labMadeNote(result);
+    setLabBusy(false);
     if ((result.screens || 0) === 0) {
-      $("labstatus").textContent = "No posts with words and photos yet. Make a few posts first.";
-      setLabBusy(false);
+      $("labstatus").textContent = note;
       return;
     }
-    setLabBusy(false);
-    await openLab();
+    await openLab(note);
   } catch (err) {
     $("labstatus").textContent = sentence(err);
     setLabBusy(false);
