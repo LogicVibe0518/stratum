@@ -23,6 +23,7 @@ from stratum_worker.assets import (
     UnsupportedFileType,
     ingest,
 )
+from stratum_worker.assets.quality import MIN_SHARPNESS, laplacian_variance
 from stratum_worker.render import render_poster
 
 EXIF_ORIENTATION = 0x0112
@@ -283,6 +284,38 @@ def test_blurred_image_is_flagged_and_sharp_one_is_not(tmp_path: Path) -> None:
     assert "too_blurry" not in sharp_meta.flags
     assert sharp_meta.flags == []
     assert sharp_meta.quality["sharpness"] > blurred_meta.quality["sharpness"]
+
+
+def _grey(image: Image.Image) -> np.ndarray:
+    return np.asarray(image.convert("L"), dtype=np.float64)
+
+
+def test_a_sharp_subject_on_a_soft_background_is_not_called_blurry(tmp_path: Path) -> None:
+    # I-16: a portrait (sharp face, out-of-focus wall) was flagged too_blurry because the
+    # soft background pulled the whole-frame score under the line, so drafts used it last.
+    portrait = _scene().filter(ImageFilter.GaussianBlur(radius=6))
+    portrait.paste(_scene(240, 320, seed=3), (280, 200))  # the sharp part: 12% of the frame
+    assert laplacian_variance(_grey(portrait)) < MIN_SHARPNESS  # what the old check read
+
+    meta = ingest(_save(portrait, tmp_path / "portrait.png", "PNG"), tmp_path / "store")
+
+    assert "too_blurry" not in meta.flags
+    assert meta.quality["sharpness"] >= MIN_SHARPNESS
+
+
+def test_a_photo_soft_all_over_is_still_blurry(tmp_path: Path) -> None:
+    soft = _scene().filter(ImageFilter.GaussianBlur(radius=1))
+    meta = ingest(_save(soft, tmp_path / "soft.png", "PNG"), tmp_path / "store")
+    assert "too_blurry" in meta.flags
+
+
+def test_one_small_sharp_detail_does_not_make_a_blurry_photo_sharp(tmp_path: Path) -> None:
+    # A logo on a shirt, sharp, in an otherwise blurry photo: the sharpest tenth of the
+    # frame decides, not the single sharpest spot.
+    blurry = _scene().filter(ImageFilter.GaussianBlur(radius=6))
+    blurry.paste(_scene(96, 96, seed=3), (150, 150))
+    meta = ingest(_save(blurry, tmp_path / "logo-shirt.png", "PNG"), tmp_path / "store")
+    assert "too_blurry" in meta.flags
 
 
 def test_dark_image_is_flagged_too_dark(tmp_path: Path) -> None:
