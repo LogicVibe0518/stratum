@@ -1,0 +1,48 @@
+{"client": "sparkle-squad", "query": "mop cleaning a floor", "want": ["sparkle-squad-01.jpg"]}
+{"client": "sparkle-squad", "query": "a mop", "want": ["sparkle-squad-01.jpg"]}
+{"client": "sparkle-squad", "query": "kitchen", "want": ["sparkle-squad-02.jpg", "sparkle-squad-05.jpg"]}
+{"client": "sparkle-squad", "query": "clean kitchen", "want": ["sparkle-squad-02.jpg", "sparkle-squad-05.jpg"]}
+{"client": "sparkle-squad", "query": "clean basin", "want": ["sparkle-squad-02.jpg"]}
+{"client": "sparkle-squad", "query": "clean white basin", "want": ["sparkle-squad-02.jpg"]}
+{"client": "sparkle-squad", "query": "a clean empty living room", "want": ["sparkle-squad-03.jpg", "sparkle-squad-04.jpg"]}
+{"client": "sparkle-squad", "query": "a clean empty room", "want": ["sparkle-squad-03.jpg", "sparkle-squad-04.jpg", "sparkle-squad-06.jpg", "sparkle-squad-08.jpg"]}
+{"client": "sparkle-squad", "query": "a clean empty room with TV", "want": ["sparkle-squad-04.jpg"]}
+{"client": "sparkle-squad", "query": "man in a blue shirt", "want": ["sparkle-squad-07.jpg"]}
+{"client": "sparkle-squad", "query": "a clean empty dining table", "want": ["sparkle-squad-05.jpg"]}
+{"client": "sparkle-squad", "query": "a clean bed side", "want": ["sparkle-squad-08.jpg"]}
+{"client": "sparkle-squad", "query": "blue sofa", "want": ["sparkle-squad-04.jpg", "sparkle-squad-06.jpg"]}
+{"client": "sparkle-squad", "query": "a cleaner in a blue uniform wiping a kitchen counter", "want": []}
+{"client": "sparkle-squad", "query": "a carpet being steam cleaned", "want": []}
+{"client": "sparkle-squad", "query": "someone washing windows from outside", "want": []}
+{"client": "sparkle-squad", "query": "an empty office after cleaning", "want": []}
+{"client": "sparkle-squad", "query": "a dog asleep on a clean sofa", "want": []}
+{"client": "lone-star-roofing", "query": "person with tools in the pocket", "want": ["lone-star-roofing-01.jpg"]}
+{"client": "lone-star-roofing", "query": "red roof", "want": ["lone-star-roofing-03.jpg", "lone-star-roofing-07.jpg"]}
+{"client": "lone-star-roofing", "query": "man in check shirt", "want": ["lone-star-roofing-04.jpg"]}
+{"client": "lone-star-roofing", "query": "man wearing helmet", "want": ["lone-star-roofing-04.jpg"]}
+{"client": "lone-star-roofing", "query": "blue house front view", "want": ["lone-star-roofing-05.jpg"]}
+{"client": "lone-star-roofing", "query": "green house front view", "want": ["lone-star-roofing-06.jpg"]}
+{"client": "lone-star-roofing", "query": "man showing thumbs up", "want": ["lone-star-roofing-08.jpg"]}
+{"client": "lone-star-roofing", "query": "roof with shingles", "want": ["lone-star-roofing-02.jpg", "lone-star-roofing-03.jpg"]}
+{"client": "lone-star-roofing", "query": "old clay roof tiles with a skylight", "want": ["lone-star-roofing-07.jpg"]}
+{"client": "lone-star-roofing", "query": "2 house roof view", "want": ["lone-star-roofing-02.jpg"]}
+{"client": "lone-star-roofing", "query": "a crew on a roof at sunset", "want": []}
+{"client": "lone-star-roofing", "query": "hail damage on shingles", "want": []}
+{"client": "lone-star-roofing", "query": "a drone shot of a whole roof from above", "want": []}
+{"client": "lone-star-roofing", "query": "a dumpster full of old shingles", "want": []}
+{"client": "lone-star-roofing", "query": "a metal roof on a barn", "want": []}
+{"client": "kowalski-plumbing", "query": "man in red", "want": ["kowalski-plumbing-03.jpg"]}
+{"client": "kowalski-plumbing", "query": "man fixing", "want": ["kowalski-plumbing-01.jpg", "kowalski-plumbing-02.jpg"]}
+{"client": "kowalski-plumbing", "query": "man fixing wires", "want": ["kowalski-plumbing-02.jpg"]}
+{"client": "kowalski-plumbing", "query": "man putting back the socket cover", "want": ["kowalski-plumbing-01.jpg"]}
+{"client": "kowalski-plumbing", "query": "bundle of pipes", "want": ["kowalski-plumbing-04.jpg"]}
+{"client": "kowalski-plumbing", "query": "washroom basin", "want": ["kowalski-plumbing-05.jpg", "kowalski-plumbing-06.jpg"]}
+{"client": "kowalski-plumbing", "query": "washrrom with circular light", "want": ["kowalski-plumbing-06.jpg"]}
+{"client": "kowalski-plumbing", "query": "faucet", "want": ["kowalski-plumbing-08.jpg"]}
+{"client": "kowalski-plumbing", "query": "washroom with brown tiles", "want": ["kowalski-plumbing-05.jpg"]}
+{"client": "kowalski-plumbing", "query": "drilling machine", "want": ["kowalski-plumbing-07.jpg"]}
+{"client": "kowalski-plumbing", "query": "a burst pipe with water all over the floor", "want": []}
+{"client": "kowalski-plumbing", "query": "a boiler being serviced", "want": []}
+{"client": "kowalski-plumbing", "query": "bleeding a radiator with a key", "want": []}
+{"client": "kowalski-plumbing", "query": "a house covered in snow", "want": []}
+{"client": "kowalski-plumbing", "query": "a new shower with glass doors", "want": ["kowalski-plumbing-05.jpg", "kowalski-plumbing-06.jpg"]}
