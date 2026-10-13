@@ -46,12 +46,15 @@ allowed in the repo; recalibrate on the benchmark photo set.
 
 | Flag | Rule | How it was chosen |
 |---|---|---|
-| `too_blurry` | variance of the 4-neighbour Laplacian < **100** | The common rule of thumb for this exact kernel (OpenCV `ksize=1`) on 0–255 grey. On a 16 px block test scene: sharp ≈ 390, 1 px Gaussian blur ≈ 25, 12 px blur ≈ 2.4. |
+| `too_blurry` | variance of the 4-neighbour Laplacian in the **sharpest part** of the photo (the 90th percentile over a 6 × 6 grid of tiles) < **100** | The common rule of thumb for this exact kernel (OpenCV `ksize=1`) on 0–255 grey. Read from the sharpest part since 13 Oct 2026 (I-16): over the whole frame, a sharp face on an out-of-focus background read as blurry. On the 24 CC0 starter photos: every original over 130 (the whole-frame score flagged 4); Gaussian blur radius 1: 19–190, 17 of 24 flagged; radius 2: 22 or less. On the 16 px block test scene: sharp ≈ 450, radius 1 ≈ 28. |
 | `too_dark` | mean Rec.601 luma < **40** | Well-exposed photos sit around 100–130, dim but usable ones 50–90. Below 40, brightening mostly amplifies noise. |
 | `too_small` | shorter side < **540 px** | Half the 1080 px canvas: below it even a half-width inset is upscaled. |
 
 Known blind spots: JPEG noise inflates sharpness, so dark noisy photos read as
-sharp; flat-colour logos read as blurry.
+sharp; flat-colour logos read as blurry. A blurry photo with a large sharp
+overlay (a caption, a sticker) reads as sharp. Photos uploaded before 13 Oct 2026
+keep the whole-frame score and flags they were given until they are measured
+again (I-11).
 
 ## Invariants (tested)
 - File type is decided by content: a JPEG named `.png` is accepted, text named
