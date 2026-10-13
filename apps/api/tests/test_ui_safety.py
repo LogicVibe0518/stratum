@@ -201,3 +201,16 @@ def test_making_lab_screens_says_how_many_posts_are_left() -> None:
     made = body("makeLabScreens")
     assert "labMadeNote(result)" in made and "openLab(note)" in made
     assert '$("labstatus").textContent = note' in body("openLab")
+
+
+def test_the_editor_never_shows_another_posts_parts() -> None:
+    # I-01: when loading a post's parts failed, the editor came back on with the last
+    # post's layers, and edits made on them were refused.
+    opened = body("openPost")
+    assert '$("editorbody").replaceChildren();' in opened
+    assert "setEditorBusy(true);" in opened
+    loaded = body("loadInspect")
+    failed = loaded[loaded.index("catch (err)") :]
+    assert "INSPECT = null;" in failed
+    assert '$("editorbody").replaceChildren(retry);' in failed
+    assert 'retry.textContent = "Try again";' in failed
