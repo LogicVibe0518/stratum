@@ -3222,7 +3222,17 @@ async function loadInspect() {
       paintEditor();
     } catch (err) {
       if (gen !== inspectGen || POST !== post) return;
-      $("editorstatus").textContent = sentence(err);
+      // Never leave the last parts on show: they can belong to another post, or to an
+      // older version of this one, and an edit made on them is refused (I-01).
+      INSPECT = null;
+      selectedLayer = null;
+      const retry = document.createElement("button");
+      retry.type = "button";
+      retry.className = "secondary";
+      retry.textContent = "Try again";
+      retry.addEventListener("click", () => { loadInspect(); });
+      $("editorbody").replaceChildren(retry);
+      $("editorstatus").textContent = `Could not load this poster's parts: ${sentence(err)}`;
       setEditorBusy(false);
     }
   })();
@@ -3260,9 +3270,9 @@ async function sendEdit(body) {
 }
 
 function paintEditor() {
+  if (!INSPECT) return; // nothing loaded: keep what is shown (empty, or "Try again")
   const root = $("editorbody");
   root.replaceChildren();
-  if (!INSPECT) return;
   setEditorBusy(false);
   for (const button of $("editortabs").querySelectorAll("button")) {
     button.setAttribute("aria-checked", button.dataset.tab === editorTab ? "true" : "false");
@@ -3900,6 +3910,10 @@ async function openPost(id, options) {
   POST = id;
   INSPECT = null;
   selectedLayer = null;
+  // The editor shows nothing until this post's parts arrive (I-01).
+  $("editorbody").replaceChildren();
+  $("editorstatus").textContent = "";
+  setEditorBusy(true);
   clearPointing();
   paintTweakPalette();
   stickScroll = null;
