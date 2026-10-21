@@ -8,12 +8,13 @@ write a spec directly.
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Annotated, Literal
+from typing import Annotated, Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from stratum_spec.models import (
     Adjust,
+    Aspect,
     AssetRef,
     Box,
     Canvas,
@@ -24,6 +25,7 @@ from stratum_spec.models import (
     Fade,
     FontToken,
     ImageLayer,
+    Layer,
     LayerId,
     LayoutOverride,
     LogoLayer,
@@ -204,6 +206,29 @@ class Align(BaseOp):
     y: Literal["top", "middle", "bottom"] | None = None
 
 
+class Place(BaseOp):
+    """Put a part exactly here, in ONE size: what dragging it on the canvas does.
+
+    Every other size keeps the part where it was. A story is laid out on its own, so
+    dragging the headline in the feed post must not move it in the story; that is
+    what each size's own tab in the editor promises.
+
+    `box` is in fractions of that size. `text_size`, for words only, is the size they
+    should be drawn at, as a fraction of that size's height: dragging a corner of a
+    text box makes the words bigger or smaller with it, as in every editor. Without
+    it the words keep fitting themselves to the box. `max_lines`, for words only, is
+    how many lines they may take: a narrower column takes more lines at the same size,
+    rather than shrinking the words until they are cut short.
+    """
+
+    op: Literal["place"] = "place"
+    layer: LayerId
+    aspect: Aspect
+    box: Box
+    text_size: float | None = Field(default=None, gt=0.0, le=1.0)
+    max_lines: int | None = Field(default=None, ge=1, le=12)
+
+
 class NeedsHuman(BaseOp):
     """The request was understood but is not mechanical ("make it pop")."""
 
@@ -231,9 +256,12 @@ EditOp = Annotated[
     | Reorder
     | SetOpacity
     | Align
+    | Place
     | NeedsHuman,
     Field(discriminator="op"),
 ]
+
+SIZES: tuple[Aspect, ...] = get_args(Aspect)
 
 _ASSET_LAYERS = (ImageLayer, CutoutLayer, LogoLayer)
 _COLOR_LAYERS = (ShapeLayer, TextLayer)
@@ -508,6 +536,8 @@ def apply_op(spec: PosterSpec, op: EditOp) -> PosterSpec:
         return _apply_new(spec, op, target)
     if isinstance(op, Reorder | SetOpacity | Align):
         return _apply_place(spec, op, target)
+    if isinstance(op, Place):
+        return _placed(spec, op, target)
 
     if isinstance(op, SetText):
         if not isinstance(target, TextLayer):
@@ -675,6 +705,55 @@ def _apply_place(spec: PosterSpec, op: Reorder | SetOpacity | Align, target: obj
         }
         for aspect, overrides in spec.variants.items()
     }
+    return spec.model_copy(update={"layers": layers, "variants": variants})
+
+
+def _kept_on(target: object, box: Box) -> Box:
+    """Words and a logo stay wholly on the poster: dragged past an edge, they stop at
+    it. A photo or a shape may run off the edge, as a bleed does."""
+    if not isinstance(target, TextLayer | LogoLayer):
+        return box
+    w, h = min(box.w, 1.0), min(box.h, 1.0)
+    return box.model_copy(
+        update={"w": w, "h": h, "x": _clamp(box.x, 0.0, 1.0 - w), "y": _clamp(box.y, 0.0, 1.0 - h)}
+    )
+
+
+def _placed(spec: PosterSpec, op: Place, target: Layer) -> PosterSpec:
+    """One size's layout for one part; see Place."""
+    if target.locked:
+        raise OpError(f"layer {op.layer!r} is locked")
+    if (op.text_size is not None or op.max_lines is not None) and not isinstance(target, TextLayer):
+        raise OpError(f"layer {op.layer!r} has no words to size")
+    base = op.aspect == spec.canvas.aspect
+    own = spec.variants.get(op.aspect, {})
+    current = LayoutOverride() if base else own.get(op.layer, LayoutOverride())
+    fields: dict[str, object] = {"box": _kept_on(target, op.box)}
+    if isinstance(target, TextLayer) and op.text_size is not None:
+        smallest = current.min_size if current.min_size is not None else target.min_size
+        fields |= {"max_size": op.text_size, "min_size": min(smallest, op.text_size)}
+    if op.max_lines is not None:
+        fields["max_lines"] = op.max_lines
+    if not base:
+        theirs = current.model_copy(update=fields)
+        return spec.model_copy(
+            update={"variants": {**spec.variants, op.aspect: {**own, op.layer: theirs}}}
+        )
+    # The base size is the layer itself, and every size without a layout of its own
+    # for this part was using it: those sizes keep the values they were drawn with.
+    before = {name: getattr(target, name) for name in fields}
+    variants = dict(spec.variants)
+    for aspect in SIZES:
+        if aspect == spec.canvas.aspect:
+            continue
+        overrides = dict(variants.get(aspect, {}))
+        theirs = overrides.get(op.layer, LayoutOverride())
+        kept = {name: value for name, value in before.items() if getattr(theirs, name) is None}
+        if kept:
+            overrides[op.layer] = theirs.model_copy(update=kept)
+            variants[aspect] = overrides
+    placed = target.model_copy(update=fields)
+    layers = [placed if one.id == op.layer else one for one in spec.layers]
     return spec.model_copy(update={"layers": layers, "variants": variants})
 
 

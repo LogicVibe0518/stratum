@@ -1,4 +1,4 @@
-.PHONY: setup sync check lint fmt type test live api notebook notebook-v2 design-sheet frame-sheet copy-eval chat-eval feature-walk
+.PHONY: setup sync check lint fmt type test live api web web-dev web-check notebook notebook-v2 design-sheet frame-sheet copy-eval chat-eval feature-walk
 
 # Git hooks are shared by every worktree of a repo, and pre-commit writes the path of
 # THIS checkout's Python into them. Installing from a worktree would point the main
@@ -36,6 +36,19 @@ live: sync
 
 api: sync
 	uv run uvicorn stratum_api.main:app --reload --port 8000
+
+# The editor (apps/web, Node 22). `make web` builds it into apps/web/dist, which `make api`
+# then serves at http://localhost:8000/app. `make web-dev` is the same editor with instant
+# reloads at http://localhost:5173/app, talking to `make api`. Not part of `make check`:
+# CI runs `make web-check` as its own job.
+web:
+	cd apps/web && npm ci --no-audit --no-fund && npm run build
+
+web-dev:
+	cd apps/web && npm run dev
+
+web-check:
+	cd apps/web && npm ci --no-audit --no-fund && npm run check
 
 # The critic (M12a) is trained by a person, step by step, in this notebook. Opens
 # JupyterLab in the browser; jupyter, pandas and matplotlib are fetched for this run

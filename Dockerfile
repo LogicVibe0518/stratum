@@ -1,4 +1,13 @@
 # One image for both services; Railway gives each its own start command.
+
+# The editor (apps/web), built to static files that the API serves at /app.
+FROM node:22-slim AS web
+WORKDIR /web
+COPY apps/web/package.json apps/web/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY apps/web/ ./
+RUN npm run build
+
 FROM python:3.12-slim
 COPY --from=ghcr.io/astral-sh/uv:0.8 /uv /uvx /bin/
 
@@ -14,6 +23,7 @@ COPY apps/worker/pyproject.toml apps/worker/pyproject.toml
 RUN uv sync --all-packages --frozen --no-dev --no-install-workspace
 
 COPY . .
+COPY --from=web /web/dist apps/web/dist
 RUN uv sync --all-packages --frozen --no-dev \
  && useradd --create-home app && chown -R app /app
 USER app
