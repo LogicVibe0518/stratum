@@ -1015,6 +1015,7 @@ _OP_PROBLEMS: tuple[tuple[str, str], ...] = (
     ("shows the whole photo", "The {part} shows the whole photo, so there is nothing to move."),
     ("is locked", "The {part} is locked in this design."),
     ("holds no asset", "The {part} has no picture to swap."),
+    ("has no words to size", "The {part} has no words, so it has no text size."),
 )
 _LAYER_IN_ERROR = re.compile(r"layer '([^']+)'")
 
@@ -1576,8 +1577,22 @@ EDITOR_OPS = frozenset(
         "align",
         # One of the client's own photos, picked from the closest matches (M17a).
         "swap_asset",
+        # A part dragged or resized on the canvas, in one size (editor v2).
+        "place",
     }
 )
+# What the canvas may try without saving, while a person is still typing or dragging
+# (editor v2): every panel change but a photo swap, which frames the new photo first.
+TRY_OPS = EDITOR_OPS - {"swap_asset"}
+# Each size as History names it.
+SIZE_NAMES = {"4:5": "post", "1:1": "square post", "9:16": "story", "16:9": "banner"}
+
+
+def moved_on(latest: int, version: int) -> str:
+    return (
+        f"The poster is on version {latest} now, not {version}. Reload to see it, then make "
+        f"the change again."
+    )
 
 
 def _new_op_note(op: EditOp, part: str) -> str:
@@ -1586,6 +1601,7 @@ def _new_op_note(op: EditOp, part: str) -> str:
         AdjustPhoto,
         Align,
         Flip,
+        Place,
         Reorder,
         SetAlign,
         SetCase,
@@ -1595,6 +1611,9 @@ def _new_op_note(op: EditOp, part: str) -> str:
         SetOpacity,
     )
 
+    if isinstance(op, Place):
+        done = "resized" if op.text_size is not None else "placed"
+        return f"{part} {done} in the {SIZE_NAMES[op.aspect]}"
     if isinstance(op, SetFade):
         return f"{part} faded at the {op.edge}" if op.length else f"no fade at the {part} {op.edge}"
     if isinstance(op, Flip):
@@ -1669,6 +1688,22 @@ def editor_note(
     return f"Editor: {text}"[:200]
 
 
+def with_own_layout(
+    ctx: Context, post: dict[str, Any], spec: PosterSpec, ops: list[EditOp]
+) -> PosterSpec:
+    """A poster from before posters carried their own sizes (schema 3) gets its
+    template's sizes written into it before one size is placed by hand (editor v2).
+
+    Otherwise the first part placed in one size would be the only layout the poster
+    carried, and every other size would lose its template layout at the next render.
+    """
+    from stratum_spec.ops import Place
+
+    if spec.variants or not any(isinstance(op, Place) for op in ops):
+        return spec
+    return embed(spec, file_variants(ctx, post["template_id"]))
+
+
 async def _own_photos_only(ctx: Context, client: dict[str, Any], ops: list[EditOp]) -> None:
     """A photo swapped in by hand must be one of this client's photos: another client's
     photo on this poster would be a leak between the agency's clients."""
@@ -1711,10 +1746,7 @@ async def edit(
         raise DraftError("this post has no draft yet")
     latest = versions[0]
     if latest["version"] != version:
-        raise PosterChanged(
-            f"The poster is on version {latest['version']} now, not {version}. Reload to "
-            f"see it, then make the change again."
-        )
+        raise PosterChanged(moved_on(latest["version"], version))
     unknown = sorted({str(one.get("op")) for one in raw_ops} - EDITOR_OPS)
     if unknown:
         raise DraftError(f"The editor cannot make that change ({', '.join(unknown)}).")
@@ -1727,7 +1759,7 @@ async def edit(
     except ValidationError as exc:
         raise DraftError("That change is outside what the editor allows.") from exc
     await _own_photos_only(ctx, client, ops)
-    spec = load_spec(latest["spec"])
+    spec = with_own_layout(ctx, post, load_spec(latest["spec"]), ops)
     kit = await kit_for(ctx, client, spec.brand_kit_version)
     off_brand = off_brand_colour(ops, kit, client)
     if off_brand is not None:
@@ -1815,6 +1847,160 @@ async def inspect_post(
         **panel,
         "style": style_options(post["template_id"], kit, len(photos)),
     }
+
+
+# --- the canvas (editor v2): the poster as the browser draws it ---------------------------
+
+# A photo is sent to the editor at most this many pixels on its longer side: twice the
+# largest canvas on a laptop screen, so it stays sharp on a retina display.
+WEB_SIDE = 2048
+WEB_QUALITY = 86
+FONT_DIR = "assets/fonts"
+
+
+def faces(kit: BrandKit) -> list[dict[str, Any]]:
+    """The brand's fonts as the browser loads them: the same files the renderer uses,
+    so the words break and sit where they do in the finished poster. Only files in
+    assets/fonts are served (GET /fonts/{name})."""
+    seen: dict[tuple[str, int], dict[str, Any]] = {}
+    for face in kit.fonts.values():
+        path = Path(face.file)
+        if path.parent.as_posix() != FONT_DIR:
+            continue
+        seen[(face.family, face.weight)] = {
+            "family": face.family,
+            "weight": face.weight,
+            "url": f"/fonts/{path.name}",
+        }
+    return list(seen.values())
+
+
+async def _latest_version(ctx: Context, post: dict[str, Any]) -> dict[str, Any]:
+    versions = await ctx.supa.select(
+        "post_versions", post_id=f"eq.{post['id']}", order="version.desc", limit="1"
+    )
+    if not versions:
+        raise DraftError("this post has no draft yet")
+    latest: dict[str, Any] = versions[0]
+    return latest
+
+
+async def _tried_ops(
+    ctx: Context, client: dict[str, Any], kit: BrandKit, raw_ops: list[dict[str, Any]]
+) -> list[EditOp]:
+    """Changes the canvas is trying, checked exactly as a saved change is."""
+    unknown = sorted({str(one.get("op")) for one in raw_ops} - TRY_OPS)
+    if unknown:
+        raise DraftError(f"The editor cannot try that change ({', '.join(unknown)}).")
+    try:
+        ops = OPS.validate_python(raw_ops)
+    except ValidationError as exc:
+        raise DraftError("That change is outside what the editor allows.") from exc
+    off_brand = off_brand_colour(ops, kit, client)
+    if off_brand is not None:
+        raise DraftError(off_brand["question"])
+    _, font_refused = without_unknown_fonts(kit, ops)
+    if font_refused:
+        raise DraftError(font_refused)
+    return ops
+
+
+async def canvas_view(
+    ctx: Context,
+    post: dict[str, Any],
+    client: dict[str, Any],
+    aspect: str,
+    *,
+    version: int | None = None,
+    raw_ops: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """One size of the latest version as the editor's canvas draws it: the poster as SVG
+    markup, the fonts it uses, and every layer measured, as inspect measures it.
+
+    With `raw_ops`, the same for the poster those changes would make, saved nowhere:
+    what the canvas shows while someone is still typing or dragging. Nothing is
+    written and no model runs; `version` is the version they were looking at.
+    """
+    from stratum_worker.app import actions
+    from stratum_worker.edit.inspect import inspect
+    from stratum_worker.render.svg import build_svg, relinked
+
+    if aspect not in post["aspects"]:
+        raise DraftError(f"This post has no {aspect} size.")
+    latest = await _latest_version(ctx, post)
+    if version is not None and latest["version"] != version:
+        raise PosterChanged(moved_on(latest["version"], version))
+    spec = load_spec(latest["spec"])
+    kit = await kit_for(ctx, client, spec.brand_kit_version)
+    if raw_ops:
+        ops = await _tried_ops(ctx, client, kit, raw_ops)
+        try:
+            spec = apply_ops(with_own_layout(ctx, post, spec, ops), ops)
+        except OpError as exc:
+            raise DraftError(plain_op_error(exc)) from exc
+    one = retarget(spec, aspect, file_variants(ctx, post["template_id"]))
+    asset_paths = {sha: await local_path(ctx, sha) for sha in one.assets()}
+    sizes = await actions.photo_sizes(asset_paths)
+    root = ctx.settings.repo_root
+    fits = measure(one, kit, root=root)
+    panel, svg = await asyncio.gather(
+        asyncio.to_thread(inspect, one, kit, root, fits=fits, photo_sizes=sizes),
+        asyncio.to_thread(build_svg, one, kit, assets=asset_paths, root=root),
+    )
+    # Every asset is one the latest version draws: a try never brings in a new one.
+    links = {sha: f"/api/versions/{latest['id']}/assets/{sha}" for sha in asset_paths}
+    return {
+        "version": latest["version"],
+        "version_id": latest["id"],
+        **panel,
+        "svg": relinked(svg, asset_paths, links),
+        "faces": faces(kit),
+    }
+
+
+def web_copy(settings: Settings, sha: str, path: str) -> tuple[bytes, str]:
+    """One asset as the editor's browser gets it: at most WEB_SIDE pixels on its longer
+    side, JPEG for a photo, PNG for anything see-through (a logo, a subject matte).
+    Made once and kept: the bytes behind a SHA-256 never change."""
+    from PIL import Image
+
+    folder = settings.asset_cache.parent / "web" / sha[:2]
+    for ext, media in (("jpg", "image/jpeg"), ("png", "image/png")):
+        kept = folder / f"{sha}.{ext}"
+        if kept.is_file():
+            return kept.read_bytes(), media
+    with Image.open(path) as image:
+        image.load()
+        clear = image.mode in ("RGBA", "LA", "L", "1") or (
+            image.mode == "P" and "transparency" in image.info
+        )
+        if image.mode in ("P", "1"):
+            made = image.convert("RGBA" if clear and image.mode == "P" else "L")
+        else:
+            made = image.copy() if clear else image.convert("RGB")
+    made.thumbnail((WEB_SIDE, WEB_SIDE), Image.Resampling.LANCZOS)
+    out = io.BytesIO()
+    if clear:
+        made.save(out, "PNG", optimize=True)
+        ext, media = "png", "image/png"
+    else:
+        made.save(out, "JPEG", quality=WEB_QUALITY, optimize=True, progressive=True)
+        ext, media = "jpg", "image/jpeg"
+    data = out.getvalue()
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / f"{sha}.{ext}").write_bytes(data)
+    return data, media
+
+
+async def version_asset(ctx: Context, version_id: str, sha: str) -> tuple[bytes, str] | None:
+    """An asset the caller may see because a version they may see draws it; None
+    otherwise. Row-level security decides the version, the version decides the asset:
+    a subject matte has no asset row of its own, and must still reach the canvas."""
+    rows = await ctx.supa.select("post_versions", id=f"eq.{version_id}", select="spec")
+    if not rows or sha not in load_spec(rows[0]["spec"]).assets():
+        return None
+    path = await local_path(ctx, sha)
+    return await asyncio.to_thread(web_copy, ctx.settings, sha, path)
 
 
 OPEN_IN_CANVA = """How to finish these posts in Canva

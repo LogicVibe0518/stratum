@@ -31,14 +31,14 @@ compositor renders it. AI models may generate a *background*, never a finished p
 
 ## Stack
 Python 3.12 · uv workspace · FastAPI · Pydantic v2 · Postgres (Supabase) with a lease-based job queue · resvg + HarfBuzz (uharfbuzz) + Pillow ·
-One-file web UI served by FastAPI (`apps/api/static`) for the pilot; Next.js + shadcn/ui later · pytest + Hypothesis · ruff · mypy (strict on packages/) ·
+One-file web UI served by FastAPI (`apps/api/static`) for the pilot, replaced step by step by the editor in `apps/web` (Vite + React + TypeScript, Radix, built to static files the API serves at `/app`) · pytest + Hypothesis · Vitest · ruff · mypy (strict on packages/) ·
 Langfuse (AI traces) · Sentry · OpenTelemetry.
 
 ## Repo map
 - `packages/spec` — the layer spec + edit-op schema (source of truth). Pure Python, no I/O.
 - `apps/api` — FastAPI: auth, commands (start workflows), reads.
 - `apps/worker` — the job queue, compositor, image ops, AI gateway calls.
-- `apps/web` — Next.js editor + client review page.
+- `apps/web` — the editor (Vite + React + TypeScript): the poster canvas, served by the API at `/app`.
 - `ml/` — command-model data, training, evals.
 - `benchmarks/` — frozen Client Lab benchmark (5 fictional clients). Read-only per version.
 - `docs/adr/` — architecture decision records. **Written by the human owner, not by agents.**

@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -23,7 +24,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel, Field, ValidationError
 from stratum_spec import SCHEMA_VERSION, BrandKit
 from stratum_spec.models import Aspect
-from stratum_worker.app import lab, options, reviews, service
+from stratum_worker.app import actions, lab, options, reviews, service
 from stratum_worker.app.settings import Settings, settings
 from stratum_worker.app.supa import Supa, SupabaseError, close_pool
 from stratum_worker.assets.errors import (
@@ -696,6 +697,119 @@ async def edit_post(
         restyle=body.restyle,
         badge=body.badge,
     )
+
+
+# --- the canvas (editor v2) --------------------------------------------------------------
+
+
+class TryEdit(BaseModel):
+    """Changes the canvas shows before they are saved: a drag, words being typed."""
+
+    version: int = Field(ge=1)
+    aspect: Aspect
+    ops: list[dict[str, Any]] = Field(min_length=1, max_length=12)
+
+
+class Restore(BaseModel):
+    """The editor's undo and redo: make version `to` the poster again."""
+
+    version: int = Field(ge=1)  # the version the person was looking at
+    to: int = Field(ge=1)
+
+
+@app.get("/api/posts/{post_id}/canvas")
+async def post_canvas(
+    post_id: str, aspect: str = "4:5", ctx: service.Context = Depends(context)
+) -> dict[str, Any]:
+    """One size of the latest version as SVG markup, with its fonts and every layer
+    measured: what the editor's canvas draws and edits. `aspect` is "4:5" or "4x5"."""
+    post, client = await _post_and_client(ctx, post_id)
+    return await service.canvas_view(ctx, post, client, aspect.replace("x", ":"))
+
+
+@app.post("/api/posts/{post_id}/canvas/try")
+async def try_on_canvas(
+    post_id: str, body: TryEdit, ctx: service.Context = Depends(context)
+) -> dict[str, Any]:
+    """The canvas for the poster these changes would make. Nothing is saved, no model
+    runs; checked exactly as a saved change is. 409 if the poster has moved on."""
+    post, client = await _post_and_client(ctx, post_id)
+    return await service.canvas_view(
+        ctx, post, client, body.aspect, version=body.version, raw_ops=body.ops
+    )
+
+
+@app.post("/api/posts/{post_id}/restore")
+async def restore_version(
+    post_id: str, body: Restore, ctx: service.Context = Depends(context)
+) -> dict[str, Any]:
+    """Undo and redo in the editor: version `to` saved as the newest version. 409 if
+    the poster has a newer version than `version`, so a double press is one step."""
+    post, client = await _post_and_client(ctx, post_id)
+    return await actions.restore(ctx, post, client, version=body.version, to=body.to)
+
+
+SHA = re.compile(r"[0-9a-f]{64}")
+VERSION_ID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+
+
+@app.get("/api/versions/{version_id}/assets/{sha}")
+async def version_asset(
+    version_id: str, sha: str, ctx: service.Context = Depends(context)
+) -> Response:
+    """A photo, logo or subject matte the canvas draws, sized for a screen. Only an
+    asset that a version the caller can see draws; immutable, like the asset."""
+    if not SHA.fullmatch(sha) or not VERSION_ID.fullmatch(version_id):
+        raise HTTPException(404, "no such asset")
+    found = await service.version_asset(ctx, version_id, sha)
+    if found is None:
+        raise HTTPException(404, "no such asset")
+    data, media = found
+    return Response(
+        content=data,
+        media_type=media,
+        headers={"Cache-Control": "private, max-age=31536000, immutable"},
+    )
+
+
+FONT_FILE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,80}\.(ttf|otf|woff2?)")
+
+
+@app.get("/fonts/{name}")
+def font_file(name: str, conf: Settings = Depends(config)) -> FileResponse:
+    """The renderer's own font files (OFL, assets/fonts/LICENSES.md), so the canvas
+    breaks and sets words exactly as the finished poster does."""
+    folder = (conf.repo_root / service.FONT_DIR).resolve()
+    path = (folder / name).resolve()
+    if not FONT_FILE.fullmatch(name) or path.parent != folder or not path.is_file():
+        raise HTTPException(404, "no such font")
+    return FileResponse(path, headers={"Cache-Control": "public, max-age=86400"})
+
+
+# The editor (apps/web), built by `npm run build` into apps/web/dist. The page at "/"
+# stays until the editor does everything it does.
+WEB_DIST = Path("apps/web/dist")
+
+
+@app.get("/app")
+@app.get("/app/{path:path}")
+def web_app(path: str = "", conf: Settings = Depends(config)) -> Response:
+    dist = (conf.repo_root / WEB_DIST).resolve()
+    index = dist / "index.html"
+    if not index.is_file():
+        return Response(
+            "The editor is not built here. Run: cd apps/web && npm ci && npm run build",
+            status_code=404,
+            media_type="text/plain",
+        )
+    wanted = (dist / path).resolve() if path else index
+    if wanted.is_relative_to(dist) and wanted.is_file():
+        # Built files carry a hash in their names, so they can be kept forever;
+        # index.html names them, so it is always asked for again.
+        forever = wanted.parent.name == "assets"
+        cache = "public, max-age=31536000, immutable" if forever else "no-cache"
+        return FileResponse(wanted, headers={"Cache-Control": cache})
+    return FileResponse(index, headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/api/quick")
