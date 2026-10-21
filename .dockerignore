@@ -16,3 +16,5 @@ benchmarks
 !.env.example
 *.pem
 *.key
+**/node_modules
+apps/web/dist

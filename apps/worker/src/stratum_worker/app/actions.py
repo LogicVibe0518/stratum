@@ -22,6 +22,7 @@ from stratum_worker.app import service
 from stratum_worker.design import decode, is_design
 from stratum_worker.design.choose import Material, fill
 from stratum_worker.draft.bindings import binding_for
+from stratum_worker.draft.pipeline import DraftError
 from stratum_worker.edit.restyle import RestyleError, carry_over, said, targets
 from stratum_worker.photo.frame import frame_photos
 
@@ -184,6 +185,42 @@ async def undo(
         [previous] = await ctx.supa.select(
             "post_versions", post_id=f"eq.{post['id']}", order="version.asc", limit="1"
         )
+    version = await _bring_back(
+        ctx,
+        post,
+        client,
+        latest=latest,
+        previous=previous,
+        note=f"undo: back to version {previous['version']}",
+        message=message,
+        logged={"op": "undo", "all": everything},
+        started=started,
+    )
+    version["outcome"] = "applied"
+    version["note"] = (
+        f"Back to the first draft (version {previous['version']})."
+        if everything
+        else f"Back to version {previous['version']}."
+    )
+    version["why"] = version["note"]
+    version["seconds"] = round(time.perf_counter() - started, 2)
+    return version
+
+
+async def _bring_back(
+    ctx: service.Context,
+    post: dict[str, Any],
+    client: dict[str, Any],
+    *,
+    latest: dict[str, Any],
+    previous: dict[str, Any],
+    note: str,
+    message: str,
+    logged: dict[str, Any],
+    started: float,
+) -> dict[str, Any]:
+    """An earlier version's poster saved as the newest version, rendered again in every
+    size and recorded in History. What undo and the editor's undo and redo share."""
     spec = load_spec(previous["spec"])
     bound = spec.assets()
     asset_paths = {s: await service.local_path(ctx, s) for s in bound if isinstance(s, str)}
@@ -195,13 +232,7 @@ async def undo(
     )
     flags = [*flags, *service.brief_flags(as_it_was, spec)]
     saved = await service.save_version(
-        ctx,
-        post,
-        spec,
-        renders,
-        flags,
-        note=f"undo: back to version {previous['version']}",
-        after=latest["version"],
+        ctx, post, spec, renders, flags, note=note, after=latest["version"]
     )
     if template_id != post["template_id"]:
         await ctx.supa.update(
@@ -214,7 +245,7 @@ async def undo(
             "post_id": post["id"],
             "from_version": latest["version"],
             "message": message,
-            "ops": [{"op": "undo", "all": everything}],
+            "ops": [logged],
             "outcome": "applied",
             "latency_ms": int((time.perf_counter() - started) * 1000),
             "cost_usd": 0,
@@ -222,15 +253,61 @@ async def undo(
         },
     )
     version: dict[str, Any] = saved
-    version["outcome"] = "applied"
-    version["note"] = (
-        f"Back to the first draft (version {previous['version']})."
-        if everything
-        else f"Back to version {previous['version']}."
-    )
-    version["why"] = version["note"]
-    version["seconds"] = round(time.perf_counter() - started, 2)
     return version
 
 
-__all__ = ["MAX_TRIES", "Restyled", "client_photos", "photo_sizes", "restyle", "undo"]
+async def restore(
+    ctx: service.Context,
+    post: dict[str, Any],
+    client: dict[str, Any],
+    *,
+    version: int,
+    to: int,
+) -> dict[str, Any]:
+    """The editor's undo and redo (editor v2): version `to` made the poster again, as a
+    new version, when the person was looking at `version`.
+
+    Typed "undo" goes back one step from whatever is newest, so undoing twice undid
+    the undo. An editor keeps its own list of the states it went through and names
+    the one it wants; refused like any hand edit when the poster has moved on.
+    """
+    started = time.perf_counter()
+    rows = await ctx.supa.select(
+        "post_versions", post_id=f"eq.{post['id']}", order="version.desc", limit="1"
+    )
+    if not rows:
+        raise DraftError("this post has no draft yet")
+    latest = rows[0]
+    if latest["version"] != version:
+        raise service.PosterChanged(service.moved_on(latest["version"], version))
+    if to == version:
+        raise DraftError("That is the poster already.")
+    wanted = await ctx.supa.select("post_versions", post_id=f"eq.{post['id']}", version=f"eq.{to}")
+    if not wanted:
+        raise DraftError(f"This post has no version {to}.")
+    saved = await _bring_back(
+        ctx,
+        post,
+        client,
+        latest=latest,
+        previous=wanted[0],
+        note=f"editor: back to version {to}",
+        message=f"Editor: back to version {to}",
+        logged={"op": "restore", "to": to},
+        started=started,
+    )
+    saved["outcome"] = "applied"
+    saved["note"] = saved["why"] = f"Back to version {to}."
+    saved["seconds"] = round(time.perf_counter() - started, 2)
+    return saved
+
+
+__all__ = [
+    "MAX_TRIES",
+    "Restyled",
+    "client_photos",
+    "photo_sizes",
+    "restore",
+    "restyle",
+    "undo",
+]

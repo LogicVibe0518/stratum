@@ -83,6 +83,19 @@ def _href(path: str) -> str:
     return escape(path, {chr(34): "&quot;"})
 
 
+def relinked(svg: str, assets: Mapping[str, str], links: Mapping[str, str]) -> str:
+    """The same SVG with each asset's file path swapped for a link (editor v2).
+
+    build_svg needs the files themselves (a photo's framing and a logo's plate are
+    worked out from the file's size), so the editor's copy is drawn from the files
+    and then pointed at URLs a browser can fetch.
+    """
+    for sha, path in assets.items():
+        if sha in links:
+            svg = svg.replace(f'href="{_href(path)}"', f'href="{_href(links[sha])}"')
+    return svg
+
+
 def _framing(
     layer: ImageLayer, geom: tuple[float, ...], size: tuple[int, int]
 ) -> tuple[float, float, float, float]:

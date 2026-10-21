@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
-from stratum_spec import BrandKit, PosterSpec, apply_ops, retarget
+from stratum_spec import Box, BrandKit, PosterSpec, apply_ops, retarget
 from stratum_spec.ops import (
     AdjustPhoto,
     Align,
@@ -32,6 +32,7 @@ from stratum_spec.ops import (
     Flip,
     Move,
     Pan,
+    Place,
     Reorder,
     Scale,
     SetAlign,
@@ -100,6 +101,24 @@ WALK: tuple[Step, ...] = (
     Step("collage design", "collage"),
     # Photos by what is in them (M17a): the closest photo, picked in the panel.
     Step("another photo", "panel", (SwapAsset(layer="bg", asset="b" * 64),)),
+    # The canvas (editor v2): dragged in one size only; a corner sizes the words too.
+    Step(
+        "logo dragged in the story",
+        "type",
+        (Place(layer="logo", aspect="9:16", box=Box(x=0.676, y=0.7, w=0.25, h=0.046)),),
+    ),
+    Step(
+        "headline corner-dragged",
+        "panel",
+        (
+            Place(
+                layer="headline",
+                aspect="4:5",
+                box=Box(x=0.074, y=0.6, w=0.852, h=0.16),
+                text_size=0.07,
+            ),
+        ),
+    ),
 )
 
 TILE_H = 220
