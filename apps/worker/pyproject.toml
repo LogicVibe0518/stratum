@@ -16,6 +16,9 @@ dependencies = [
   "onnxruntime>=1.20",
   # SigLIP's tokenizer (M17a). Apache-2.0.
   "sentencepiece>=0.2",
+  # ES256 for the worker's per-job tokens, signed with a key imported into Supabase's
+  # JWT signing keys (queue/identity.py). Apache-2.0 OR BSD-3-Clause.
+  "cryptography>=50.0.2",
 ]
 # M7 adds: dbos. Add when the module starts.
 
