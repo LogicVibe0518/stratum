@@ -51,6 +51,18 @@ class SupabaseError(RuntimeError):
         super().__init__(f"supabase {status}: {detail}")
 
 
+# Supabase's API keys (sb_publishable_..., sb_secret_...) replaced the legacy anon and
+# service-role keys, which were JWTs. An API key is not a JWT: it goes in `apikey` only,
+# and the gateway refuses one sent as a bearer token. A client that holds no user token
+# (the queue's ledger, a review link) then sends no Authorization header at all, and the
+# gateway gives the request the key's own role. Legacy keys are still sent both ways.
+API_KEY_PREFIXES = ("sb_publishable_", "sb_secret_")
+
+
+def is_api_key(token: str) -> bool:
+    return token.startswith(API_KEY_PREFIXES)
+
+
 @dataclass
 class Supa:
     base_rest: str
@@ -64,10 +76,11 @@ class Supa:
     def _headers(self, extra: dict[str, str] | None = None) -> dict[str, str]:
         headers = {
             "apikey": self.api_key,
-            "Authorization": f"Bearer {self.access_token}",
             "Accept-Profile": self.schema,
             "Content-Profile": self.schema,
         }
+        if not is_api_key(self.access_token):
+            headers["Authorization"] = f"Bearer {self.access_token}"
         headers.update(extra or {})
         return headers
 

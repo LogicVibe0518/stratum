@@ -19,14 +19,17 @@ writes. A worker that minted a token from that field would act as whoever the ca
 named - someone in agency A could name a user in agency B. Never mint a credential
 from a value a user can write.
 
-Signing is HS256 with the project's JWT secret, done with the standard library. The
-project signs its own sessions with ES256, but it still accepts tokens signed with
-that secret (the publishable key the API uses is one). If the secret is ever revoked,
-swap TokenSigner for one holding a private key imported into Supabase's JWT keys;
-nothing else here changes.
+Signing: ES256 with a private key the worker holds and the project trusts (KeySigner,
+SUPABASE_JWT_PRIVATE_KEY). The key is made on the owner's machine (`--new-key`) and
+imported into Supabase's JWT signing keys; the project keeps trusting it until it is
+revoked there, and nothing but this worker ever holds it. The legacy JWT secret
+(TokenSigner, HS256, SUPABASE_JWT_SECRET) still works for a project that has not
+revoked it, but that secret also signed the legacy anon and service-role keys: after
+the Railway incident (21 Oct 2026) it was revoked, so a deployed worker uses a key.
 
 Try it against the live project before trusting it:
 
+    uv run python -m stratum_worker.queue.identity --new-key      # once, on your machine
     uv run python -m stratum_worker.queue.identity --check <user-uuid>
 """
 
@@ -41,9 +44,9 @@ import json
 import time
 import uuid
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from stratum_worker.app.supa import Supa, SupabaseError
 from stratum_worker.queue.jobs import Job
@@ -52,7 +55,10 @@ from stratum_worker.queue.ledger import WORKER_ENV, worker_env
 
 PUBLISHABLE = "SUPABASE_ANON_KEY"
 JWT_SECRET = "SUPABASE_JWT_SECRET"  # noqa: S105 - the variable's name, not a secret
+PRIVATE_KEY = "SUPABASE_JWT_PRIVATE_KEY"  # the variable's name, not a key
 ROLE = "authenticated"
+# The fields of a private P-256 key as Supabase's dashboard imports it (a JWK).
+JWK_FIELDS = ("kty", "kid", "crv", "x", "y", "d")
 
 # Our clock and the database's disagree by a little. iat is backdated so a token is
 # never "issued in the future", and exp carries some slack past the lease.
@@ -73,8 +79,107 @@ def _compact(value: dict[str, Any]) -> bytes:
     return json.dumps(value, separators=(",", ":"), sort_keys=True).encode("utf-8")
 
 
+def _user_claims(
+    user_id: str, issuer: str, *, expires_at: int, now: float | None
+) -> dict[str, Any]:
+    issued = int(time.time() if now is None else now)
+    if expires_at <= issued:
+        raise PermissionError("refusing to sign a token that is already expired")
+    return {
+        "aud": ROLE,
+        "role": ROLE,
+        "sub": user_id,
+        "iss": issuer,
+        "iat": issued - CLOCK_SKEW_S,
+        "exp": expires_at,
+        "is_anonymous": False,
+    }
+
+
+class Signer(Protocol):
+    """Makes the token a job runs with. Two kinds: a private key (KeySigner) or the
+    legacy shared secret (TokenSigner)."""
+
+    @property
+    def issuer(self) -> str: ...
+
+    def user_token(self, user_id: str, *, expires_at: int, now: float | None = None) -> str: ...
+
+
+@dataclass(frozen=True)
+class KeySigner:
+    """ES256 with a private key imported into the project's JWT signing keys.
+
+    `jwk` is the key as made by `--new-key` (and as pasted into the dashboard): a P-256
+    private key with its kid. Every token names that kid, so the project knows which of
+    its trusted keys to check it with.
+    """
+
+    jwk: dict[str, str]
+    issuer: str
+    _key: Any = field(init=False, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        from cryptography.hazmat.primitives.asymmetric import ec
+
+        missing = [name for name in JWK_FIELDS if not self.jwk.get(name)]
+        if missing:
+            raise ValueError(f"the signing key has no {', '.join(missing)}: is it the private key?")
+        if self.jwk["kty"] != "EC" or self.jwk["crv"] != "P-256":
+            raise ValueError("the signing key must be an ES256 key (EC, curve P-256)")
+        secret = int.from_bytes(_b64url_decode(self.jwk["d"]), "big")
+        key = ec.derive_private_key(secret, ec.SECP256R1())
+        public = key.public_key().public_numbers()
+        if (_b64url(public.x.to_bytes(32, "big")), _b64url(public.y.to_bytes(32, "big"))) != (
+            self.jwk["x"],
+            self.jwk["y"],
+        ):
+            raise ValueError("the signing key's private and public halves do not match")
+        object.__setattr__(self, "_key", key)
+
+    @property
+    def kid(self) -> str:
+        return self.jwk["kid"]
+
+    def sign(self, claims: dict[str, Any]) -> str:
+        from cryptography.hazmat.primitives import hashes
+        from cryptography.hazmat.primitives.asymmetric import ec
+        from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
+
+        head = _b64url(_compact({"alg": "ES256", "kid": self.kid, "typ": "JWT"}))
+        body = _b64url(_compact(claims))
+        der = self._key.sign(f"{head}.{body}".encode("ascii"), ec.ECDSA(hashes.SHA256()))
+        r, s = decode_dss_signature(der)
+        # JWS wants the two numbers side by side (RFC 7518 3.4), not the DER that
+        # cryptography returns.
+        return f"{head}.{body}.{_b64url(r.to_bytes(32, 'big') + s.to_bytes(32, 'big'))}"
+
+    def user_token(self, user_id: str, *, expires_at: int, now: float | None = None) -> str:
+        return self.sign(_user_claims(user_id, self.issuer, expires_at=expires_at, now=now))
+
+
+def new_key() -> dict[str, str]:
+    """A new ES256 signing key, as a private JWK with a fresh kid."""
+    from cryptography.hazmat.primitives.asymmetric import ec
+
+    key = ec.generate_private_key(ec.SECP256R1())
+    numbers = key.private_numbers()
+    public = numbers.public_numbers
+    return {
+        "kty": "EC",
+        "kid": str(uuid.uuid4()),
+        "crv": "P-256",
+        "x": _b64url(public.x.to_bytes(32, "big")),
+        "y": _b64url(public.y.to_bytes(32, "big")),
+        "d": _b64url(numbers.private_value.to_bytes(32, "big")),
+    }
+
+
 @dataclass(frozen=True)
 class TokenSigner:
+    """HS256 with the project's legacy JWT secret. Only for a project that still trusts
+    that secret; see the module docstring."""
+
     secret: bytes
     issuer: str
 
@@ -91,20 +196,7 @@ class TokenSigner:
         return f"{head}.{body}.{_b64url(mac.digest())}"
 
     def user_token(self, user_id: str, *, expires_at: int, now: float | None = None) -> str:
-        issued = int(time.time() if now is None else now)
-        if expires_at <= issued:
-            raise PermissionError("refusing to sign a token that is already expired")
-        return self.sign(
-            {
-                "aud": ROLE,
-                "role": ROLE,
-                "sub": user_id,
-                "iss": self.issuer,
-                "iat": issued - CLOCK_SKEW_S,
-                "exp": expires_at,
-                "is_anonymous": False,
-            }
-        )
+        return self.sign(_user_claims(user_id, self.issuer, expires_at=expires_at, now=now))
 
 
 def claims_of(token: str) -> dict[str, Any]:
@@ -150,7 +242,7 @@ class ScopedClientFactory:
 
     url: str
     publishable_key: str
-    signer: TokenSigner
+    signer: Signer
     bucket: str = "stratum"
     # Injected so tests do not depend on today's date: the first version of these
     # tests pinned a lease to a fixed morning and started failing that afternoon.
@@ -182,32 +274,40 @@ def _refuse_privileged(key: str) -> None:
 def from_env(env_file: Path = WORKER_ENV) -> ScopedClientFactory:
     """The factory `stratum-queue --factory stratum_worker.queue.identity:from_env` loads.
 
-    Reads SUPABASE_URL, SUPABASE_ANON_KEY and SUPABASE_JWT_SECRET from the worker's
-    environment or .env.worker, never from the API's .env.
+    Reads SUPABASE_URL, SUPABASE_ANON_KEY (the publishable key) and the signing key from
+    the worker's environment or .env.worker, never from the API's .env. The signing key
+    is SUPABASE_JWT_PRIVATE_KEY (a private JWK, see `--new-key`); without it, the legacy
+    SUPABASE_JWT_SECRET.
     """
     env = worker_env(env_file)
     url = env.get("SUPABASE_URL", "").rstrip("/")
     key = env.get(PUBLISHABLE, "")
+    private = env.get(PRIVATE_KEY, "")
     secret = env.get(JWT_SECRET, "")
-    missing = [
-        name
-        for name, value in (("SUPABASE_URL", url), (PUBLISHABLE, key), (JWT_SECRET, secret))
-        if not value
-    ]
+    missing = [name for name, value in (("SUPABASE_URL", url), (PUBLISHABLE, key)) if not value]
+    if not private and not secret:
+        missing.append(PRIVATE_KEY)
     if missing:
         raise RuntimeError(
             f"the worker needs {', '.join(missing)} in its environment or in {env_file}. "
-            "The JWT secret is in the Supabase dashboard under Settings, JWT Keys, "
-            "Legacy JWT secret."
+            f"Make a signing key with `python -m stratum_worker.queue.identity --new-key`."
         )
     _refuse_privileged(key)
-    if secret == env.get(SERVICE_KEY):
-        raise RuntimeError(f"{JWT_SECRET} is set to the service-role key, not the JWT secret")
-    return ScopedClientFactory(
-        url=url,
-        publishable_key=key,
-        signer=TokenSigner(secret=secret.encode("utf-8"), issuer=f"{url}/auth/v1"),
-    )
+    issuer = f"{url}/auth/v1"
+    signer: Signer
+    if private:
+        try:
+            jwk = json.loads(private)
+        except ValueError as exc:
+            raise RuntimeError(f"{PRIVATE_KEY} is not a JSON key (a JWK)") from exc
+        if not isinstance(jwk, dict):
+            raise RuntimeError(f"{PRIVATE_KEY} is not a JSON key (a JWK)")
+        signer = KeySigner(jwk={str(k): str(v) for k, v in jwk.items()}, issuer=issuer)
+    else:
+        if secret == env.get(SERVICE_KEY):
+            raise RuntimeError(f"{JWT_SECRET} is set to the service-role key, not the JWT secret")
+        signer = TokenSigner(secret=secret.encode("utf-8"), issuer=issuer)
+    return ScopedClientFactory(url=url, publishable_key=key, signer=signer)
 
 
 # --- a smoke test against the live project -------------------------------------------
@@ -237,8 +337,9 @@ async def _check(user_id: str) -> dict[str, Any]:
     except SupabaseError as exc:
         if exc.status in (401, 403):
             raise SystemExit(
-                f"the database rejected the token ({exc.detail}). The JWT secret in "
-                ".env.worker is wrong, or the project no longer accepts it."
+                f"the database rejected the token ({exc.detail}). The project does not "
+                "trust the worker's signing key: import it in the dashboard (JWT signing "
+                "keys) and rotate it in, or check .env.worker."
             ) from exc
         raise
     finally:
@@ -251,8 +352,25 @@ def main(argv: list[str] | None = None) -> None:
         prog="python -m stratum_worker.queue.identity",
         description="Sign a token for one user and ask the database who that is.",
     )
-    parser.add_argument("--check", metavar="USER_ID", required=True)
+    what = parser.add_mutually_exclusive_group(required=True)
+    what.add_argument("--check", metavar="USER_ID")
+    what.add_argument(
+        "--new-key",
+        action="store_true",
+        help="print a new ES256 signing key: paste it into the dashboard and the worker's env",
+    )
     args = parser.parse_args(argv)
+    if args.new_key:
+        made = new_key()
+        print(
+            "A new signing key for the worker. It is printed once and kept nowhere.\n\n"
+            "1. Supabase dashboard > Project Settings > JWT Keys > create a standby key,\n"
+            "   import this JSON, then rotate it in.\n"
+            f"2. Put the same line in .env.worker and the worker's host as {PRIVATE_KEY}=\n"
+            "3. Clear the terminal. Never commit it or paste it into a chat.\n\n"
+            f"kid: {made['kid']}\n\n{json.dumps(made, separators=(',', ':'))}"
+        )
+        return
     me = asyncio.run(_check(args.check))
     if not me.get("agency_id"):
         raise SystemExit(
