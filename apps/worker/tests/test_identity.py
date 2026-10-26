@@ -4,7 +4,9 @@ These pin the properties a reviewer should check by hand in identity.py:
 - the token names the job's requester and nobody else, and is verifiable with the secret;
 - it dies with the lease, measured on the database's clock;
 - the client presents the publishable key, never the service-role key;
-- a job without a trustworthy requester is refused before any work, permanently.
+- a job without a trustworthy requester is refused before any work, permanently;
+- with a private key (the deployed worker since the Railway incident), the token is
+  ES256, names the key's kid, verifies with the public half and says the same thing.
 """
 
 from __future__ import annotations
@@ -24,10 +26,13 @@ from stratum_worker.app.supa import Supa
 from stratum_worker.queue.fake import World
 from stratum_worker.queue.identity import (
     CLOCK_SKEW_S,
+    KeySigner,
     ScopedClientFactory,
     TokenSigner,
     claims_of,
     from_env,
+    main,
+    new_key,
 )
 from stratum_worker.queue.jobs import Job
 from stratum_worker.queue.worker import Deps, QueueWorker
@@ -176,6 +181,7 @@ def clean_env(monkeypatch: pytest.MonkeyPatch) -> pytest.MonkeyPatch:
         "SUPABASE_URL",
         "SUPABASE_ANON_KEY",
         "SUPABASE_JWT_SECRET",
+        "SUPABASE_JWT_PRIVATE_KEY",
         "SUPABASE_SERVICE_ROLE_KEY",
     ):
         monkeypatch.delenv(name, raising=False)
@@ -203,7 +209,7 @@ def test_from_env_builds_a_factory_from_the_worker_file(
 
 def test_from_env_names_what_is_missing(tmp_path: Path, clean_env: pytest.MonkeyPatch) -> None:
     env = _write(tmp_path / ".env.worker", SUPABASE_URL=URL)
-    with pytest.raises(RuntimeError, match="SUPABASE_ANON_KEY, SUPABASE_JWT_SECRET"):
+    with pytest.raises(RuntimeError, match="SUPABASE_ANON_KEY, SUPABASE_JWT_PRIVATE_KEY"):
         from_env(env)
 
 
@@ -234,3 +240,121 @@ def test_from_env_refuses_the_service_key_posing_as_the_jwt_secret(
     )
     with pytest.raises(RuntimeError, match="not the JWT secret"):
         from_env(env)
+
+
+# --- ES256: a private key the project trusts --------------------------------------------
+
+
+def _verify_es256(token: str, jwk: dict[str, str]) -> tuple[dict[str, Any], dict[str, Any]]:
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.hazmat.primitives.asymmetric.utils import encode_dss_signature
+
+    def raw(text: str) -> bytes:
+        return base64.urlsafe_b64decode(text + "=" * (-len(text) % 4))
+
+    head, body, sig = token.split(".")
+    public = ec.EllipticCurvePublicNumbers(
+        int.from_bytes(raw(jwk["x"]), "big"), int.from_bytes(raw(jwk["y"]), "big"), ec.SECP256R1()
+    ).public_key()
+    signature = raw(sig)
+    assert len(signature) == 64, "a JWS ES256 signature is r and s, 32 bytes each"
+    der = encode_dss_signature(
+        int.from_bytes(signature[:32], "big"), int.from_bytes(signature[32:], "big")
+    )
+    public.verify(der, f"{head}.{body}".encode(), ec.ECDSA(hashes.SHA256()))  # raises if not
+    return json.loads(raw(head)), claims_of(token)
+
+
+def _key_factory(jwk: dict[str, str]) -> ScopedClientFactory:
+    return ScopedClientFactory(
+        url=URL,
+        publishable_key=PUBLISHABLE,
+        signer=KeySigner(jwk, f"{URL}/auth/v1"),
+        clock=lambda: CLAIMED_AT,
+    )
+
+
+def test_a_new_key_is_a_private_p256_jwk_with_a_fresh_kid() -> None:
+    one, two = new_key(), new_key()
+    assert set(one) == {"kty", "kid", "crv", "x", "y", "d"}
+    assert (one["kty"], one["crv"]) == ("EC", "P-256")
+    assert one["kid"] != two["kid"] and one["d"] != two["d"]
+    uuid.UUID(one["kid"])
+
+
+def test_the_key_token_names_its_kid_and_verifies_with_the_public_half() -> None:
+    jwk = new_key()
+    token = _key_factory(jwk)(_job()).access_token
+    header, claims = _verify_es256(token, jwk)
+    assert header == {"alg": "ES256", "kid": jwk["kid"], "typ": "JWT"}
+    # Exactly what the secret-signed token says: same person, same lease, same role.
+    legacy = claims_of(_factory()(_job()).access_token)
+    assert claims == legacy
+    assert claims["sub"] == USER and claims["role"] == "authenticated"
+
+
+def test_a_key_token_does_not_verify_with_another_key() -> None:
+    from cryptography.exceptions import InvalidSignature
+
+    token = _key_factory(new_key())(_job()).access_token
+    with pytest.raises(InvalidSignature):
+        _verify_es256(token, new_key())
+
+
+@pytest.mark.parametrize(
+    ("change", "said"),
+    [
+        ({"d": ""}, "no d"),
+        ({"crv": "P-384"}, "curve P-256"),
+        ({"kty": "RSA"}, "curve P-256"),
+    ],
+)
+def test_a_broken_key_is_refused(change: dict[str, str], said: str) -> None:
+    with pytest.raises(ValueError, match=said):
+        KeySigner({**new_key(), **change}, "issuer")
+
+
+def test_halves_of_two_different_keys_are_refused() -> None:
+    mixed = {**new_key(), "d": new_key()["d"]}
+    with pytest.raises(ValueError, match="do not match"):
+        KeySigner(mixed, "issuer")
+
+
+def test_from_env_prefers_the_private_key(tmp_path: Path, clean_env: pytest.MonkeyPatch) -> None:
+    jwk = new_key()
+    env = _write(
+        tmp_path / ".env.worker",
+        SUPABASE_URL=URL,
+        SUPABASE_ANON_KEY=PUBLISHABLE,
+        SUPABASE_JWT_PRIVATE_KEY=json.dumps(jwk),
+        SUPABASE_JWT_SECRET="j" * 40,
+    )
+    factory = replace(from_env(env), clock=lambda: CLAIMED_AT)
+    header, claims = _verify_es256(factory(_job()).access_token, jwk)
+    assert header["kid"] == jwk["kid"] and claims["sub"] == USER
+
+
+def test_from_env_refuses_a_key_that_is_not_json(
+    tmp_path: Path, clean_env: pytest.MonkeyPatch
+) -> None:
+    env = _write(
+        tmp_path / ".env.worker",
+        SUPABASE_URL=URL,
+        SUPABASE_ANON_KEY=PUBLISHABLE,
+        SUPABASE_JWT_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----",
+    )
+    with pytest.raises(RuntimeError, match="not a JSON key"):
+        from_env(env)
+
+
+def test_the_new_key_command_prints_one_key_and_how_to_use_it(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    main(["--new-key"])
+    out = capsys.readouterr().out
+    jwk = json.loads(out.strip().splitlines()[-1])
+    assert set(jwk) == {"kty", "kid", "crv", "x", "y", "d"}
+    assert f"kid: {jwk['kid']}" in out
+    assert "SUPABASE_JWT_PRIVATE_KEY" in out and "never commit" in out.lower()
+    KeySigner(jwk, "issuer")  # the printed key loads
