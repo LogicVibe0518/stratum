@@ -14,6 +14,7 @@ import contextlib
 import importlib
 import logging
 import os
+import random
 import signal
 import socket
 import time
@@ -48,6 +49,13 @@ log = logging.getLogger("stratum.queue")
 DEFAULT_LEASE_S = 180
 # While the queue is unreachable, wait idle_s, then twice that, and so on up to this.
 MAX_IDLE_S = 30.0
+# Live, 26 Oct: four idle loops asking every second were 332,000 requests a day, most
+# of a free project's quota, to learn there was nothing to do. A loop asks every
+# idle_s for a minute after its last job (a designer making a run of changes), then
+# the whole pool asks about once every QUIET_S between them: about 22,000 a day, and
+# a first change after a quiet spell waits a couple of seconds longer.
+QUIET_AFTER_S = 60.0
+QUIET_S = 4.0
 # The database said no to the worker's own key: a wrong key, or grants missing. Asking
 # again cannot change the answer, so the worker stops and says why.
 REFUSED = frozenset({401, 403})
@@ -212,6 +220,10 @@ class QueueWorker:
     idle_s: float = 1.0
     worker_id: str = field(default_factory=new_worker_id)
     handlers: Mapping[str, Handler] = field(default_factory=lambda: HANDLERS)
+    # This loop's own wait once the queue has been quiet for QUIET_AFTER_S. A pool of
+    # n loops sets n * QUIET_S, so the pool together asks about once every QUIET_S.
+    quiet_s: float = QUIET_S
+    last_job: float = field(default_factory=time.monotonic)
 
     async def run_once(self) -> bool:
         """Claim and finish at most one job. True if there was one."""
@@ -278,15 +290,25 @@ class QueueWorker:
                 failures += 1
                 self._unavailable(exc, failures)
                 handled = False
-            if not handled:
+            if handled:
+                self.last_job = time.monotonic()
+            else:
                 with contextlib.suppress(TimeoutError):
                     await asyncio.wait_for(stop.wait(), timeout=self.pause(failures))
 
-    def pause(self, failures: int) -> float:
-        """Seconds to wait before asking again: idle_s, then doubling up to MAX_IDLE_S."""
-        if failures == 0:
+    def pause(self, failures: int, now: float | None = None) -> float:
+        """Seconds to wait before asking again.
+
+        Unreachable: idle_s, then doubling up to MAX_IDLE_S. Reachable and empty:
+        idle_s within QUIET_AFTER_S of this loop's last job, then quiet_s, give or take
+        a quarter so the loops of a pool do not ask in step.
+        """
+        if failures:
+            return min(MAX_IDLE_S, self.idle_s * 2.0**failures)
+        quiet_for = (time.monotonic() if now is None else now) - self.last_job
+        if quiet_for < QUIET_AFTER_S or self.quiet_s <= self.idle_s:
             return self.idle_s
-        return min(MAX_IDLE_S, self.idle_s * 2.0**failures)
+        return self.quiet_s * random.uniform(0.75, 1.25)  # noqa: S311 - jitter, not a secret
 
     def _unavailable(self, exc: BaseException, failures: int) -> None:
         """One line per failed try. A traceback only for the unexpected.
@@ -317,8 +339,11 @@ async def run_pool(
     stop: asyncio.Event,
     lease_seconds: int = DEFAULT_LEASE_S,
     idle_s: float = 1.0,
+    quiet_s: float = QUIET_S,
 ) -> None:
-    """`concurrency` loops in one process, each its own worker with its own id."""
+    """`concurrency` loops in one process, each its own worker with its own id.
+
+    Once quiet, the pool as a whole asks about once every `quiet_s`."""
     workers = [
         QueueWorker(
             ledger=ledger,
@@ -327,6 +352,7 @@ async def run_pool(
             lease_seconds=lease_seconds,
             idle_s=idle_s,
             worker_id=new_worker_id(slot),
+            quiet_s=quiet_s * concurrency,
         )
         for slot in range(concurrency)
     ]
