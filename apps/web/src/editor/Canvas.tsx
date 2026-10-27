@@ -13,7 +13,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { loadFaces, pictureURL } from "../lib/assets";
+import { loadFaces, PHOTO_DRAG, pictureURL } from "../lib/assets";
 import {
   CORNERS,
   type Guide,
@@ -25,6 +25,7 @@ import {
   MIN_SIZE_PX,
   mapBox,
   moveRect,
+  photoAt,
   type Point,
   resize,
   SIDES,
@@ -122,6 +123,8 @@ export function Canvas({
   const [room, setRoom] = useState({ width: 800, height: 600 });
   const [zoom, setZoom] = useState<"fit" | number>("fit");
   const [hover, setHover] = useState<string | null>(null);
+  // The photo a photo dragged from the Photos panel would replace, while it is held over it.
+  const [dropOn, setDropOn] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [live, setLive] = useState<Live | null>(null);
   const gesture = useRef<Gesture | null>(null);
@@ -466,6 +469,28 @@ export function Canvas({
         onPointerCancel={end}
         onPointerLeave={() => setHover(null)}
         onDoubleClick={doubleClick}
+        onDragOver={(event) => {
+          if (!event.dataTransfer.types.includes(PHOTO_DRAG)) return;
+          const under = photoAt(shown, toPoster(event));
+          if (!under) {
+            event.dataTransfer.dropEffect = "none";
+            setDropOn(null);
+            return;
+          }
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "copy";
+          setDropOn(under.id);
+        }}
+        onDragLeave={() => setDropOn(null)}
+        onDrop={(event) => {
+          const sha = event.dataTransfer.getData(PHOTO_DRAG);
+          const under = photoAt(shown, toPoster(event));
+          setDropOn(null);
+          if (!sha || !under) return;
+          event.preventDefault();
+          onSelect(under.id);
+          if (under.asset !== sha) apply([{ op: "swap_asset", layer: under.id, asset: sha }]);
+        }}
         role="application"
         aria-label="Poster canvas"
       >
@@ -477,6 +502,9 @@ export function Canvas({
           height={height * scale}
         >
           {hovered && hovered.visible ? <OutlineRect rect={frameOf(hovered)} className="hover" /> : null}
+          {dropOn && byId.get(dropOn) ? (
+            <OutlineRect rect={frameOf(byId.get(dropOn) as LayerInfo)} className="drop" />
+          ) : null}
           {live?.guides.map((guide, index) =>
             guide.axis === "x" ? (
               <line

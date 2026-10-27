@@ -114,6 +114,36 @@ export interface PostDetail {
   renders: { aspect: Aspect; url: string }[];
   flags: Flag[];
   edits: { message: string; outcome: string; latency_ms: number; created_at: string }[];
+  /** The three options of a "best three" draft, in the order shown; empty otherwise. */
+  options: DesignOption[];
+}
+
+export interface DesignOption {
+  id: string;
+  name: string;
+  position: number;
+  design_id: string;
+  title: string;
+  /** "/previews/options/<id>/{shape}.webp": {shape} is "4x5", "1x1", ... */
+  preview: string;
+}
+
+/** One of the client's files (GET /api/clients/{id}/assets). `url` is signed for an hour. */
+export interface Asset {
+  id: string;
+  sha256: string;
+  kind: "photo" | "logo" | string;
+  width: number | null;
+  height: number | null;
+  url: string;
+  photo_type: string | null;
+}
+
+/** A version saved by POST /options/{id}/pick: the version row. */
+export interface SavedVersion {
+  id: string;
+  version: number;
+  note: string | null;
 }
 
 /** A version saved by /edit, /restore or /tweak, or a change that was not made. */
@@ -126,6 +156,9 @@ export interface ChangeResult {
   unable?: string;
   question?: string;
   choices?: { label: string; kind: "tweak" | "brand" }[];
+  /** "Which photo?": the client's photos to pick from, and the photo part to put it in. */
+  photos?: { sha256: string; probability: number | null }[];
+  layer?: string | null;
   seconds?: number;
 }
 
@@ -142,4 +175,5 @@ export type Op =
   | { op: "text_effect"; layer: string; kind: "shadow" | "outline" | "none" }
   | { op: "set_opacity"; layer: string; opacity: number }
   | { op: "dim"; layer: string; amount: number }
-  | { op: "flip"; layer: string };
+  | { op: "flip"; layer: string }
+  | { op: "swap_asset"; layer: string; asset: string };

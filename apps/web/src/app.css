@@ -1132,3 +1132,206 @@ kbd {
         transition-duration: 1ms !important;
     }
 }
+
+/* --- Designs, Photos, History (side panel) ---------------------------------------------- */
+
+.small {
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+.thumb {
+    display: grid;
+    place-items: center;
+    width: 100%;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    background: var(--raised);
+    border: 1px solid var(--line);
+    color: var(--subtle);
+}
+
+.thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.thumb .skeleton {
+    width: 100%;
+    height: 100%;
+}
+
+.badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 6px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    background: var(--raised);
+    border: 1px solid var(--line-strong);
+    color: var(--text);
+    white-space: nowrap;
+}
+
+.option-list {
+    display: grid;
+    gap: 12px;
+}
+
+.option-card {
+    display: grid;
+    gap: 6px;
+    padding: 6px;
+    border-radius: var(--radius);
+    border: 1px solid var(--line);
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition:
+        border-color var(--fast) var(--ease-out),
+        transform var(--fast) var(--ease-out);
+}
+
+.option-card:hover {
+    border-color: var(--line-strong);
+}
+
+.option-card:active {
+    transform: scale(0.98);
+}
+
+.option-card[aria-pressed="true"] {
+    border-color: var(--accent);
+    cursor: default;
+}
+
+.option-card .caption {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+}
+
+.option-card .caption .badge,
+.option-card .caption .spinner {
+    margin-left: auto;
+}
+
+.photo-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+}
+
+.photo-tile {
+    position: relative;
+    padding: 0;
+    aspect-ratio: 1;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    border: 1px solid var(--line);
+    background: var(--raised);
+    cursor: grab;
+    transition:
+        border-color var(--fast) var(--ease-out),
+        transform var(--fast) var(--ease-out);
+}
+
+.photo-tile:hover {
+    border-color: var(--accent);
+}
+
+.photo-tile:active {
+    transform: scale(0.97);
+    cursor: grabbing;
+}
+
+.photo-tile:disabled {
+    cursor: default;
+    opacity: 0.6;
+}
+
+.photo-tile img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.photo-tile .badge.on {
+    position: absolute;
+    left: 6px;
+    bottom: 6px;
+}
+
+.history-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 10px;
+}
+
+.history-row {
+    display: grid;
+    grid-template-columns: 56px 1fr auto;
+    align-items: center;
+    gap: 10px;
+    padding: 6px;
+    border-radius: var(--radius-sm);
+    border: 1px solid transparent;
+}
+
+.history-row:not(:has(.thumb)) {
+    grid-template-columns: 1fr auto;
+}
+
+.history-row[data-current="true"] {
+    border-color: var(--line-strong);
+    background: var(--raised);
+}
+
+.history-row .label {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+    font-size: 12px;
+}
+
+.history-row .label b {
+    white-space: nowrap;
+}
+
+.history-row .label .note {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+}
+
+.ask-photos {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.overlay .drop {
+    fill: var(--accent-soft);
+    stroke: var(--accent);
+    stroke-width: 2;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .option-card,
+    .photo-tile {
+        transition: none;
+    }
+}

@@ -8,6 +8,7 @@ import {
   layerAt,
   lockAxis,
   mapBox,
+  photoAt,
   resize,
   snapMove,
   snapResize,
@@ -206,5 +207,23 @@ describe("boxes", () => {
     expect(transformBetween({ x: 0, y: 0, w: 10, h: 10 }, { x: 5, y: 5, w: 20, h: 20 })).toBe(
       "matrix(2 0 0 2 5 5)",
     );
+  });
+});
+
+describe("dropping a photo from the panel", () => {
+  const right = layer({ id: "photo_b", kind: "photo", px: { x: 540, y: 0, w: 540, h: 700 }, order: 2 });
+  const fixed = layer({
+    id: "photo_c",
+    kind: "photo",
+    locked: true,
+    px: { x: 0, y: 0, w: 540, h: 700 },
+    order: 3,
+  });
+
+  it("lands on the topmost photo under the pointer, never on words or a locked photo", () => {
+    const layers = [...LAYERS, right, fixed];
+    expect(photoAt(layers, { x: 800, y: 300 })?.id).toBe("photo_b");
+    expect(photoAt(layers, { x: 200, y: 300 })?.id).toBe("bg"); // the locked one is skipped
+    expect(photoAt([panel, headline], { x: 200, y: 900 })).toBeNull();
   });
 });
