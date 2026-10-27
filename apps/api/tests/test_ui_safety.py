@@ -214,3 +214,20 @@ def test_the_editor_never_shows_another_posts_parts() -> None:
     assert "INSPECT = null;" in failed
     assert '$("editorbody").replaceChildren(retry);' in failed
     assert 'retry.textContent = "Try again";' in failed
+
+
+def test_the_page_opens_the_new_editor_on_the_same_post() -> None:
+    assert 'id="openeditor"' in PAGE
+    assert "window.location.assign(`/app/posts/${POST}`)" in PAGE
+
+
+def test_brand_colour_chips_name_each_colour_once() -> None:
+    body = _function_body("paintTweakPalette")
+    assert "named.has(word)" in body
+
+
+def test_photo_choices_swap_by_click_without_server_strings_in_markup() -> None:
+    body = _function_body("photoChoices")
+    assert "innerHTML" not in body
+    assert '{ op: "swap_asset", layer, asset: photo.sha256 }' in body
+    assert "out.photos" in PAGE and "await photoChoices(out.photos, out.layer)" in PAGE

@@ -130,9 +130,26 @@ make web-dev    # tab 2: http://localhost:5173/app (or `make web` and open http:
 4. `/canvas/try` shows the server's picture of unsaved changes; it writes nothing and runs no model.
 5. Undo/redo name the version to restore; versions are never overwritten.
 
+## Phase 2a (27 Oct 2026): the side panel and sharing
+
+- **Designs** - the three options of a "Best three" draft, drawn by the server; a click picks one
+  (`POST /options/{id}/pick`), and the designer's words and changes come along (0032). Opens first
+  when a post has options, as Canva opens on its design panel.
+- **Photos** - the client's own photos. A click puts one in the selected photo (or the only one);
+  dragging one onto any photo on the canvas swaps it there (`swap_asset`, outlined while held over).
+- **History** - every version, newest first, with its picture (fetched once on screen) and note;
+  "Bring back" saves that version as the newest (`/restore`).
+- **Share for review** - one review link for the post (`POST /api/reviews`), copied, status set to
+  In review.
+- Ask Stratum's "which photo?" answers show the photos to click; with photo search off the server
+  now offers every photo instead of a dead end (I-45).
+- All four go through `EditorSession.call`, so they wait their turn behind unsaved edits and undo
+  covers them like any edit.
+- Old page: "Open in editor" on a post, one brand-colour chip per name, photo choices.
+
 ## Not in this phase
 
-Crop mode, drag-to-reorder layers, History strip, Designs and Photos rails, ⌘K, shortcut sheet,
-right-click menu, multi-select, rotation handle, rename, Share for review, warnings with a fix button,
-a browser smoke test in CI (run by hand for this PR). Parts that belong together move apart today: a
+Crop mode, drag-to-reorder layers, before/after slider, ⌘K, shortcut sheet, right-click menu,
+multi-select, rotation handle, rename, warnings with a fix button, a browser smoke test in CI (run by
+hand for this PR). Parts that belong together move apart today: a
 logo and the panel drawn behind it, a headline and its band (phase 2: groups, as Canva groups them).

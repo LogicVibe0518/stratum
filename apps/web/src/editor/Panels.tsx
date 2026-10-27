@@ -22,6 +22,7 @@ import { distinctColours } from "../lib/colours";
 import type { EditorSession } from "../lib/session";
 import type { Aspect, CanvasView, ChangeResult, Flag, LayerInfo, LayerKind, Op } from "../lib/types";
 import { Button, IconButton } from "../ui/Button";
+import { usePhotos } from "./photos";
 
 const ICONS: Record<LayerKind, typeof Type> = {
   text: Type,
@@ -152,6 +153,9 @@ interface Message {
   bad?: boolean;
   detail?: string;
   choices?: ChangeResult["choices"];
+  /** "Which photo?": the photos to pick from, and the part they would go in. */
+  photos?: string[];
+  layer?: string;
 }
 
 function suggestions(layer: LayerInfo | undefined): string[] {
@@ -164,6 +168,7 @@ function suggestions(layer: LayerInfo | undefined): string[] {
 export function AskPanel({
   session,
   postId,
+  clientId,
   layer,
   aspect,
   flags,
@@ -171,6 +176,7 @@ export function AskPanel({
 }: {
   session: EditorSession;
   postId: string;
+  clientId: string;
   layer: LayerInfo | undefined;
   aspect: Aspect;
   flags: Flag[];
@@ -183,6 +189,8 @@ export function AskPanel({
   const log = useRef<HTMLDivElement>(null);
   const counter = useRef(0);
   const queries = useQueryClient();
+  const library = usePhotos(clientId);
+  const urls = new Map((library.data ?? []).map((photo) => [photo.sha256, photo.url]));
 
   useEffect(() => {
     log.current?.scrollTo({ top: log.current.scrollHeight, behavior: "smooth" });
@@ -218,6 +226,8 @@ export function AskPanel({
                 .join(" · ")
             : undefined,
           choices: result.choices,
+          photos: result.photos?.map((one) => one.sha256),
+          layer: result.layer ?? undefined,
         },
       ]);
       if (applied) void queries.invalidateQueries({ queryKey: ["post", postId] });
@@ -275,6 +285,28 @@ export function AskPanel({
                       {choice.label}
                     </button>
                   ))}
+              </div>
+            ) : null}
+            {message.photos?.length && message.layer ? (
+              <div className="ask-photos">
+                {message.photos.map((sha) =>
+                  urls.has(sha) ? (
+                    <button
+                      key={sha}
+                      type="button"
+                      className="photo-tile"
+                      aria-label="Use this photo"
+                      onClick={() => {
+                        session.apply([{ op: "swap_asset", layer: message.layer as string, asset: sha }]);
+                        setMessages((now) =>
+                          now.map((one) => (one.id === message.id ? { ...one, photos: undefined } : one)),
+                        );
+                      }}
+                    >
+                      <img src={urls.get(sha)} alt="" loading="lazy" draggable={false} />
+                    </button>
+                  ) : null,
+                )}
               </div>
             ) : null}
           </div>

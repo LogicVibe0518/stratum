@@ -161,6 +161,9 @@ button.card:hover:not(:disabled) { border-color: var(--line-strong); background:
 #tweakchoices { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 #tweakchoices:empty { display: none; }
 #tweakchoices button { height: auto; min-height: 36px; white-space: normal; text-align: left; }
+#tweakchoices .photo-choices { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; width: 100%; }
+#tweakchoices .photo-choice { display: grid; gap: 4px; padding: 4px; text-align: center; font-size: 12px; }
+#tweakchoices .photo-choice img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 6px; display: block; }
 #history .nowrap { white-space: nowrap; }
 #editorfields { border: 0; margin: 0; padding: 0; min-width: 0; }
 #editorfields:disabled { opacity: 0.65; }
@@ -1127,6 +1130,7 @@ button, input, select, textarea, .card, .badge, .drop, .switch-ui, .toast {
           </div>
         </div>
         <button type="button" class="secondary" id="download">Download all</button>
+        <button type="button" class="primary" id="openeditor" title="Drag, resize and type on the poster itself">Open in editor</button>
       </div>
     </div>
     <div class="stats">
@@ -3307,7 +3311,11 @@ function paintTweakPalette() {
   heading.textContent = "Brand colours:";
   const row = document.createElement("div");
   row.className = "tweak-swatches";
+  const named = new Set();
   for (const swatch of palette) {
+    const word = (swatch.name || "").trim().toLowerCase();
+    if (!word || named.has(word)) continue; // live, 26 Oct: "cool grey" and "white" twice
+    named.add(word);
     const button = document.createElement("button");
     button.type = "button";
     button.className = "tweak-swatch ghost";
@@ -4044,6 +4052,45 @@ function choiceButtons(choices) {
   }
 }
 
+// The photos a "which one?" answer offers (photo search off, or no clear match): each
+// with a button that swaps it in through the control panel - a click, no model.
+async function photoChoices(photos, layer) {
+  const root = $("tweakchoices");
+  root.replaceChildren();
+  const client = (POSTDATA && POSTDATA.client) || {};
+  let rows = [];
+  try {
+    rows = await api(`/clients/${client.id}/assets`);
+  } catch (err) {
+    $("tweakunable").textContent = sentence(err);
+    return;
+  }
+  const urls = new Map(rows.map((row) => [row.sha256, row.url]));
+  const grid = document.createElement("div");
+  grid.className = "photo-choices";
+  for (const photo of photos) {
+    const url = urls.get(photo.sha256);
+    if (!url) continue;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "photo-choice";
+    button.setAttribute("aria-label", "Use this photo");
+    const img = document.createElement("img");
+    img.src = url;
+    img.alt = "";
+    img.loading = "lazy";
+    const label = document.createElement("span");
+    label.textContent = photo.probability == null ? "Use this" : `Use this · ${Math.round(photo.probability * 100)}%`;
+    button.append(img, label);
+    button.addEventListener("click", async () => {
+      clearTweakAnswer();
+      await sendEdit({ ops: [{ op: "swap_asset", layer, asset: photo.sha256 }] });
+    });
+    grid.append(button);
+  }
+  root.append(grid);
+}
+
 function openBrandFromTweak() {
   const client = (POSTDATA && POSTDATA.client) || {};
   const opened = openClient(CLIENT && CLIENT.id === client.id ? CLIENT : client);
@@ -4143,8 +4190,14 @@ async function applyTweak(preset) {
     const out = await api(`/posts/${POST}/tweak`, { method: "POST", json: tweakBody(message) });
     const seconds = (performance.now() - started) / 1000;
     const asking = Array.isArray(out.choices) && out.choices.length;
+    const picking = Array.isArray(out.photos) && out.photos.length && out.layer;
     const declined = out.outcome && out.outcome !== "applied";
-    if (asking) {
+    if (picking) {
+      $("tweakwhy").textContent = out.question || out.why || "";
+      $("tweakwhy").className = "why";
+      await photoChoices(out.photos, out.layer);
+      await refreshPost({ fade: false, keepScroll: true, lastChange: seconds });
+    } else if (asking) {
       $("tweakwhy").textContent = out.question || out.why || "";
       $("tweakwhy").className = "why";
       choiceButtons(out.choices);
@@ -4287,6 +4340,11 @@ async function downloadCanva(aspect, button) {
     busy(button, false);
   }
 }
+
+// The new editor (apps/web, at /app): the same sign-in, the same post.
+$("openeditor").addEventListener("click", () => {
+  if (POST) window.location.assign(`/app/posts/${POST}`);
+});
 
 $("download").addEventListener("click", async () => {
   if (!POST) return;

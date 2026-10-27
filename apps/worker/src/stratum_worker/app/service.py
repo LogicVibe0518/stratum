@@ -1270,6 +1270,11 @@ async def tweak(
         refusal = _no_photo_search(client, found)
         if refusal and not ops and not restyles and not badges:
             await record("needs_human", raw, step.cost_usd)
+            if found is None and photos:
+                # Live, 26 Oct: "use the image of a mop" ended at "not switched on
+                # yet" - a dead end. Without the model, every photo is a choice.
+                target = _photo_target(spec, use.layer, photos)
+                return _pick_a_photo(use.description, photos, target)
             return {"outcome": "needs_human", "why": refusal}
         if refusal:
             result = result.model_copy(
@@ -1372,6 +1377,29 @@ def _photo_target(spec: PosterSpec, layer: str | None, photos: list[str]) -> str
     if own is not None:
         return own.id
     return images[0].id if images else None
+
+
+# The most photos a "which one?" answer shows.
+MAX_PICK = 12
+
+
+def _pick_a_photo(description: str, photos: list[str], layer: str | None) -> dict[str, Any]:
+    """Photo search is off: the client's photos, best first, for the designer to pick.
+
+    The same shape as _photo_question, so a page shows them the same way: each photo
+    with a button that swaps it in through the control panel (swap_asset)."""
+    question = (
+        f"I cannot search the photos by what is in them yet. Pick the one that shows "
+        f"{description.strip().rstrip('.')}, or upload one that does."
+    )
+    return {
+        "outcome": "needs_human",
+        "why": question,
+        "question": question,
+        "choices": [],
+        "photos": [{"sha256": sha, "probability": None} for sha in photos[:MAX_PICK]],
+        "layer": layer,
+    }
 
 
 def _photo_question(found: photo_search.Found, layer: str | None) -> dict[str, Any]:

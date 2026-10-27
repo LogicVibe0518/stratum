@@ -71,6 +71,14 @@ export function layerAt(layers: LayerInfo[], point: Point, slack = 0): LayerInfo
   return small ?? shown.find((one) => contains(frameOf(one), point, slack)) ?? null;
 }
 
+/** The topmost shown photo under a point: where a photo dragged from the panel lands. */
+export function photoAt(layers: LayerInfo[], point: Point): LayerInfo | null {
+  const photos = layers
+    .filter((one) => one.visible && !one.locked && one.kind === "photo")
+    .sort((a, b) => b.order - a.order);
+  return photos.find((one) => contains(frameOf(one), point)) ?? null;
+}
+
 /** The band a part is aligned to: the designs' margin, and a story's safe area. */
 export function band(aspect: Aspect, canvas: CanvasSize): Rect {
   const { width, height } = canvas;
