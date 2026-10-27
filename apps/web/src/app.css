@@ -1335,3 +1335,120 @@ kbd {
         transition: none;
     }
 }
+
+/* --- the shared demo -------------------------------------------------------------------- */
+
+.demo-entry {
+    display: grid;
+    gap: 8px;
+}
+
+.demo-entry .or {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--subtle);
+    font-size: 12px;
+    margin-top: 4px;
+}
+
+.demo-entry .or::before,
+.demo-entry .or::after {
+    content: "";
+    flex: 1;
+    border-top: 1px solid var(--line);
+}
+
+.demo-banner {
+    margin: 0;
+    padding: 10px 14px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--line-strong);
+    background: var(--raised);
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+/* --- the mark and the cost ---------------------------------------------------------------- */
+
+.logo {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text);
+    font-weight: 600;
+    letter-spacing: -0.02em;
+}
+
+.logo-word {
+    font-size: 1.05em;
+}
+
+.topbar .home {
+    color: var(--text);
+}
+
+.page-head .sep {
+    width: 1px;
+    height: 20px;
+    background: var(--line-strong);
+}
+
+.cost-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 30px;
+    padding: 0 10px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: none;
+    color: var(--muted);
+    font: inherit;
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+    transition: border-color var(--fast) var(--ease-out);
+}
+
+.cost-chip:hover {
+    border-color: var(--line-strong);
+    color: var(--text);
+}
+
+.cost-pop {
+    width: 300px;
+    padding: 14px;
+    display: grid;
+    gap: 10px;
+}
+
+.cost-pop h3 {
+    margin: 0;
+    font-size: 14px;
+}
+
+.cost-pop dl {
+    margin: 0;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 6px 12px;
+    font-size: 13px;
+}
+
+.cost-pop dt {
+    color: var(--muted);
+}
+
+.cost-pop dd {
+    margin: 0;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.cost-pop .total {
+    padding-top: 6px;
+    border-top: 1px solid var(--line);
+    color: var(--text);
+    font-weight: 600;
+}

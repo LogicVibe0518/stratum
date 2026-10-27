@@ -9,18 +9,23 @@ boundary, so there is no "admin path" to get wrong.
 from __future__ import annotations
 
 import asyncio
+import base64
+import json
 import logging
 import os
 import re
+import time
 import uuid
+from collections import deque
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
-from fastapi import Depends, FastAPI, Form, Header, HTTPException, UploadFile
-from fastapi.responses import FileResponse, JSONResponse, Response
+import httpx
+from fastapi import Depends, FastAPI, Form, Header, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from pydantic import BaseModel, Field, ValidationError
 from stratum_spec import SCHEMA_VERSION, BrandKit
 from stratum_spec.models import Aspect
@@ -42,7 +47,7 @@ from stratum_worker.draft.compose import ComposeError
 from stratum_worker.draft.pipeline import DraftError
 from stratum_worker.edit.pointing import Pointing
 from stratum_worker.gateway.config import load_config
-from stratum_worker.gateway.errors import NoProviderAvailable
+from stratum_worker.gateway.errors import BudgetExceeded, NoProviderAvailable
 from stratum_worker.gateway.gateway import Gateway
 from stratum_worker.gateway.providers.registry import build_router
 from stratum_worker.gateway.tasks import TaskName
@@ -123,19 +128,58 @@ async def supa(
     )
 
 
+def token_email(token: str) -> str:
+    """The email in a Supabase access token, lower-cased; "" if it has none.
+
+    Read without checking the signature: only ever called on a token the database has
+    just accepted (`me` ran with it), so its claims are the ones Supabase signed."""
+    try:
+        part = token.split(".")[1]
+        claims = json.loads(base64.urlsafe_b64decode(part + "=" * (-len(part) % 4)))
+    except (IndexError, ValueError):
+        return ""
+    email = claims.get("email") if isinstance(claims, dict) else None
+    return email.strip().lower() if isinstance(email, str) else ""
+
+
+def is_demo(token: str, conf: Settings) -> bool:
+    return conf.demo_on and token_email(token) == conf.demo_email.strip().lower()
+
+
+# The shared demo account's AI spend per day, in place of the agency default: a link on
+# a CV is clicked by strangers, and the providers' keys are shared with the real agency.
+DEMO_DAILY_CAP_USD = 0.5
+DEMO_REFUSED = (
+    "This is the shared demo, so uploads, new clients and new posts are switched off. "
+    "Everything on the existing posts can be changed."
+)
+
+
 async def context(
     client: Supa = Depends(supa), conf: Settings = Depends(config)
 ) -> service.Context:
     me = await client.rpc("me")
     if not isinstance(me, dict) or not me.get("agency_id"):
         raise HTTPException(403, "you are not in an agency yet")
+    agency = str(me["agency_id"])
+    demo = is_demo(client.access_token, conf)
+    if demo:
+        gateway().budget.caps[agency] = DEMO_DAILY_CAP_USD
     return service.Context(
         supa=client,
         settings=conf,
         gateway=gateway(),
-        agency_id=str(me["agency_id"]),
+        agency_id=agency,
         user_id=str(me.get("user_id") or "") or None,
+        demo=demo,
     )
+
+
+async def not_demo(ctx: service.Context = Depends(context)) -> service.Context:
+    """The context for what the shared demo may not do: upload, add, train."""
+    if ctx.demo:
+        raise HTTPException(403, DEMO_REFUSED)
+    return ctx
 
 
 @app.exception_handler(SupabaseError)
@@ -160,6 +204,16 @@ async def _brand_conflict(_: Any, exc: service.BrandConflict) -> Response:
 @app.exception_handler(service.PosterChanged)
 async def _poster_changed(_: Any, exc: service.PosterChanged) -> Response:
     return Response(content=str(exc)[:300], status_code=409, media_type="text/plain")
+
+
+@app.exception_handler(BudgetExceeded)
+async def _over_budget(_: Any, exc: BudgetExceeded) -> Response:
+    return Response(
+        content="Today's AI allowance for this account is used up. Instant changes and the "
+        "canvas still work; plain-English changes are back tomorrow.",
+        status_code=429,
+        media_type="text/plain",
+    )
 
 
 @app.exception_handler(NoProviderAvailable)
@@ -196,9 +250,64 @@ def healthz() -> dict[str, object]:
 
 
 @app.get("/api/config")
-def public_config(conf: Settings = Depends(config)) -> dict[str, str]:
+def public_config(conf: Settings = Depends(config)) -> dict[str, Any]:
     """What the browser needs to sign in. The publishable key is meant to be public."""
-    return {"url": conf.supabase_url, "key": conf.supabase_key}
+    return {"url": conf.supabase_url, "key": conf.supabase_key, "demo": conf.demo_on}
+
+
+# Sign-ins to the shared demo: per visitor, and for everyone together.
+DEMO_PER_IP = (10, 600.0)  # 10 in 10 minutes
+DEMO_ALL = (300, 3600.0)  # 300 an hour
+_demo_calls: dict[str, deque[float]] = {}
+
+
+def _allow(key: str, limit: tuple[int, float], now: float) -> bool:
+    count, window = limit
+    calls = _demo_calls.setdefault(key, deque())
+    while calls and now - calls[0] > window:
+        calls.popleft()
+    if len(calls) >= count:
+        return False
+    calls.append(now)
+    return True
+
+
+def _visitor(request: Request) -> str:
+    # Railway's proxy puts the visitor first in X-Forwarded-For.
+    forwarded = request.headers.get("x-forwarded-for", "")
+    first = forwarded.split(",")[0].strip()
+    return first or (request.client.host if request.client else "unknown")
+
+
+@app.post("/api/demo")
+async def demo_session(request: Request, conf: Settings = Depends(config)) -> dict[str, Any]:
+    """A session for the shared demo account, for the "Try the demo" button.
+
+    The server signs in with the demo account's password (DEMO_EMAIL / DEMO_PASSWORD on
+    the API's host) and hands back only the session, so the password is never in a page.
+    The account can change its posts but not upload, add or train (`not_demo`)."""
+    if not conf.demo_on:
+        raise HTTPException(404, "There is no demo on this server.")
+    now = time.monotonic()
+    if not (_allow(f"ip:{_visitor(request)}", DEMO_PER_IP, now) and _allow("all", DEMO_ALL, now)):
+        raise HTTPException(429, "The demo is busy. Try again in a few minutes.")
+    async with httpx.AsyncClient(timeout=15) as http:
+        answer = await http.post(
+            f"{conf.supabase_url}/auth/v1/token?grant_type=password",
+            headers={"apikey": conf.supabase_key, "Content-Type": "application/json"},
+            json={"email": conf.demo_email, "password": conf.demo_password.get_secret_value()},
+        )
+    if answer.status_code != 200:
+        logging.getLogger("stratum").warning("demo sign-in refused: HTTP %s", answer.status_code)
+        raise HTTPException(503, "The demo is not available right now.")
+    body = answer.json()
+    return {
+        "access_token": body["access_token"],
+        "refresh_token": body["refresh_token"],
+        "expires_at": body.get("expires_at"),
+        "user": {"email": conf.demo_email},
+        "demo": True,
+    }
 
 
 class Onboard(BaseModel):
@@ -206,7 +315,11 @@ class Onboard(BaseModel):
 
 
 @app.post("/api/onboard")
-async def onboard(body: Onboard, client: Supa = Depends(supa)) -> dict[str, Any]:
+async def onboard(
+    body: Onboard, client: Supa = Depends(supa), conf: Settings = Depends(config)
+) -> dict[str, Any]:
+    if is_demo(client.access_token, conf):
+        raise HTTPException(403, DEMO_REFUSED)
     agency_id = await client.rpc("onboard", {"agency_name": body.agency_name})
     return {"agency_id": agency_id}
 
@@ -236,7 +349,9 @@ async def list_clients(ctx: service.Context = Depends(context)) -> list[dict[str
 
 
 @app.post("/api/clients")
-async def create_client(body: NewClient, ctx: service.Context = Depends(context)) -> dict[str, Any]:
+async def create_client(
+    body: NewClient, ctx: service.Context = Depends(not_demo)
+) -> dict[str, Any]:
     if body.brand is not None:
         try:
             BrandKit.model_validate(body.brand)
@@ -284,7 +399,7 @@ async def upload_asset(
     client_id: str,
     file: UploadFile,
     kind: Annotated[str, Form()] = "photo",
-    ctx: service.Context = Depends(context),
+    ctx: service.Context = Depends(not_demo),
 ) -> dict[str, Any]:
     if kind not in ("photo", "logo"):
         raise HTTPException(400, "kind must be photo or logo")
@@ -401,7 +516,7 @@ async def suggest_brand(
 
 @app.put("/api/clients/{client_id}/brand")
 async def save_brand(
-    client_id: str, body: BrandSave, ctx: service.Context = Depends(context)
+    client_id: str, body: BrandSave, ctx: service.Context = Depends(not_demo)
 ) -> dict[str, Any]:
     """Save a palette as the client's next brand-kit version. Old posters keep theirs."""
     client = await _client(ctx, client_id)
@@ -467,7 +582,7 @@ async def list_posts(
 
 @app.post("/api/posts")
 async def create_post(
-    body: NewPost, queue: bool = False, ctx: service.Context = Depends(context)
+    body: NewPost, queue: bool = False, ctx: service.Context = Depends(not_demo)
 ) -> dict[str, Any]:
     if (
         body.template_id != AUTO
@@ -610,7 +725,7 @@ async def get_job(job_id: str, ctx: service.Context = Depends(context)) -> dict[
 @app.get("/api/posts/{post_id}")
 async def get_post(post_id: str, ctx: service.Context = Depends(context)) -> dict[str, Any]:
     post, client = await _post_and_client(ctx, post_id)
-    versions, edits, choices = await asyncio.gather(
+    versions, edits, choices, spent = await asyncio.gather(
         ctx.supa.select(
             "post_versions",
             post_id=f"eq.{post_id}",
@@ -626,6 +741,8 @@ async def get_post(post_id: str, ctx: service.Context = Depends(context)) -> dic
         ),
         # The three options of a "best three" draft (M12b); empty otherwise.
         options.latest_options(ctx, post_id),
+        # Every change's model cost, for "what this post has cost" (one number each).
+        ctx.supa.select("edits", post_id=f"eq.{post_id}", select="cost_usd"),
     )
     latest = versions[0] if versions else None
     renders: list[dict[str, Any]] = []
@@ -648,6 +765,22 @@ async def get_post(post_id: str, ctx: service.Context = Depends(context)) -> dic
         "flags": flags,
         "edits": edits,
         "options": choices,
+        "cost": post_cost(post, spent, gateway().budget.cap_for(ctx.agency_id)),
+    }
+
+
+def post_cost(post: dict[str, Any], spent: list[dict[str, Any]], cap: float) -> dict[str, Any]:
+    """What one post has cost in model calls: the draft (copy, caption, a background if
+    one was painted) and every plain-English change; changes made by hand cost nothing."""
+    paid = [float(row.get("cost_usd") or 0) for row in spent]
+    draft = float(post.get("cost_usd") or 0)
+    return {
+        "draft_usd": round(draft, 6),
+        "changes_usd": round(sum(paid), 6),
+        "total_usd": round(draft + sum(paid), 6),
+        "paid_changes": sum(1 for one in paid if one > 0),
+        "free_changes": sum(1 for one in paid if one == 0),
+        "daily_cap_usd": cap,
     }
 
 
@@ -972,7 +1105,7 @@ class LabAnswer(BaseModel):
 
 
 @app.post("/api/lab/screens")
-async def lab_make(body: LabRequest, ctx: service.Context = Depends(context)) -> dict[str, Any]:
+async def lab_make(body: LabRequest, ctx: service.Context = Depends(not_demo)) -> dict[str, Any]:
     """Queue a job that makes Taste Lab screens from the agency's posts."""
     job = await jobs.enqueue(
         ctx.supa,
@@ -992,7 +1125,7 @@ async def lab_next(ctx: service.Context = Depends(context)) -> dict[str, Any]:
 
 @app.post("/api/lab/screens/{screen_id}/answer")
 async def lab_answer(
-    screen_id: str, body: LabAnswer, ctx: service.Context = Depends(context)
+    screen_id: str, body: LabAnswer, ctx: service.Context = Depends(not_demo)
 ) -> dict[str, Any]:
     return await lab.answer(
         ctx,
@@ -1165,5 +1298,13 @@ async def decide_review(token: str, body: Decision, anon: Supa = Depends(anonymo
 
 
 @app.get("/")
-def index() -> FileResponse:
+def index() -> RedirectResponse:
+    """One link for everyone: the editor, which opens on the posts. 307 rather than
+    301, so browsers do not remember it while the first page still exists."""
+    return RedirectResponse("/app", status_code=307)
+
+
+@app.get("/classic")
+def classic() -> FileResponse:
+    """The first page - clients, uploads, new posts - until the editor does all of it."""
     return FileResponse(STATIC / "index.html")

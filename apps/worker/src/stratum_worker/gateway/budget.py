@@ -27,17 +27,23 @@ class Budget:
     """Tracks spend per agency per UTC day."""
 
     daily_cap_usd: float = DEFAULT_DAILY_CAP_USD
+    # A lower cap for one agency (the shared demo), in place of daily_cap_usd.
+    caps: dict[str, float] = field(default_factory=dict)
     _spent: dict[tuple[str, str], float] = field(default_factory=lambda: defaultdict(float))
+
+    def cap_for(self, agency_id: str) -> float:
+        return self.caps.get(agency_id, self.daily_cap_usd)
 
     def spent_today(self, agency_id: str) -> float:
         return self._spent[(agency_id, _today())]
 
     def check(self, agency_id: str, estimated_usd: float) -> None:
         """Raise before spending money we should not spend."""
-        if self.spent_today(agency_id) + estimated_usd > self.daily_cap_usd:
+        cap = self.cap_for(agency_id)
+        if self.spent_today(agency_id) + estimated_usd > cap:
             raise BudgetExceeded(
                 f"agency {agency_id} would exceed its daily cap of "
-                f"${self.daily_cap_usd:.2f} (spent ${self.spent_today(agency_id):.4f})"
+                f"${cap:.2f} (spent ${self.spent_today(agency_id):.4f})"
             )
 
     def record(self, agency_id: str, actual_usd: float) -> float:
@@ -48,4 +54,5 @@ class Budget:
 
     def warn_level(self, agency_id: str) -> float:
         """Fraction of the cap used today, for alerting."""
-        return self.spent_today(agency_id) / self.daily_cap_usd if self.daily_cap_usd else 0.0
+        cap = self.cap_for(agency_id)
+        return self.spent_today(agency_id) / cap if cap else 0.0
