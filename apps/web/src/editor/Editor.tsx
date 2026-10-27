@@ -4,7 +4,6 @@
 import * as Dropdown from "@radix-ui/react-dropdown-menu";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  ArrowLeft,
   Check,
   ChevronDown,
   CloudOff,
@@ -27,6 +26,8 @@ import { navigate } from "../lib/router";
 import { EditorSession } from "../lib/session";
 import { ASPECTS, type Aspect, type LayerInfo, type Op, type PostDetail } from "../lib/types";
 import { Button, IconButton } from "../ui/Button";
+import { LogoMark } from "../ui/Logo";
+import { CostChip } from "./Cost";
 import { editorApi } from "./api";
 import { Canvas } from "./Canvas";
 import { AskPanel, BrandPanel, LayersPanel } from "./Panels";
@@ -435,8 +436,8 @@ function TopBar({
 
   return (
     <header className="topbar">
-      <IconButton label="All posts" onClick={() => navigate("/")}>
-        <ArrowLeft size={18} />
+      <IconButton label="All posts" onClick={() => navigate("/")} className="home">
+        <LogoMark size={22} />
       </IconButton>
       <div className="name">
         <strong>{title.charAt(0).toUpperCase() + title.slice(1)}</strong>
@@ -500,6 +501,7 @@ function TopBar({
         ) : null}
       </span>
       <span className="grow" />
+      {detail.cost ? <CostChip cost={detail.cost} /> : null}
       <Dropdown.Root>
         <Dropdown.Trigger asChild>
           <Button variant="ghost">

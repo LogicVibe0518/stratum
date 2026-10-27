@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { LogOut, Plus } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, IconButton } from "../ui/Button";
+import { Logo } from "../ui/Logo";
 import { currentSession, getBlob, getJSON, sentence, signOut } from "../lib/api";
 import { CLASSIC, navigate } from "../lib/router";
 import type { Client, PostDetail, PostRow } from "../lib/types";
@@ -27,6 +28,8 @@ export function Posts() {
   return (
     <main className="page">
       <header className="page-head">
+        <Logo />
+        <span className="sep" aria-hidden />
         <h1 className="grow">Posts</h1>
         {demo ? null : (
           <Button variant="secondary" onClick={() => window.location.assign(CLASSIC)}>

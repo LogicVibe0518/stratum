@@ -725,7 +725,7 @@ async def get_job(job_id: str, ctx: service.Context = Depends(context)) -> dict[
 @app.get("/api/posts/{post_id}")
 async def get_post(post_id: str, ctx: service.Context = Depends(context)) -> dict[str, Any]:
     post, client = await _post_and_client(ctx, post_id)
-    versions, edits, choices = await asyncio.gather(
+    versions, edits, choices, spent = await asyncio.gather(
         ctx.supa.select(
             "post_versions",
             post_id=f"eq.{post_id}",
@@ -741,6 +741,8 @@ async def get_post(post_id: str, ctx: service.Context = Depends(context)) -> dic
         ),
         # The three options of a "best three" draft (M12b); empty otherwise.
         options.latest_options(ctx, post_id),
+        # Every change's model cost, for "what this post has cost" (one number each).
+        ctx.supa.select("edits", post_id=f"eq.{post_id}", select="cost_usd"),
     )
     latest = versions[0] if versions else None
     renders: list[dict[str, Any]] = []
@@ -763,6 +765,22 @@ async def get_post(post_id: str, ctx: service.Context = Depends(context)) -> dic
         "flags": flags,
         "edits": edits,
         "options": choices,
+        "cost": post_cost(post, spent, gateway().budget.cap_for(ctx.agency_id)),
+    }
+
+
+def post_cost(post: dict[str, Any], spent: list[dict[str, Any]], cap: float) -> dict[str, Any]:
+    """What one post has cost in model calls: the draft (copy, caption, a background if
+    one was painted) and every plain-English change; changes made by hand cost nothing."""
+    paid = [float(row.get("cost_usd") or 0) for row in spent]
+    draft = float(post.get("cost_usd") or 0)
+    return {
+        "draft_usd": round(draft, 6),
+        "changes_usd": round(sum(paid), 6),
+        "total_usd": round(draft + sum(paid), 6),
+        "paid_changes": sum(1 for one in paid if one > 0),
+        "free_changes": sum(1 for one in paid if one == 0),
+        "daily_cap_usd": cap,
     }
 
 

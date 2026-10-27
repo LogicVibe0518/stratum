@@ -1,5 +1,6 @@
 import { type FormEvent, useEffect, useState } from "react";
 import { Button } from "../ui/Button";
+import { Logo } from "../ui/Logo";
 import { demoAvailable, sentence, signIn, tryDemo } from "../lib/api";
 import { CLASSIC } from "../lib/router";
 
@@ -42,7 +43,9 @@ export function Login() {
     <main className="center-page">
       <form className="card" onSubmit={submit} noValidate>
         <div style={{ display: "grid", gap: 4 }}>
-          <h1>Stratum</h1>
+          <h1>
+            <Logo size={28} />
+          </h1>
           <p className="muted">On-brand social posts from a brief, real photos and a brand kit.</p>
         </div>
         {demo ? (

@@ -116,6 +116,20 @@ export interface PostDetail {
   edits: { message: string; outcome: string; latency_ms: number; created_at: string }[];
   /** The three options of a "best three" draft, in the order shown; empty otherwise. */
   options: DesignOption[];
+  /** What this post has cost in model calls (main.post_cost). */
+  cost?: PostCost;
+}
+
+export interface PostCost {
+  draft_usd: number;
+  changes_usd: number;
+  total_usd: number;
+  /** Plain-English changes a model read (applied or not). */
+  paid_changes: number;
+  /** Changes made by hand or with the instant buttons: no model, no cost. */
+  free_changes: number;
+  /** The agency's AI allowance per day. */
+  daily_cap_usd: number;
 }
 
 export interface DesignOption {
