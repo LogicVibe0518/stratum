@@ -333,6 +333,47 @@ async def test_picking_the_option_already_shown_is_logged_without_a_new_version(
     assert pick["detail"]["slot"] == 1
 
 
+def _layer_for(design_id: str, field: str) -> str:
+    from stratum_worker.draft.bindings import binding_for
+
+    return next(layer for layer, name in binding_for(design_id).texts.items() if name == field)
+
+
+@pytest.mark.usefixtures("few")
+async def test_picking_another_option_keeps_the_words_the_designer_changed(
+    studio: Any,
+) -> None:
+    """Live, 26 Oct: the headline and offer were fixed on option A, option C was picked,
+    and C came back with the first draft's words. The edits are the person's work."""
+    from stratum_worker.app import options, service
+
+    ctx, post, client = studio
+    await service.draft(ctx, post, client)
+    rows = await ctx.supa.select("post_options", post_id=f"eq.{post['id']}", order="slot.asc")
+    [post] = await ctx.supa.select("posts", id=f"eq.{post['id']}")
+    mine = "Boiler checks: 20% off"
+    await service.edit(
+        ctx,
+        post,
+        client,
+        version=1,
+        raw_ops=[
+            {"op": "set_text", "layer": _layer_for(rows[0]["design_id"], "headline"), "text": mine}
+        ],
+        restyle=None,
+    )
+    third = rows[2]
+    version = await options.pick_option(ctx, post, client, third["id"])
+    spec = service.load_spec(version["spec"])
+    assert spec.layer(_layer_for(third["design_id"], "headline")).content == mine  # type: ignore[union-attr]
+    assert version["note"].endswith("kept your words")
+
+    # Picking the design the poster now is changes nothing: no new version.
+    [post] = await ctx.supa.select("posts", id=f"eq.{post['id']}")
+    again = await options.pick_option(ctx, post, client, third["id"])
+    assert again["id"] == version["id"]
+
+
 async def test_an_option_of_another_post_cannot_be_picked(studio: Any) -> None:
     from stratum_worker.app import options
     from stratum_worker.draft.pipeline import DraftError

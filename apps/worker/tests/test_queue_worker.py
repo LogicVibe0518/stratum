@@ -334,6 +334,30 @@ async def test_a_refused_key_stops_every_loop_with_one_clear_message(
     assert 1 <= ledger.calls <= 3 and stop.is_set()
 
 
+def test_a_quiet_pool_asks_about_once_every_few_seconds_between_its_loops(world: World) -> None:
+    """Live, 26 Oct: four idle loops asking every second were 332,000 requests a day."""
+    from stratum_worker.queue.worker import QUIET_AFTER_S, QUIET_S
+
+    loop = QueueWorker(
+        ledger=None,  # type: ignore[arg-type]
+        factory=world.scoped,
+        deps=Deps(settings=world.settings(), gateway=fake.gateway()),
+        idle_s=1.0,
+        quiet_s=4 * QUIET_S,  # what run_pool gives each of four loops
+        last_job=100.0,
+    )
+    # Busy (a run of changes): every second, as before.
+    assert loop.pause(0, now=100.0 + QUIET_AFTER_S - 1) == 1.0
+    # Quiet: each loop waits 12-20 s, so four of them ask about every 4 s together.
+    waits = [loop.pause(0, now=100.0 + QUIET_AFTER_S + 1) for _ in range(200)]
+    assert min(waits) >= 12.0 and max(waits) <= 20.0
+    pool_asks_every = 1 / (4 * sum(1 / wait for wait in waits) / len(waits))
+    assert 3.5 < pool_asks_every < 4.5
+    assert 86_400 / pool_asks_every < 25_000  # requests a day, from 332,000
+    # Unreachable still backs off the same way.
+    assert loop.pause(3) == 8.0
+
+
 async def test_an_unreachable_queue_is_asked_less_often_each_time(world: World) -> None:
     import httpx
 

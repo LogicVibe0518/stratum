@@ -18,15 +18,20 @@ from typing import Any
 
 import numpy as np
 from PIL import Image
+from stratum_spec import BrandKit, PosterSpec
 from stratum_spec import load as load_spec
+from stratum_spec.models import TextLayer
+from stratum_spec.ops import EditOp, OpError, SetText, apply_ops
 
 from stratum_worker.app import service
 from stratum_worker.critic.ranker import model_name
-from stratum_worker.design import decode, repair
+from stratum_worker.design import decode, is_design, repair
 from stratum_worker.design.choose import AUTO, Material, NothingFits, candidates, choose, seed_for
+from stratum_worker.draft.bindings import UnknownTemplate, binding_for
 from stratum_worker.draft.models import Flag
 from stratum_worker.draft.pipeline import DraftError
 from stratum_worker.draft.preflight import check_copy
+from stratum_worker.edit.restyle import carry_over
 from stratum_worker.photo.read import edge_map, read_photo
 
 # The copy is written once, before any design is chosen, to the character budget of
@@ -34,6 +39,61 @@ from stratum_worker.photo.read import edge_map, read_photo
 # A design the words then do not fit is simply not a candidate.
 REFERENCE = "ds.overlay.1.000000"
 NAMES = ("A", "B", "C")
+
+
+def carried(
+    before: PosterSpec,
+    before_design: str,
+    drafted: PosterSpec | None,
+    chosen: PosterSpec,
+    chosen_design: str,
+    kit: BrandKit,
+) -> tuple[PosterSpec, list[str]]:
+    """The chosen option as drafted, with the person's changes to the poster made again.
+
+    Live, 26 Oct: a designer fixed the headline and the offer line on option A, picked
+    option C, and C came back with the first draft's words - the edits were gone and
+    nothing said so. All three options are drafted around the same words, so the
+    words on the poster now are the words to keep, matched by what each line is for
+    (headline, offer, call to action). `drafted` is the poster's own option as it was
+    first drafted: what differs between it and `before` (colours, darker photos,
+    hidden parts, the logo's size) is carried the way a restyle carries it. Where each
+    thing sits is the new design's own. Returns (spec, what was kept, in words).
+    """
+    try:
+        mine, theirs_by_layer = (
+            binding_for(before_design).texts,
+            binding_for(chosen_design).texts,
+        )
+    except UnknownTemplate:
+        mine, theirs_by_layer = {}, {}
+    theirs = {field: layer for layer, field in theirs_by_layer.items()}
+    ops: list[EditOp] = []
+    for layer_id, field in mine.items():
+        target = theirs.get(field)
+        was = next((one for one in before.layers if one.id == layer_id), None)
+        now = next((one for one in chosen.layers if one.id == target), None)
+        if (
+            isinstance(was, TextLayer)
+            and isinstance(now, TextLayer)
+            and target is not None
+            and was.content != now.content
+        ):
+            ops.append(SetText(layer=target, text=was.content))
+    kept: list[str] = []
+    spec = chosen
+    if ops:
+        try:
+            spec = apply_ops(chosen, ops)
+            kept.append("your words")
+        except OpError:
+            spec = chosen
+    again = carry_over(before, drafted, spec, kit, {})
+    return again.spec, [*kept, *again.kept]
+
+
+def listed(items: list[str]) -> str:
+    return items[0] if len(items) == 1 else f"{', '.join(items[:-1])} and {items[-1]}"
 
 
 def title_of(design_id: str) -> str:
@@ -253,26 +313,49 @@ async def pick_option(
         "post_versions", post_id=f"eq.{post['id']}", order="version.desc", limit="1"
     )
     spec = load_spec(option["spec"])
-    same = bool(versions) and load_spec(versions[0]["spec"]) == spec
+    before = load_spec(versions[0]["spec"]) if versions else None
+    design_now = (
+        before.template_id
+        if before is not None and is_design(before.template_id)
+        else str(post["template_id"])
+    )
+    # Picking the design the poster already is keeps the poster as it is, edits and
+    # all: still a choice worth recording, but not a new version.
+    same = before is not None and (option["design_id"] == design_now or before == spec)
     if same:
-        # Picking what is already the poster is still a choice worth recording, but
-        # it is not a new version.
         version = versions[0]
     else:
+        kit = await service.kit_for(ctx, client, spec.brand_kit_version)
+        kept: list[str] = []
+        if before is not None:
+            drafted = next(
+                (
+                    load_spec(row["spec"])
+                    for row in await ctx.supa.select(
+                        "post_options",
+                        batch=f"eq.{option['batch']}",
+                        design_id=f"eq.{design_now}",
+                        select="spec",
+                        limit="1",
+                    )
+                ),
+                None,
+            )
+            spec, kept = carried(before, design_now, drafted, spec, option["design_id"], kit)
         bound = spec.assets()
         asset_paths = {s: await service.local_path(ctx, s) for s in bound if isinstance(s, str)}
-        kit = await service.kit_for(ctx, client, spec.brand_kit_version)
         chosen = {**post, "template_id": option["design_id"]}
         renders, flags = await service.render_versions(ctx, chosen, spec, {}, asset_paths, kit)
         flags = [*flags, *service.brief_flags(chosen, spec)]
         name = NAMES[int(option["position"])]
+        note = f"picked option {name} ({title_of(str(option['design_id']))})"
         version = await service.save_version(
             ctx,
             post,
             spec,
             renders,
             flags,
-            note=f"picked option {name} ({title_of(str(option['design_id']))})",
+            note=f"{note}, kept {listed(kept)}" if kept else note,
             after=versions[0]["version"] if versions else None,
         )
     await ctx.supa.update(
@@ -317,6 +400,7 @@ async def pick_option(
 __all__ = [
     "AUTO",
     "REFERENCE",
+    "carried",
     "draft_options",
     "latest_options",
     "material_for",

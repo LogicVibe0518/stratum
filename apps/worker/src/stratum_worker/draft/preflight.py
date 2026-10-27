@@ -226,6 +226,19 @@ def _missing(brief: str, text: str) -> list[str]:
     return missing
 
 
+def facts_missing(source: str, text: str) -> list[str]:
+    """The dates, money, percentages and long numbers (phone, licence) in `source` that
+    `text` does not show, as `source` writes them. Shared by the brief check and the
+    edit guard (edit/facts.py)."""
+    missing = _missing(source, text)
+    digits = re.sub(r"\D", "", text)
+    for match in LONG_NUMBER.finditer(source):
+        number = re.sub(r"\D", "", match.group())
+        if number not in digits:
+            missing.append(match.group().strip())
+    return missing
+
+
 def _listed(items: list[str]) -> str:
     quoted = [f"'{item}'" for item in items]
     return quoted[0] if len(quoted) == 1 else f"{', '.join(quoted[:-1])} and {quoted[-1]}"
@@ -269,6 +282,7 @@ __all__ = [
     "check_claims",
     "check_copy",
     "check_layout",
+    "facts_missing",
     "first_sentence",
 ]
 
