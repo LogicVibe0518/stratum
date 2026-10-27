@@ -226,4 +226,34 @@ describe("an editing session", () => {
     const order = server.calls.filter((call) => call.startsWith("edit") || call.startsWith("tweak"));
     expect(order).toEqual(["edit:place", "tweak:make it pop"]);
   });
+
+  it("runs another endpoint's change in order, and undoes it like an edit", async () => {
+    const { server, session } = await opened();
+    session.apply([place(0.2)]);
+    // An option picked: the server writes version 3 from the version it was made on.
+    const picked = await session.call(async (version) => {
+      server.calls.push(`pick@${version}`);
+      server.versions.push([flip]);
+      return { outcome: "applied", version: server.versions.length, id: `v${server.versions.length}` };
+    });
+    await settle();
+    expect(picked.version).toBe(3);
+    expect(server.calls.filter((call) => !call.startsWith("try") && call !== "canvas")).toEqual([
+      "edit:place",
+      "pick@2",
+    ]);
+    expect(session.getSnapshot().version).toBe(3);
+    session.undo();
+    await settle();
+    await settle();
+    expect(server.calls).toContain("restore:2");
+  });
+
+  it("does not count picking what is already shown as a step", async () => {
+    const { session } = await opened();
+    const same = await session.call(async (version) => ({ outcome: "applied", version, id: `v${version}` }));
+    await settle();
+    expect(same.version).toBe(1);
+    expect(session.getSnapshot().canUndo).toBe(false);
+  });
 });

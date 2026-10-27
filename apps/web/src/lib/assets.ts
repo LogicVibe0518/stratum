@@ -8,6 +8,9 @@
 import { getBlob } from "./api";
 import type { Face } from "./types";
 
+/** What a photo dragged from the Photos panel carries: its SHA-256. */
+export const PHOTO_DRAG = "application/x-stratum-photo";
+
 const pictures = new Map<string, Promise<string>>();
 
 /** A local URL for one picture, fetched (with the person's token) the first time. */
@@ -24,6 +27,22 @@ export function pictureURL(versionId: string, sha: string): Promise<string> {
     });
     found.catch(() => pictures.delete(sha)); // a failed fetch is tried again next time
     pictures.set(sha, found);
+  }
+  return found;
+}
+
+const previews = new Map<string, Promise<string>>();
+
+/**
+ * A local URL for a server-drawn picture (a version's or an option's preview), fetched
+ * with the person's token. Both are immutable on the server, so one fetch per page.
+ */
+export function previewURL(path: string): Promise<string> {
+  let found = previews.get(path);
+  if (!found) {
+    found = getBlob(path).then((blob) => URL.createObjectURL(blob));
+    found.catch(() => previews.delete(path));
+    previews.set(path, found);
   }
   return found;
 }

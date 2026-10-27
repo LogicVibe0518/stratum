@@ -12,7 +12,7 @@ What a reviewer should be able to repeat back:
 - the panel only swaps in this client's own photos;
 - "include the blue one too" restyles to two photos with the one asked for;
 - a draft takes the photo its note describes, and never starts with a graphic;
-- without the model, use_photo says it is not switched on and nothing else changes;
+- without the model, use_photo offers the client's photos to pick and nothing else changes;
 - the chat model is told what kinds of photos the client has.
 """
 
@@ -247,12 +247,19 @@ async def test_a_graphic_goes_last(monkeypatch: pytest.MonkeyPatch, colours: Col
     assert [row["sha256"][0] for row in ordered] == ["b", "c", "a"]
 
 
-async def test_without_the_model_use_photo_says_it_is_off(tmp_path: Path) -> None:
+async def test_without_the_model_use_photo_offers_every_photo_to_pick(tmp_path: Path) -> None:
+    """Live, 26 Oct: "replace the right side image with image of mop" ended at "not
+    switched on yet". Without the model the answer is the client's photos, to click."""
     red = {"ops": [{"op": "use_photo", "description": "the red one"}]}
     one, _ = await studio(tmp_path, red, photos=["red", "blue"])
     post = await one.post()
     out = await one.tweak(post, "use the red photo")
-    assert out == {"outcome": "needs_human", "why": service.PHOTO_SEARCH_OFF}
+    assert out["outcome"] == "needs_human"
+    assert out["why"].startswith("I cannot search the photos by what is in them yet.")
+    assert "shows the red one" in out["why"]
+    assert len(out["photos"]) >= 2  # every usable photo of the client's, best first
+    assert all(one["probability"] is None for one in out["photos"])
+    assert out["layer"] is not None and out["choices"] == []
     assert asked(one.provider).library == ""
 
 

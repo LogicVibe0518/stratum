@@ -9,15 +9,19 @@ import {
   ChevronDown,
   CloudOff,
   Download,
+  History,
+  Image,
   Layers,
+  LayoutTemplate,
   MessageSquare,
   Palette,
   Redo2,
+  Share2,
   Undo2,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
-import { download, getJSON, request, sentence } from "../lib/api";
+import { download, getJSON, postJSON, request, sentence } from "../lib/api";
 import { mod, shortcut, typing } from "../lib/keys";
 import { navigate } from "../lib/router";
 import { EditorSession } from "../lib/session";
@@ -26,6 +30,7 @@ import { Button, IconButton } from "../ui/Button";
 import { editorApi } from "./api";
 import { Canvas } from "./Canvas";
 import { AskPanel, BrandPanel, LayersPanel } from "./Panels";
+import { DesignsPanel, HistoryPanel, PhotosPanel } from "./RailPanels";
 import { shownLayers } from "./shown";
 import { Toolbar } from "./Toolbar";
 
@@ -94,7 +99,7 @@ function EditorSkeleton() {
   );
 }
 
-type LeftTab = "layers" | "brand";
+type LeftTab = "designs" | "photos" | "layers" | "brand" | "history";
 
 function Workspace({
   detail,
@@ -109,7 +114,8 @@ function Workspace({
   const queries = useQueryClient();
   const [selected, setSelected] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
-  const [left, setLeft] = useState<LeftTab | null>("layers");
+  // Canva opens on its design panel: here the three options, when there are three.
+  const [left, setLeft] = useState<LeftTab | null>(detail.options.length ? "designs" : "layers");
   const [asking, setAsking] = useState(true);
   const { view, aspect } = snapshot;
 
@@ -241,23 +247,27 @@ function Workspace({
       />
       <nav className="rail" aria-label="Panels">
         <div className="rail-tabs" role="tablist">
-          <RailTab
-            icon={<Layers size={18} />}
-            label="Layers"
-            active={left === "layers"}
-            onClick={() => setLeft(left === "layers" ? null : "layers")}
-          />
-          <RailTab
-            icon={<Palette size={18} />}
-            label="Brand"
-            active={left === "brand"}
-            onClick={() => setLeft(left === "brand" ? null : "brand")}
-          />
+          {RAIL.map(({ tab, label, Icon }) => (
+            <RailTab
+              key={tab}
+              icon={<Icon size={18} />}
+              label={label}
+              active={left === tab}
+              onClick={() => setLeft(left === tab ? null : tab)}
+            />
+          ))}
         </div>
+        {left === "designs" ? <DesignsPanel detail={detail} session={session} aspect={aspect} /> : null}
+        {left === "photos" && view ? (
+          <PhotosPanel clientId={detail.client.id} layers={layers} selected={selected} apply={apply} />
+        ) : null}
         {left === "layers" && view ? (
           <LayersPanel layers={layers} selected={selected} onSelect={setSelected} apply={apply} />
         ) : null}
         {left === "brand" && view ? <BrandPanel view={view} /> : null}
+        {left === "history" ? (
+          <HistoryPanel detail={detail} session={session} aspect={aspect} current={snapshot.version} />
+        ) : null}
       </nav>
       <section className="stage" aria-label="Poster">
         {view ? (
@@ -303,6 +313,7 @@ function Workspace({
         <AskPanel
           session={session}
           postId={detail.post.id}
+          clientId={detail.client.id}
           layer={chosen}
           aspect={aspect}
           flags={detail.flags}
@@ -318,6 +329,14 @@ function Workspace({
     </div>
   );
 }
+
+const RAIL: { tab: LeftTab; label: string; Icon: typeof Layers }[] = [
+  { tab: "designs", label: "Designs", Icon: LayoutTemplate },
+  { tab: "photos", label: "Photos", Icon: Image },
+  { tab: "layers", label: "Layers", Icon: Layers },
+  { tab: "brand", label: "Brand", Icon: Palette },
+  { tab: "history", label: "History", Icon: History },
+];
 
 function RailTab({
   icon,
@@ -367,6 +386,42 @@ function TopBar({
     } catch (failure) {
       setStatus(before);
       toast.error(sentence(failure));
+    }
+  }
+
+  const [sharing, setSharing] = useState(false);
+
+  // One link for this post (reviews.create_review): the client sees it frozen at this
+  // version, comments on it, and approves or asks for changes. No account needed.
+  async function share() {
+    setSharing(true);
+    try {
+      const made = await postJSON<{ path: string; expires_at: string }>("/api/reviews", {
+        client_id: detail.client.id,
+        post_ids: [detail.post.id],
+      });
+      const link = `${window.location.origin}${made.path}`;
+      let copied = false;
+      try {
+        await navigator.clipboard.writeText(link);
+        copied = true;
+      } catch {
+        // a browser that refuses the clipboard still shows the link
+      }
+      setStatus("review");
+      void queries.invalidateQueries({ queryKey: ["posts"] });
+      const until = new Date(made.expires_at).toLocaleDateString(undefined, {
+        day: "numeric",
+        month: "short",
+      });
+      toast(copied ? "Review link copied" : "Review link ready", {
+        description: `${link} - open until ${until}.`,
+        duration: 12000,
+      });
+    } catch (failure) {
+      toast.error(sentence(failure));
+    } finally {
+      setSharing(false);
     }
   }
 
@@ -463,6 +518,9 @@ function TopBar({
           </Dropdown.Content>
         </Dropdown.Portal>
       </Dropdown.Root>
+      <Button variant="secondary" busy={sharing} disabled={snapshot.saving} onClick={() => void share()}>
+        <Share2 size={16} /> Share for review
+      </Button>
       <Dropdown.Root>
         <Dropdown.Trigger asChild>
           <Button variant="primary" disabled={snapshot.saving}>

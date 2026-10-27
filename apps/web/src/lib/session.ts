@@ -39,6 +39,13 @@ type Job =
       pointed?: Pointed;
       done: (result: ChangeResult) => void;
       fail: (error: unknown) => void;
+    }
+  | {
+      kind: "call";
+      seq: number;
+      call: (version: number) => Promise<ChangeResult>;
+      done: (result: ChangeResult) => void;
+      fail: (error: unknown) => void;
     };
 
 /** What a layer looks like on screen before the server has drawn it. */
@@ -258,6 +265,20 @@ export class EditorSession {
     });
   }
 
+  /**
+   * A change another endpoint makes (pick an option, bring back a version), saved in
+   * order with everything else and undone like any edit. `call` gets the version the
+   * change is made on; a result on that same version (the option already shown) is
+   * not a new step.
+   */
+  call(call: (version: number) => Promise<ChangeResult>): Promise<ChangeResult> {
+    return new Promise((done, fail) => {
+      this.queue.push({ kind: "call", seq: ++this.seq, call, done, fail });
+      this.changed();
+      void this.pump();
+    });
+  }
+
   undo(): void {
     const last = this.queue.at(-1);
     const waiting = last && !(this.running && this.queue.length === 1);
@@ -293,6 +314,9 @@ export class EditorSession {
     const waiting = this.queue.flatMap((job) => (job.kind === "edit" ? job.ops : []));
     const ops = [...waiting, ...extra];
     if (ops.length === 0 || ops.length > MAX_OPS) return;
+    // A photo swap is not drawn ahead of saving (the server would refuse to try it):
+    // the saved version shows it a moment later.
+    if (ops.some((op) => op.op === "swap_asset")) return;
     const asked = ++this.tries;
     const epoch = this.epoch;
     const covered = extra.length ? this.viewSeq : this.seq;
@@ -343,12 +367,20 @@ export class EditorSession {
       result = await this.api.edit(this.post, { version, ops: job.ops });
     } else if (job.kind === "tweak") {
       result = await this.api.tweak(this.post, { message: job.message, pointed: job.pointed });
+    } else if (job.kind === "call") {
+      result = await job.call(version);
     } else {
       const to = this.states[this.pos + job.step];
       if (to === undefined) return;
       result = await this.api.restore(this.post, { version, to });
     }
-    if (result.outcome === "applied" && result.version !== undefined && result.id !== undefined) {
+    const moved = result.version !== version;
+    if (
+      result.outcome === "applied" &&
+      result.version !== undefined &&
+      result.id !== undefined &&
+      (moved || job.kind !== "call")
+    ) {
       this.base = { version: result.version, id: result.id };
       if (job.kind === "restore") {
         this.pos += job.step;
@@ -361,7 +393,7 @@ export class EditorSession {
       this.dropped(job);
       if (job.kind === "edit") this.notice("error", result.why ?? "That change could not be made.");
     }
-    if (job.kind === "tweak") job.done(result);
+    if (job.kind === "tweak" || job.kind === "call") job.done(result);
   }
 
   private dropped(job: Job): void {
@@ -371,9 +403,10 @@ export class EditorSession {
 
   private failed(job: Job, error: unknown): void {
     this.dropped(job);
-    if (job.kind === "tweak") job.fail(error);
+    const asked = job.kind === "tweak" || job.kind === "call";
+    if (asked) job.fail(error);
     if (error instanceof ApiError && error.status === 409) return;
-    if (job.kind !== "tweak") this.notice("error", sentence(error));
+    if (!asked) this.notice("error", sentence(error));
   }
 
   /** The poster changed somewhere else: drop what was waiting and show the newest. */
@@ -381,7 +414,9 @@ export class EditorSession {
     this.epoch += 1;
     for (const job of this.queue) {
       this.dropped(job);
-      if (job.kind === "tweak") job.fail(new Error("The poster changed somewhere else."));
+      if (job.kind === "tweak" || job.kind === "call") {
+        job.fail(new Error("The poster changed somewhere else."));
+      }
     }
     this.queue = [];
     this.log = [];
