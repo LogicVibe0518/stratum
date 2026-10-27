@@ -60,6 +60,7 @@ from stratum_worker.draft.preflight import (
     check_layout,
 )
 from stratum_worker.edit import badge as badges
+from stratum_worker.edit import facts
 from stratum_worker.edit.actions import (
     Ask,
     Badge,
@@ -88,6 +89,7 @@ from stratum_worker.gateway.errors import (
 from stratum_worker.gateway.gateway import Gateway
 from stratum_worker.gateway.tasks import (
     BackgroundRequest,
+    EditParseRequest,
     EditParseResult,
     PostCopyRequest,
     PostCopyResult,
@@ -1173,18 +1175,23 @@ async def tweak(
             started=started,
         )
 
-    request = edit_request(
-        spec,
-        kit,
-        fits,
-        sizes,
-        template_id=post["template_id"],
-        photos=len(photos),
-        message=message,
-        recent=list(reversed(recent)),
-        pointed=target,
-        library=await _library_line(ctx, client),
-    )
+    library = await _library_line(ctx, client)
+
+    def request_for(said: str) -> EditParseRequest:
+        return edit_request(
+            spec,
+            kit,
+            fits,
+            sizes,
+            template_id=post["template_id"],
+            photos=len(photos),
+            message=said,
+            recent=list(reversed(recent)),
+            pointed=target,
+            library=library,
+        )
+
+    request = request_for(message)
     tracer = CollectingTracer(inner=ctx.gateway.tracer)
     gateway = Gateway(router=ctx.gateway.router, budget=ctx.gateway.budget, tracer=tracer)
 
@@ -1208,6 +1215,17 @@ async def tweak(
             "outcome": "failed",
             "why": "I could not turn that into a change. Try saying it another way.",
         }
+    dropped = facts.lost(spec, ops, message)
+    if dropped:
+        # New words that leave out the poster's price, percentage, date or number
+        # (edit/facts.py): ask once more with them named, else change nothing.
+        said = f"{facts.keep_line(dropped)} {message}"[:1000]
+        again = await _parse_again(gateway, request_for(said), ctx.agency_id)
+        step = tracer.step("edit_parse", TaskName.EDIT_PARSE)
+        if again is None or facts.lost(spec, again[2], message):
+            await record("needs_human", raw, step.cost_usd)
+            return {"outcome": "needs_human", "why": facts.refusal(dropped)}
+        result, raw, ops, service_ops = again
     asks = [one for one in service_ops if isinstance(one, Ask)]
     if asks:
         await record("needs_human", raw, step.cost_usd)
@@ -1283,6 +1301,29 @@ async def tweak(
         started=started,
         step=step,
     )
+
+
+async def _parse_again(
+    gateway: Gateway, request: EditParseRequest, agency_id: str
+) -> (
+    tuple[
+        EditParseResult,
+        list[dict[str, Any]],
+        list[EditOp],
+        list[Restyle | Ask | Undo | Badge | UsePhoto],
+    ]
+    | None
+):
+    """The model's second reading of a tweak: (result, raw ops, spec ops, service
+    actions), or None when it could not be read at all."""
+    try:
+        result = await gateway.run(TaskName.EDIT_PARSE, request, agency_id=agency_id)
+        assert isinstance(result, EditParseResult)
+        raw = [dict(one) for one in result.ops]
+        raw_ops, service_ops = split(raw)
+        return result, raw, OPS.validate_python(raw_ops), list(service_ops)
+    except (NoProviderAvailable, ValidationError):
+        return None
 
 
 async def _library_line(ctx: Context, client: dict[str, Any]) -> str:
