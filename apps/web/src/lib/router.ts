@@ -3,6 +3,8 @@
 import { useSyncExternalStore } from "react";
 
 export const BASE = "/app";
+/** The first page (clients, uploads, new posts) until the editor does all of it. */
+export const CLASSIC = "/classic";
 
 const listeners = new Set<() => void>();
 

@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { postJSON, sentence } from "../lib/api";
 import { PHOTO_DRAG, previewURL } from "../lib/assets";
+import { CLASSIC } from "../lib/router";
 import type { EditorSession } from "../lib/session";
 import type {
   Aspect,
@@ -230,7 +231,7 @@ export function PhotosPanel({
         </div>
       ) : (
         <p className="muted small">
-          No photos yet. <a href="/">Upload them on the client’s page</a>.
+          No photos yet. <a href={CLASSIC}>Upload them on the client’s page</a>.
         </p>
       )}
     </div>

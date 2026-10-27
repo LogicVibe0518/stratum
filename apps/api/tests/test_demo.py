@@ -1,0 +1,178 @@
+"""One link for a CV: "/" opens the editor, and "Try the demo" needs no password.
+
+What a reviewer should be able to repeat back:
+- "/" sends everyone to the editor (/app); the first page lives on at /classic;
+- POST /api/demo signs in to the shared demo account on the server and returns only the
+  session: the password never reaches a page; off (404) unless both settings are set;
+- it is rate-limited per visitor and overall;
+- the demo account edits but cannot upload, add clients or posts, change the brand, or
+  answer the Taste Lab (whose answers train the ranker), and its AI spend has its own
+  small daily cap.
+"""
+
+from __future__ import annotations
+
+import base64
+import json
+from collections.abc import Iterator
+from typing import Any
+
+import httpx
+import pytest
+from fastapi.testclient import TestClient
+from stratum_api import main
+from stratum_worker.app.settings import Settings
+from stratum_worker.gateway.budget import Budget
+from stratum_worker.gateway.errors import BudgetExceeded
+
+DEMO = "Demo@Example.com"
+SECRET = "not-a-real-password-0"  # noqa: S105 - a test value, never a real one
+
+
+def settings(demo: bool = True) -> Settings:
+    extra = {"DEMO_EMAIL": DEMO, "DEMO_PASSWORD": SECRET} if demo else {}
+    return Settings(
+        SUPABASE_URL="https://example.supabase.co",
+        SUPABASE_ANON_KEY="sb_publishable_example",
+        **extra,  # type: ignore[arg-type]
+    )
+
+
+def token(email: str) -> str:
+    def part(data: dict[str, Any]) -> str:
+        return base64.urlsafe_b64encode(json.dumps(data).encode()).decode().rstrip("=")
+
+    return f"{part({'alg': 'ES256'})}.{part({'email': email, 'sub': 'u'})}.sig"
+
+
+@pytest.fixture
+def http() -> Iterator[TestClient]:
+    main._demo_calls.clear()
+    main.app.dependency_overrides[main.config] = settings
+    try:
+        yield TestClient(main.app)
+    finally:
+        main.app.dependency_overrides.clear()
+        main._demo_calls.clear()
+
+
+def test_the_one_link_opens_the_editor_and_the_first_page_moves(http: TestClient) -> None:
+    out = http.get("/", follow_redirects=False)
+    assert out.status_code == 307 and out.headers["location"] == "/app"
+    page = http.get("/classic")
+    assert page.status_code == 200 and "<title>" in page.text
+
+
+def test_the_page_is_told_whether_there_is_a_demo(http: TestClient) -> None:
+    assert http.get("/api/config").json()["demo"] is True
+    main.app.dependency_overrides[main.config] = lambda: settings(demo=False)
+    assert http.get("/api/config").json()["demo"] is False
+    assert http.post("/api/demo").status_code == 404
+
+
+def test_the_demo_session_comes_from_the_server_without_the_password(
+    http: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sent: list[dict[str, Any]] = []
+
+    async def post(self: httpx.AsyncClient, url: str, **kwargs: Any) -> httpx.Response:
+        sent.append({"url": url, **kwargs})
+        body = {"access_token": "a", "refresh_token": "r", "expires_at": 123, "user": {}}
+        return httpx.Response(200, json=body)
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", post)
+    out = http.post("/api/demo")
+    assert out.status_code == 200
+    body = out.json()
+    assert body == {
+        "access_token": "a",
+        "refresh_token": "r",
+        "expires_at": 123,
+        "user": {"email": DEMO},
+        "demo": True,
+    }
+    assert SECRET not in out.text
+    [call] = sent
+    assert call["url"] == "https://example.supabase.co/auth/v1/token?grant_type=password"
+    assert call["json"] == {"email": DEMO, "password": SECRET}
+
+
+def test_a_refused_demo_sign_in_is_a_sentence(
+    http: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def post(self: httpx.AsyncClient, url: str, **kwargs: Any) -> httpx.Response:
+        return httpx.Response(400, json={"error": "invalid_grant"})
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", post)
+    out = http.post("/api/demo")
+    assert out.status_code == 503 and "not available" in out.text
+
+
+def test_one_visitor_cannot_sign_in_over_and_over(
+    http: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def post(self: httpx.AsyncClient, url: str, **kwargs: Any) -> httpx.Response:
+        return httpx.Response(200, json={"access_token": "a", "refresh_token": "r"})
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", post)
+    codes = [
+        http.post("/api/demo", headers={"x-forwarded-for": "203.0.113.9"}).status_code
+        for _ in range(main.DEMO_PER_IP[0] + 1)
+    ]
+    assert codes[:-1] == [200] * main.DEMO_PER_IP[0] and codes[-1] == 429
+    assert http.post("/api/demo", headers={"x-forwarded-for": "198.51.100.4"}).status_code == 200
+
+
+def test_the_demo_is_recognised_by_its_email_only() -> None:
+    on = settings()
+    assert main.is_demo(token("demo@example.com"), on)
+    assert main.is_demo(token(" DEMO@example.COM "), on)
+    assert not main.is_demo(token("owner@agency.example"), on)
+    assert not main.is_demo("not-a-token", on)
+    assert not main.is_demo(token("demo@example.com"), settings(demo=False))
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("post", "/api/clients"),
+        ("post", "/api/clients/c/assets"),
+        ("put", "/api/clients/c/brand"),
+        ("post", "/api/posts"),
+        ("post", "/api/lab/screens"),
+        ("post", "/api/lab/screens/s/answer"),
+    ],
+)
+def test_the_demo_cannot_upload_add_or_train(http: TestClient, method: str, path: str) -> None:
+    async def demo_context() -> Any:
+        return type("Ctx", (), {"demo": True})()
+
+    main.app.dependency_overrides[main.context] = demo_context
+    out = getattr(http, method)(path, json={})
+    # Refused by the dependency, before the body is looked at.
+    assert out.status_code == 403 and "shared demo" in out.text
+
+
+def test_the_demo_has_its_own_small_daily_cap() -> None:
+    budget = Budget(daily_cap_usd=5.0, caps={"demo-agency": main.DEMO_DAILY_CAP_USD})
+    budget.check("real-agency", 4.0)
+    with pytest.raises(BudgetExceeded):
+        budget.check("demo-agency", 0.6)
+    budget.record("demo-agency", 0.4)
+    assert budget.warn_level("demo-agency") == pytest.approx(0.8)
+
+
+def test_running_out_of_allowance_is_a_sentence_not_a_500(http: TestClient) -> None:
+    @main.app.get("/test-only/over-budget")
+    def over() -> None:
+        raise BudgetExceeded("agency x would exceed its daily cap")
+
+    try:
+        out = http.get("/test-only/over-budget")
+        assert out.status_code == 429 and "allowance" in out.text
+    finally:
+        main.app.router.routes = [
+            route
+            for route in main.app.router.routes
+            if getattr(route, "path", "") != "/test-only/over-budget"
+        ]
