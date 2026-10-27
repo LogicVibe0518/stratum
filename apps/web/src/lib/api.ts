@@ -9,11 +9,15 @@ export interface Session {
   refresh_token: string;
   expires_at?: number;
   user?: { email?: string };
+  /** The shared demo account ("Try the demo"): it edits, it does not upload. */
+  demo?: boolean;
 }
 
 interface Config {
   url: string;
   key: string;
+  /** The server has a shared demo account (POST /api/demo). */
+  demo?: boolean;
 }
 
 /** A refusal the server explained in a sentence ("The poster is on version 4 now..."). */
@@ -90,6 +94,22 @@ export async function signIn(email: string, password: string): Promise<void> {
   keep(await auth("token?grant_type=password", { email, password }));
 }
 
+/** Whether this server offers "Try the demo". */
+export async function demoAvailable(): Promise<boolean> {
+  try {
+    return (await getConfig()).demo === true;
+  } catch {
+    return false;
+  }
+}
+
+/** Sign in to the shared demo: the server signs in and hands back only the session. */
+export async function tryDemo(): Promise<void> {
+  const r = await fetch("/api/demo", { method: "POST" });
+  if (!r.ok) throw new ApiError(await errorText(r), r.status);
+  keep((await r.json()) as Session);
+}
+
 export function signOut(): void {
   keep(null);
 }
@@ -101,7 +121,9 @@ async function fresh(force = false): Promise<Session | null> {
   if (!force && !soon) return session;
   refreshing ??= (async () => {
     try {
-      keep(await auth("token?grant_type=refresh_token", { refresh_token: session?.refresh_token }));
+      const demo = session?.demo;
+      const renewed = await auth("token?grant_type=refresh_token", { refresh_token: session?.refresh_token });
+      keep(demo ? { ...renewed, demo } : renewed);
     } catch {
       keep(null);
     }

@@ -1,12 +1,30 @@
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { Button } from "../ui/Button";
-import { sentence, signIn } from "../lib/api";
+import { demoAvailable, sentence, signIn, tryDemo } from "../lib/api";
+import { CLASSIC } from "../lib/router";
 
 export function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [demo, setDemo] = useState(false);
+  const [opening, setOpening] = useState(false);
+
+  useEffect(() => {
+    void demoAvailable().then(setDemo);
+  }, []);
+
+  async function openDemo() {
+    setOpening(true);
+    setError("");
+    try {
+      await tryDemo();
+    } catch (failure) {
+      setError(sentence(failure));
+      setOpening(false);
+    }
+  }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -25,8 +43,23 @@ export function Login() {
       <form className="card" onSubmit={submit} noValidate>
         <div style={{ display: "grid", gap: 4 }}>
           <h1>Stratum</h1>
-          <p className="muted">Sign in to edit your posts.</p>
+          <p className="muted">On-brand social posts from a brief, real photos and a brand kit.</p>
         </div>
+        {demo ? (
+          <div className="demo-entry">
+            <Button variant="primary" type="button" busy={opening} onClick={() => void openDemo()}>
+              Try the demo
+            </Button>
+            <p className="subtle" style={{ fontSize: 13 }}>
+              No account needed: a shared demo agency with fictional clients. Change anything on its posts.
+            </p>
+            <div className="or" aria-hidden>
+              <span>or sign in</span>
+            </div>
+          </div>
+        ) : (
+          <p className="muted">Sign in to edit your posts.</p>
+        )}
         <div className="field">
           <label htmlFor="email">Email</label>
           <input
@@ -37,7 +70,7 @@ export function Login() {
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             required
-            autoFocus
+            autoFocus={!demo}
           />
         </div>
         <div className="field">
@@ -57,11 +90,16 @@ export function Login() {
             {error}
           </p>
         ) : null}
-        <Button variant="primary" type="submit" busy={busy} disabled={!email || !password}>
+        <Button
+          variant={demo ? "secondary" : "primary"}
+          type="submit"
+          busy={busy}
+          disabled={!email || !password}
+        >
           Sign in
         </Button>
         <p className="subtle" style={{ fontSize: 13 }}>
-          New to Stratum? <a href="/">Create your account here</a>.
+          New to Stratum? <a href={CLASSIC}>Create your account here</a>.
         </p>
       </form>
     </main>

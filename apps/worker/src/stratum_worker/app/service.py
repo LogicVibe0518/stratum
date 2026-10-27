@@ -175,6 +175,8 @@ class Context:
     gateway: Gateway
     agency_id: str
     user_id: str | None = None
+    # The shared demo account (Settings.demo_email): it edits, it does not upload.
+    demo: bool = False
 
     @property
     def store(self) -> AssetStore:

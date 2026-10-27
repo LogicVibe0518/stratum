@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
-import { download, getJSON, postJSON, request, sentence } from "../lib/api";
+import { currentSession, download, getJSON, postJSON, request, sentence } from "../lib/api";
 import { mod, shortcut, typing } from "../lib/keys";
 import { navigate } from "../lib/router";
 import { EditorSession } from "../lib/session";
@@ -442,6 +442,11 @@ function TopBar({
         <strong>{title.charAt(0).toUpperCase() + title.slice(1)}</strong>
         <span>{detail.client.name}</span>
       </div>
+      {currentSession()?.demo ? (
+        <span className="badge" title="A shared demo account: other visitors see these posts too">
+          Demo
+        </span>
+      ) : null}
       <span className="sep" />
       <div className="sizes" role="tablist" aria-label="Sizes">
         {aspects.map((one) => {

@@ -1335,3 +1335,36 @@ kbd {
         transition: none;
     }
 }
+
+/* --- the shared demo -------------------------------------------------------------------- */
+
+.demo-entry {
+    display: grid;
+    gap: 8px;
+}
+
+.demo-entry .or {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--subtle);
+    font-size: 12px;
+    margin-top: 4px;
+}
+
+.demo-entry .or::before,
+.demo-entry .or::after {
+    content: "";
+    flex: 1;
+    border-top: 1px solid var(--line);
+}
+
+.demo-banner {
+    margin: 0;
+    padding: 10px 14px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--line-strong);
+    background: var(--raised);
+    font-size: 13px;
+    line-height: 1.5;
+}
