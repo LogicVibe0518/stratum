@@ -18,8 +18,8 @@ Two models, both read by the server with plain numpy:
 ## Data
 
 - **Answers:** {N} Taste Lab answers from {RATERS} raters ({DESIGNERS} designers,
-  {STUDENTS} design students, {OTHERS} others) on {POSTS} posts of Nimble's clients,
-  with Nimble's agreement. {TOO_QUICK} answers quicker than 1.5 s were left out.
+  {STUDENTS} design students, {OTHERS} others) on {POSTS} posts of the agency's clients,
+  with the agency's agreement. {TOO_QUICK} answers quicker than 1.5 s were left out.
 - **What a rater does:** sees four designs for one real post, picks the one they
   would send, may tick every one they would send as it is, and may mark any as
   "never send". Labels: best 3, would send 2, unmarked 1, never 0 (older answers

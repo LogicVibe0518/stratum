@@ -20,12 +20,12 @@ export function LogoMark({ size = 20 }: { size?: number }) {
   );
 }
 
-/** The mark and the name, for the sign-in page and the posts list. */
+/** The mark and the name, for the front page and the posts list. */
 export function Logo({ size = 22 }: { size?: number }) {
   return (
-    <span className="logo" aria-label="Stratum">
+    <span className="logo" aria-label="Stratum" style={{ gap: size * 0.36 }}>
       <LogoMark size={size} />
-      <span className="logo-word" aria-hidden>
+      <span className="logo-word" aria-hidden style={{ fontSize: size * 0.82 }}>
         Stratum
       </span>
     </span>

@@ -5,8 +5,10 @@ kit go in; on-brand, fully editable posts come out in every size within minutes.
 ("make the logo bigger", "use the photo of the van") take seconds, in plain English or by hand on a
 canvas that works like Canva.
 
-> Status: in a pilot with a small digital agency. The repository is private until IP terms are
-> settled; a live demo is available on request.
+**Live demo: https://stratum-production-d7bd.up.railway.app** - click **Try the demo**, no
+account needed (a shared demo agency with fictional clients).
+
+> Status: in a pilot with a small digital agency.
 
 ## Why it is built this way
 

@@ -33,7 +33,7 @@ prompt.
 
 **The default background is the client's own photo, not a generated one.**
 `offer_4x5`'s `bg` layer is `"source": "client"`, dimmed 0.25. That matches what the
-Nimble owner actually described - clients send real photos. `background.create` is
+agency owner actually described - clients send real photos. `background.create` is
 the fallback for when no usable photo exists (all candidates flagged `too_blurry` /
 `too_small`), not the default path. This cuts the modal cost per post to the copy
 call alone and removes the generated-background failure mode from most posts.
@@ -137,7 +137,7 @@ difference and preflight flags truncation. Four copy calls for four aspects woul
 quadruple cost to solve a problem auto-fit already solves.
 
 Staging: **R0 ships 4:5 and 1:1**; 9:16 and 16:9 with real overrides and safe-zone
-checks land in R1, before the Nimble demo.
+checks land in R1, before the agency demo.
 
 ## Caption discoverability - what is actually true (checked 25 Sep 2026)
 
@@ -174,7 +174,7 @@ terms in the right position, verified. We cannot claim rankings, because measuri
 them needs analytics, which is on the do-not-build list. Say the former, never the
 latter.
 
-Worth telling Nimble but **not** worth building: for a tradie, the dominant local
+Worth telling the agency but **not** worth building: for a tradie, the dominant local
 search lever is a maintained Google Business Profile, not Instagram captions. That
 is a service they could sell; it is not this product.
 

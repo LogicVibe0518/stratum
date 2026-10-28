@@ -64,7 +64,7 @@ def test_missing_langfuse_keys_degrade_to_null_tracer_silently(
                 provider="p",
                 call=None,
                 outcome="ok",
-                agency_id="nimble",
+                agency_id="agency-a",
             )
     assert isinstance(tracer, NullTracer)
     assert caplog.records == []
