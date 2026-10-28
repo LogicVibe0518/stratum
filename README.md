@@ -6,7 +6,10 @@ kit go in; on-brand, fully editable posts come out in every size within minutes.
 canvas that works like Canva.
 
 **Live demo: https://stratum-production-d7bd.up.railway.app** - click **Try the demo**, no
-account needed (a shared demo agency with fictional clients).
+account needed. It opens a shared agency with fictional clients: open a post, pick another of
+its three designs, drag things around, or type a change like "make the offer bigger". The demo
+can edit but not upload or make new posts, and its AI spend is capped
+([how the demo works](docs/runbooks/demo.md)).
 
 > Status: in a pilot with a small digital agency.
 
@@ -61,7 +64,7 @@ browser ── FastAPI (apps/api) ── reads ──► Postgres (Supabase, row
 
 ## Quality and safety
 
-- About 1,500 automated tests (pytest + Hypothesis, Vitest), `ruff`, strict `mypy`, `gitleaks`, and a
+- About 1,600 automated tests (pytest + Hypothesis, Vitest), `ruff`, strict `mypy`, `gitleaks`, and a
   frozen benchmark of five fictional clients (`benchmarks/v1`).
 - Live findings become regression tests: e.g. "picking another option kept the first draft's words"
   and "an edit dropped the 30% off" are both tests now.
@@ -83,15 +86,17 @@ ONNX Runtime (SigLIP, YuNet, U²-Net), React 19 + TypeScript + Vite + Radix, Rai
 make setup      # uv sync + pre-commit
 make check      # lint, types, tests
 make web        # build the editor
-make api        # http://localhost:8000 (old page) and /app (editor)
+make api        # http://localhost:8000/app (the editor; the first page is at /classic)
 ```
 
-Copy `.env.example` to `.env` (and `.env.worker` for the queue worker) first.
+Copy `.env.example` to `.env` (and `.env.worker` for the queue worker) first. Everything in
+`clients/` and `benchmarks/` is fictional: the businesses, phone numbers and offers are made up.
 
 ## Docs
 
 - `AGENTS.md`: the architecture rules every contributor and coding agent follows
-- `docs/adr/`: decision records · `docs/modules/`: one note per module · `docs/runbooks/`
+- `docs/adr/`: decision records · `docs/modules/`: one note per module
+- `docs/runbooks/`: rotating secrets, and setting up the shared demo
 
 ## How it was built
 
