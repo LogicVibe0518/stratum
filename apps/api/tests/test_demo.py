@@ -30,7 +30,13 @@ SECRET = "not-a-real-password-0"  # noqa: S105 - a test value, never a real one
 
 
 def settings(demo: bool = True) -> Settings:
-    extra = {"DEMO_EMAIL": DEMO, "DEMO_PASSWORD": SECRET} if demo else {}
+    # Both values are always given: Settings also reads the developer's own .env, and a
+    # laptop that runs the demo has DEMO_EMAIL there (pre-push, 28 Oct: "off" read as on).
+    extra = (
+        {"DEMO_EMAIL": DEMO, "DEMO_PASSWORD": SECRET}
+        if demo
+        else {"DEMO_EMAIL": "", "DEMO_PASSWORD": ""}
+    )
     return Settings(
         SUPABASE_URL="https://example.supabase.co",
         SUPABASE_ANON_KEY="sb_publishable_example",
