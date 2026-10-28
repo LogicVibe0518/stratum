@@ -145,7 +145,10 @@ export function Canvas({
     return () => watch.disconnect();
   }, []);
 
-  const fit = Math.max(0.05, Math.min((room.width - 96) / width, (room.height - 96) / height));
+  // Room around the poster (.paper's margin on both sides, and a little more); less
+  // on a phone, where the poster is the point.
+  const margin = room.width < 500 ? 40 : 96;
+  const fit = Math.max(0.05, Math.min((room.width - margin) / width, (room.height - margin) / height));
   const scale = zoom === "fit" ? fit : zoom;
 
   const zoomBy = useCallback(
