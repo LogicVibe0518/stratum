@@ -1,9 +1,8 @@
 # apps/web - the editor
 
 The poster editor: Vite + React + TypeScript, built into static files that the API serves at
-`/app` (the page at `/` stays until this one does everything it does). Spec:
-`claude/editor-v2-spec.md` in the project; conventions follow Canva, which the agency's
-designers use every day.
+`/app`; `/` opens it, and the first page lives on at `/classic` until the editor does
+everything it does. Conventions follow Canva, which the agency's designers use every day.
 
 ## Run it
 
@@ -13,7 +12,7 @@ make web-dev    # the editor on http://localhost:5173/app, reloading as you edit
 ```
 
 `make web` builds `dist/` so `make api` serves the editor itself at http://localhost:8000/app.
-Sign in with the same account as the old page (the session is shared).
+Sign in with the same account as the first page (the session is shared).
 
 ## How it works
 
