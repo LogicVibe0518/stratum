@@ -11,6 +11,8 @@ its three designs, drag things around, or type a change like "make the offer big
 can edit but not upload or make new posts, and its AI spend is capped
 ([how the demo works](docs/runbooks/demo.md)).
 
+![The Stratum editor: a roofing post with its three designs on the left and plain-English changes on the right](docs/images/editor.jpg)
+
 > Status: in a pilot with a small digital agency.
 
 ## Why it is built this way
