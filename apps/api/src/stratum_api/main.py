@@ -919,8 +919,8 @@ def font_file(name: str, conf: Settings = Depends(config)) -> FileResponse:
     return FileResponse(path, headers={"Cache-Control": "public, max-age=86400"})
 
 
-# The editor (apps/web), built by `npm run build` into apps/web/dist. The page at "/"
-# stays until the editor does everything it does.
+# The editor (apps/web), built by `npm run build` into apps/web/dist. "/" opens it; the
+# first page lives on at /classic until the editor does everything it does.
 WEB_DIST = Path("apps/web/dist")
 
 

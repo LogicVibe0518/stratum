@@ -2,8 +2,8 @@
 
 The migrations here are the record of what is deployed. Apply them in filename order.
 
-Project: `piuwwigzpofwrzymmrsw` (eu-west-2, London). Its sibling `shandil-dev` is an
-unrelated live application - never point anything here at it.
+Project: `piuwwigzpofwrzymmrsw` (eu-west-2, London). The same account holds unrelated
+projects: check the project ref before applying anything.
 
 Applying by hand from the SQL editor is fine; if you use the Supabase CLI:
 
