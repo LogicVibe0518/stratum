@@ -449,10 +449,10 @@ async def test_gateway_end_to_end_with_real_adapter_records_cost() -> None:
     router = build_router(CONFIG, {"OPENROUTER_API_KEY": KEY}, transport=transport)
     gateway = Gateway(router=router, budget=Budget(daily_cap_usd=1.0))
 
-    result = await gateway.run(CAPTION, _requests()[CAPTION], agency_id="nimble")
+    result = await gateway.run(CAPTION, _requests()[CAPTION], agency_id="agency-a")
 
     assert isinstance(result, CaptionResult)
-    assert gateway.budget.spent_today("nimble") == pytest.approx(0.002)
+    assert gateway.budget.spent_today("agency-a") == pytest.approx(0.002)
 
 
 async def test_gateway_treats_malformed_model_json_as_invalid_output() -> None:
@@ -468,7 +468,7 @@ async def test_gateway_treats_malformed_model_json_as_invalid_output() -> None:
     gateway = Gateway(router=router, budget=Budget(daily_cap_usd=1.0))
 
     with pytest.raises(NoProviderAvailable) as caught:
-        await gateway.run(EDIT, _requests()[EDIT], agency_id="nimble")
+        await gateway.run(EDIT, _requests()[EDIT], agency_id="agency-a")
     assert isinstance(caught.value.__cause__, InvalidProviderOutput)
     assert len(calls) == 2, "invalid output is retried once on the same provider"
-    assert gateway.budget.spent_today("nimble") > 0
+    assert gateway.budget.spent_today("agency-a") > 0

@@ -1452,3 +1452,48 @@ kbd {
     color: var(--text);
     font-weight: 600;
 }
+
+/* --- the front page: the mark, what it is, then the way in --------------------------------- */
+
+.landing {
+    min-height: 100%;
+    display: grid;
+    align-content: center;
+    justify-items: center;
+    gap: 28px;
+    padding: 48px 16px;
+}
+
+.landing-hero {
+    display: grid;
+    justify-items: center;
+    gap: 14px;
+    text-align: center;
+    max-width: 560px;
+}
+
+.landing-hero h1 {
+    margin: 0;
+    line-height: 1;
+}
+
+.landing-pitch {
+    margin: 0;
+    font-size: 17px;
+    line-height: 1.5;
+    color: var(--muted);
+}
+
+.landing-foot {
+    font-size: 13px;
+}
+
+.landing-foot a {
+    color: inherit;
+}
+
+@media (max-width: 520px) {
+    .landing-pitch {
+        font-size: 15px;
+    }
+}

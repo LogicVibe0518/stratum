@@ -192,7 +192,7 @@ class Deps:
     templates_dir: Path
     repo_root: Path
     clients_root: Path
-    agency_id: str = "nimble"
+    agency_id: str = "local-agency"
 
 
 def ingest_photos(client: Client, deps: Deps) -> tuple[list[AssetMeta], list[Flag]]:
