@@ -40,14 +40,17 @@ export function Login() {
   }
 
   return (
-    <main className="center-page">
+    <main className="landing">
+      <header className="landing-hero">
+        <h1>
+          <Logo size={64} />
+        </h1>
+        <p className="landing-pitch">
+          On-brand social posts from a brief, real photos and a brand kit, in minutes. Change anything by
+          hand, like in Canva, or in plain English.
+        </p>
+      </header>
       <form className="card" onSubmit={submit} noValidate>
-        <div style={{ display: "grid", gap: 4 }}>
-          <h1>
-            <Logo size={28} />
-          </h1>
-          <p className="muted">On-brand social posts from a brief, real photos and a brand kit.</p>
-        </div>
         {demo ? (
           <div className="demo-entry">
             <Button variant="primary" type="button" busy={opening} onClick={() => void openDemo()}>
@@ -73,7 +76,6 @@ export function Login() {
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             required
-            autoFocus={!demo}
           />
         </div>
         <div className="field">
@@ -105,6 +107,7 @@ export function Login() {
           New to Stratum? <a href={CLASSIC}>Create your account here</a>.
         </p>
       </form>
+      <footer className="landing-foot subtle">Built by Rushil Shandil</footer>
     </main>
   );
 }

@@ -250,7 +250,7 @@ Fill this from `ml/critic/report-v2.json`:
 - **Few raters, one agency.** v2 learns this agency's designers' taste for trades
   clients, not good design in general. The model card says so.
 - **Client posts in the export.** The export is git-ignored. The shipped files hold
-  trees and weights only, with fictional proof rows. Get Nimble's agreement in
+  trees and weights only, with fictional proof rows. Get the agency's agreement in
   writing to train on ratings of their posts.
 - **The bar learns from what raters saw.** Lab screens are chosen to be different
   from each other (M15b), not to be a random sample of drafts, so its probabilities
