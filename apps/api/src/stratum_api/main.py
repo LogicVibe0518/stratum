@@ -24,7 +24,16 @@ from pathlib import Path
 from typing import Annotated, Any, Literal
 
 import httpx
-from fastapi import Depends, FastAPI, Form, Header, HTTPException, Request, UploadFile
+from fastapi import (
+    BackgroundTasks,
+    Depends,
+    FastAPI,
+    Form,
+    Header,
+    HTTPException,
+    Request,
+    UploadFile,
+)
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from pydantic import BaseModel, Field, ValidationError
 from stratum_spec import SCHEMA_VERSION, BrandKit
@@ -280,12 +289,16 @@ def _visitor(request: Request) -> str:
 
 
 @app.post("/api/demo")
-async def demo_session(request: Request, conf: Settings = Depends(config)) -> dict[str, Any]:
+async def demo_session(
+    request: Request, background: BackgroundTasks, conf: Settings = Depends(config)
+) -> dict[str, Any]:
     """A session for the shared demo account, for the "Try the demo" button.
 
     The server signs in with the demo account's password (DEMO_EMAIL / DEMO_PASSWORD on
     the API's host) and hands back only the session, so the password is never in a page.
-    The account can change its posts but not upload, add or train (`not_demo`)."""
+    The account can change its posts but not upload, add or train (`not_demo`). At most
+    every DEMO_RESET_S, a sign-in also puts the demo's posts back as they were drafted,
+    after the answer has gone (`reset_demo_posts`)."""
     if not conf.demo_on:
         raise HTTPException(404, "There is no demo on this server.")
     now = time.monotonic()
@@ -301,6 +314,8 @@ async def demo_session(request: Request, conf: Settings = Depends(config)) -> di
         logging.getLogger("stratum").warning("demo sign-in refused: HTTP %s", answer.status_code)
         raise HTTPException(503, "The demo is not available right now.")
     body = answer.json()
+    if _reset_due(time.monotonic()):
+        background.add_task(_reset_demo, str(body["access_token"]), conf)
     return {
         "access_token": body["access_token"],
         "refresh_token": body["refresh_token"],
@@ -308,6 +323,58 @@ async def demo_session(request: Request, conf: Settings = Depends(config)) -> di
         "user": {"email": conf.demo_email},
         "demo": True,
     }
+
+
+# Everyone who tries the demo edits the same few posts. Shared on 29 Oct with a 350-person
+# group, so one visitor's changes (or rude words) would be what the next hundred see:
+# the posts go back to their first drafts, and to Draft, at most this often.
+DEMO_RESET_S = 15 * 60
+_demo_reset_at: list[float] = []  # when this process last reset the demo (monotonic)
+
+
+def _reset_due(now: float) -> bool:
+    """True at most once per DEMO_RESET_S; claims the slot so concurrent sign-ins don't."""
+    if _demo_reset_at and now - _demo_reset_at[0] < DEMO_RESET_S:
+        return False
+    _demo_reset_at[:] = [now]
+    return True
+
+
+async def reset_demo_posts(ctx: service.Context) -> int:
+    """Every post the account can see back to version 1 and to Draft. Returns how many
+    posts changed. Each restore is a new version, as an undo would be, so History keeps
+    what visitors did and nothing is deleted."""
+    changed = 0
+    for post in await ctx.supa.select("posts", select="*"):
+        pid = f"eq.{post['id']}"
+        latest = await ctx.supa.select(
+            "post_versions", post_id=pid, select="version,spec", order="version.desc", limit="1"
+        )
+        first = await ctx.supa.select("post_versions", post_id=pid, select="spec", version="eq.1")
+        edited = bool(latest and first and latest[0]["spec"] != first[0]["spec"])
+        if edited:
+            [client] = await ctx.supa.select("clients", id=f"eq.{post['client_id']}", select="*")
+            await actions.restore(ctx, post, client, version=latest[0]["version"], to=1)
+        moved = post.get("status") != "draft"
+        if moved:
+            await ctx.supa.update("posts", {"status": "draft"}, id=pid)
+        changed += int(edited or moved)
+    return changed
+
+
+async def _reset_demo(token: str, conf: Settings) -> None:
+    """The reset, run after a demo sign-in has answered. A failure is logged with its
+    traceback and the visitor never sees it: their session is already on its way."""
+    log = logging.getLogger("stratum")
+    try:
+        ctx = await context(
+            client=await supa(authorization=f"Bearer {token}", conf=conf), conf=conf
+        )
+        if not ctx.demo:
+            return
+        log.info("demo reset: %d posts back to their first drafts", await reset_demo_posts(ctx))
+    except Exception:
+        log.exception("demo reset failed")
 
 
 class Onboard(BaseModel):
