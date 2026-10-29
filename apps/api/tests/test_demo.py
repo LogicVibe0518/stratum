@@ -12,18 +12,25 @@ What a reviewer should be able to repeat back:
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 from collections.abc import Iterator
+from pathlib import Path
 from typing import Any
 
 import httpx
 import pytest
 from fastapi.testclient import TestClient
 from stratum_api import main
+from stratum_worker.app import service
 from stratum_worker.app.settings import Settings
 from stratum_worker.gateway.budget import Budget
 from stratum_worker.gateway.errors import BudgetExceeded
+from stratum_worker.queue import fake
+from stratum_worker.queue.fake import World
+
+REPO = Path(__file__).resolve().parents[3]
 
 DEMO = "Demo@Example.com"
 SECRET = "not-a-real-password-0"  # noqa: S105 - a test value, never a real one
@@ -182,3 +189,76 @@ def test_running_out_of_allowance_is_a_sentence_not_a_500(http: TestClient) -> N
             for route in main.app.router.routes
             if getattr(route, "path", "") != "/test-only/over-budget"
         ]
+
+
+# --- the shared posts go back to their first drafts --------------------------------
+#
+# Shared with a 350-person group on 29 Oct: everyone edits the same posts, so the
+# demo is put back as drafted at most every DEMO_RESET_S, by the next sign-in.
+
+
+def test_a_reset_is_due_at_most_once_per_window(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(main, "_demo_reset_at", [])
+    assert main._reset_due(1000.0) is True
+    assert main._reset_due(1000.0 + main.DEMO_RESET_S - 1) is False
+    assert main._reset_due(1000.0 + main.DEMO_RESET_S) is True
+
+
+def test_a_demo_sign_in_starts_the_reset_only_when_it_is_due(
+    http: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def post(self: httpx.AsyncClient, url: str, **kwargs: Any) -> httpx.Response:
+        return httpx.Response(200, json={"access_token": "tok", "refresh_token": "r"})
+
+    started: list[str] = []
+
+    async def reset(token: str, conf: Settings) -> None:
+        started.append(token)
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", post)
+    monkeypatch.setattr(main, "_reset_demo", reset)
+    monkeypatch.setattr(main, "_demo_reset_at", [])
+    assert http.post("/api/demo").status_code == 200
+    assert http.post("/api/demo").status_code == 200
+    assert started == ["tok"]
+
+
+def test_the_reset_brings_back_the_first_draft_and_draft_status(tmp_path: Path) -> None:
+    world = World(tmp_path / "db.sqlite")
+    agency, client = asyncio.run(fake.seed(world, REPO))
+
+    def ctx(demo: bool = True) -> service.Context:
+        return service.Context(
+            supa=world.factory(agency),
+            settings=world.settings(REPO),
+            gateway=fake.gateway(),
+            agency_id=agency,
+            demo=demo,
+        )
+
+    # The post is drafted as the agency would; a visitor then edits and archives it.
+    main.app.dependency_overrides[main.context] = lambda: ctx(demo=False)
+    try:
+        http = TestClient(main.app)
+        made = http.post(
+            "/api/posts",
+            json={"client_id": client, "brief": "Boiler service, 20% off.", "slug": "demo-post"},
+        )
+        post_id = made.json()["post"]["id"]
+        main.app.dependency_overrides[main.context] = ctx
+        edit = {"version": 1, "ops": [{"op": "dim", "layer": "bg", "amount": 0.4}]}
+        assert http.post(f"/api/posts/{post_id}/edit", json=edit).status_code == 200
+        assert http.post(f"/api/posts/{post_id}/status", data={"status": "archived"}).is_success
+    finally:
+        main.app.dependency_overrides.clear()
+
+    assert asyncio.run(main.reset_demo_posts(ctx())) == 1
+    supa = world.factory(agency)
+    versions = asyncio.run(supa.select("post_versions", post_id=f"eq.{post_id}", order="version"))
+    assert [v["version"] for v in versions] == [1, 2, 3]
+    assert versions[-1]["spec"] == versions[0]["spec"]
+    [post] = asyncio.run(supa.select("posts", id=f"eq.{post_id}"))
+    assert post["status"] == "draft"
+    # Nothing left to put back: a second reset changes nothing and adds no version.
+    assert asyncio.run(main.reset_demo_posts(ctx())) == 0
+    assert len(asyncio.run(supa.select("post_versions", post_id=f"eq.{post_id}"))) == 3
