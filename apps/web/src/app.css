@@ -1497,3 +1497,79 @@ kbd {
         font-size: 15px;
     }
 }
+
+/* Phones: the poster first, panels over it (Editor.tsx, NARROW). */
+@media (max-width: 760px) {
+    .editor {
+        position: relative;
+        grid-template-columns: auto 1fr;
+        grid-template-areas:
+            "top top"
+            "left stage";
+    }
+
+    .topbar {
+        overflow-x: auto;
+        scrollbar-width: none;
+    }
+
+    .topbar .saved,
+    .topbar .sep {
+        display: none;
+    }
+
+    .topbar .name {
+        flex: none;
+    }
+
+    .topbar .name strong {
+        max-width: 112px;
+    }
+
+    .topbar .name span {
+        display: none;
+    }
+
+    .rail-tabs {
+        width: 56px;
+    }
+
+    /* Canvas.tsx fits the poster with 40px of room on a phone: 16px each side. */
+    .paper {
+        margin: 16px;
+    }
+
+    .rail .panel {
+        position: absolute;
+        top: 52px;
+        bottom: 0;
+        left: 57px;
+        right: 0;
+        width: auto;
+        z-index: 20;
+        background: var(--bg);
+        box-shadow: var(--shadow);
+    }
+
+    .ask {
+        position: absolute;
+        top: 52px;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        width: auto;
+        z-index: 30;
+        border-left: 0;
+    }
+
+    .collapsed-ask {
+        position: absolute;
+        right: 12px;
+        bottom: 76px;
+        z-index: 10;
+        padding: 4px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        box-shadow: var(--shadow);
+    }
+}

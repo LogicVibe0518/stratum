@@ -102,6 +102,15 @@ function EditorSkeleton() {
 
 type LeftTab = "designs" | "photos" | "layers" | "brand" | "history";
 
+// People open a link from a CV on their phone (28 Oct). The editor is made for a computer:
+// on a narrow screen it opens on the poster with both panels closed, the panels open over
+// the poster, and it says once what a phone is good for here.
+const NARROW = "(max-width: 760px)";
+
+function isNarrow(): boolean {
+  return typeof window.matchMedia === "function" && window.matchMedia(NARROW).matches;
+}
+
 function Workspace({
   detail,
   session,
@@ -115,10 +124,21 @@ function Workspace({
   const queries = useQueryClient();
   const [selected, setSelected] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
+  const [narrow] = useState(isNarrow);
   // Canva opens on its design panel: here the three options, when there are three.
-  const [left, setLeft] = useState<LeftTab | null>(detail.options.length ? "designs" : "layers");
-  const [asking, setAsking] = useState(true);
+  const [left, setLeft] = useState<LeftTab | null>(
+    narrow ? null : detail.options.length ? "designs" : "layers",
+  );
+  const [asking, setAsking] = useState(!narrow);
   const { view, aspect } = snapshot;
+
+  useEffect(() => {
+    if (narrow) {
+      toast("Made for a computer screen. On a phone you can look around and make small changes.", {
+        id: "narrow-screen",
+      });
+    }
+  }, [narrow]);
 
   // What the server said that a person needs to know: a refusal, a reload.
   useEffect(
