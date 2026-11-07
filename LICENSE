@@ -1,0 +1,9 @@
+Copyright (c) 2026 Rushil Shandil. All rights reserved.
+
+This repository is public so that people can read the code and try the
+live demo. Apart from viewing and forking on GitHub as GitHub's Terms of
+Service allow, no permission is given to copy, modify, distribute or use
+this code, in whole or in part, without written permission from the author.
+
+Third-party files keep their own licences: see assets/fonts/LICENSES.md
+and apps/worker/src/stratum_worker/photo/model/LICENSE-*.txt.
