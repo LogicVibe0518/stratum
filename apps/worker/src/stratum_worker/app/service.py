@@ -177,6 +177,9 @@ class Context:
     user_id: str | None = None
     # The shared demo account (Settings.demo_email): it edits, it does not upload.
     demo: bool = False
+    # Which visitor of the shared demo this is (stratum_api.visitors): each visitor
+    # sees and changes only their own copies of the demo's posts. None outside the demo.
+    visitor: str | None = None
 
     @property
     def store(self) -> AssetStore:

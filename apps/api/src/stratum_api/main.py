@@ -63,6 +63,8 @@ from stratum_worker.gateway.tasks import TaskName
 from stratum_worker.gateway.tracing import tracer_from_env
 from stratum_worker.queue import jobs
 
+from stratum_api import visitors
+
 SERVICE_ROLE_KEY = "SUPABASE_SERVICE_ROLE_KEY"
 
 
@@ -155,9 +157,9 @@ def is_demo(token: str, conf: Settings) -> bool:
     return conf.demo_on and token_email(token) == conf.demo_email.strip().lower()
 
 
-# The shared demo account's AI spend per day, in place of the agency default: a link on
-# a CV is clicked by strangers, and the providers' keys are shared with the real agency.
-DEMO_DAILY_CAP_USD = 0.5
+# The shared demo account's AI spend per day (Settings.demo_daily_cap_usd) replaces the
+# agency default: a link on a CV is clicked by strangers, and the providers' keys are
+# shared with the real agency.
 DEMO_REFUSED = (
     "This is the shared demo, so uploads, new clients and new posts are switched off. "
     "Everything on the existing posts can be changed."
@@ -165,7 +167,9 @@ DEMO_REFUSED = (
 
 
 async def context(
-    client: Supa = Depends(supa), conf: Settings = Depends(config)
+    client: Supa = Depends(supa),
+    conf: Settings = Depends(config),
+    x_demo_visitor: Annotated[str | None, Header()] = None,
 ) -> service.Context:
     me = await client.rpc("me")
     if not isinstance(me, dict) or not me.get("agency_id"):
@@ -173,7 +177,7 @@ async def context(
     agency = str(me["agency_id"])
     demo = is_demo(client.access_token, conf)
     if demo:
-        gateway().budget.caps[agency] = DEMO_DAILY_CAP_USD
+        gateway().budget.caps[agency] = conf.demo_daily_cap_usd
     return service.Context(
         supa=client,
         settings=conf,
@@ -181,6 +185,7 @@ async def context(
         agency_id=agency,
         user_id=str(me.get("user_id") or "") or None,
         demo=demo,
+        visitor=visitors.visitor_of(x_demo_visitor) if demo else None,
     )
 
 
@@ -298,7 +303,11 @@ async def demo_session(
     the API's host) and hands back only the session, so the password is never in a page.
     The account can change its posts but not upload, add or train (`not_demo`). At most
     every DEMO_RESET_S, a sign-in also puts the demo's posts back as they were drafted,
-    after the answer has gone (`reset_demo_posts`)."""
+    after the answer has gone (`reset_demo_posts`).
+
+    The answer also names the visitor (`visitors`): the editor sends it back as
+    X-Demo-Visitor, and each visitor gets their own copies of the posts. A visitor who
+    comes back sends the name they were given and keeps their copies."""
     if not conf.demo_on:
         raise HTTPException(404, "There is no demo on this server.")
     now = time.monotonic()
@@ -314,6 +323,7 @@ async def demo_session(
         logging.getLogger("stratum").warning("demo sign-in refused: HTTP %s", answer.status_code)
         raise HTTPException(503, "The demo is not available right now.")
     body = answer.json()
+    visitor = visitors.visitor_of(request.headers.get("x-demo-visitor")) or visitors.new_visitor()
     if _reset_due(time.monotonic()):
         background.add_task(_reset_demo, str(body["access_token"]), conf)
     return {
@@ -322,6 +332,7 @@ async def demo_session(
         "expires_at": body.get("expires_at"),
         "user": {"email": conf.demo_email},
         "demo": True,
+        "visitor": visitor,
     }
 
 
@@ -345,7 +356,7 @@ async def reset_demo_posts(ctx: service.Context) -> int:
     posts changed. Each restore is a new version, as an undo would be, so History keeps
     what visitors did and nothing is deleted."""
     changed = 0
-    for post in await ctx.supa.select("posts", select="*"):
+    for post in await ctx.supa.select("posts", select="*", slug=visitors.ORIGINALS):
         pid = f"eq.{post['id']}"
         latest = await ctx.supa.select(
             "post_versions", post_id=pid, select="version,spec", order="version.desc", limit="1"
@@ -373,6 +384,7 @@ async def _reset_demo(token: str, conf: Settings) -> None:
         if not ctx.demo:
             return
         log.info("demo reset: %d posts back to their first drafts", await reset_demo_posts(ctx))
+        log.info("demo cleanup: %d visitor copies deleted", await visitors.clean_copies(ctx))
     except Exception:
         log.exception("demo reset failed")
 
@@ -626,7 +638,7 @@ async def _post_and_client(
     ctx: service.Context, post_id: str
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     posts = await ctx.supa.select("posts", id=f"eq.{post_id}", select="*")
-    if not posts:
+    if not posts or not visitors.owns(ctx, posts[0]):
         raise HTTPException(404, "no such post")
     clients = await ctx.supa.select("clients", id=f"eq.{posts[0]['client_id']}", select="*")
     if not clients:
@@ -644,6 +656,8 @@ async def list_posts(
     }
     if client_id:
         filters["client_id"] = f"eq.{client_id}"
+    await visitors.ensure_copies(ctx)  # a demo visitor's own posts, on their first visit
+    filters.update(visitors.post_filter(ctx))
     return await ctx.supa.select("posts", **filters)
 
 
@@ -1291,6 +1305,8 @@ def anonymous(conf: Settings = Depends(config)) -> Supa:
 
 @app.post("/api/reviews")
 async def create_review(body: NewReview, ctx: service.Context = Depends(context)) -> Any:
+    for post_id in body.post_ids:  # in the demo, a visitor shares only their own posts
+        await _post_and_client(ctx, post_id)
     try:
         return await reviews.create_review(
             ctx,
@@ -1306,11 +1322,18 @@ async def create_review(body: NewReview, ctx: service.Context = Depends(context)
 @app.get("/api/reviews")
 async def list_reviews(client_id: str, ctx: service.Context = Depends(context)) -> Any:
     """This client's review links, newest first, each marked open, expired or revoked."""
-    return await reviews.list_reviews(ctx.supa, client_id)
+    found = await reviews.list_reviews(ctx.supa, client_id)
+    allowed = await visitors.review_ids_of(ctx, client_id)
+    return found if allowed is None else [r for r in found if str(r["id"]) in allowed]
 
 
 @app.post("/api/reviews/{review_id}/revoke")
 async def revoke_review(review_id: str, ctx: service.Context = Depends(context)) -> Any:
+    if ctx.demo:
+        rows = await ctx.supa.select("reviews", id=f"eq.{review_id}", select="client_id")
+        allowed = await visitors.review_ids_of(ctx, str(rows[0]["client_id"])) if rows else set()
+        if review_id not in (allowed or set()):
+            raise HTTPException(404, "no such review, or it was already revoked")
     if not await reviews.revoke(ctx.supa, review_id):
         raise HTTPException(404, "no such review, or it was already revoked")
     return {"revoked": True}
@@ -1319,6 +1342,7 @@ async def revoke_review(review_id: str, ctx: service.Context = Depends(context))
 @app.get("/api/posts/{post_id}/feedback")
 async def post_feedback(post_id: str, ctx: service.Context = Depends(context)) -> Any:
     """Every verdict clients have given on this post, newest first."""
+    await _post_and_client(ctx, post_id)
     items = await ctx.supa.select(
         "review_items", post_id=f"eq.{post_id}", select="id,review_id,version_id"
     )

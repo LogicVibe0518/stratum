@@ -20,7 +20,16 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
-import { currentSession, download, getJSON, postJSON, request, sentence } from "../lib/api";
+import {
+  currentSession,
+  download,
+  fileSlug,
+  getJSON,
+  postJSON,
+  postName,
+  request,
+  sentence,
+} from "../lib/api";
 import { mod, shortcut, typing } from "../lib/keys";
 import { navigate } from "../lib/router";
 import { EditorSession } from "../lib/session";
@@ -395,7 +404,7 @@ function TopBar({
 }) {
   const queries = useQueryClient();
   const [status, setStatus] = useState(detail.post.status);
-  const title = detail.post.slug.replace(/-/g, " ");
+  const title = postName(detail.post.slug);
   useEffect(() => setStatus(detail.post.status), [detail.post.status]);
 
   async function changeStatus(next: typeof status) {
@@ -558,7 +567,9 @@ function TopBar({
           <Dropdown.Content className="float" sideOffset={6} align="end" style={{ minWidth: 260 }}>
             <Dropdown.Item
               className="menu-item"
-              onSelect={() => void save(`/api/posts/${detail.post.id}/download`, `${detail.post.slug}.zip`)}
+              onSelect={() =>
+                void save(`/api/posts/${detail.post.id}/download`, `${fileSlug(detail.post.slug)}.zip`)
+              }
             >
               Every size, with the caption <span className="end">.zip</span>
             </Dropdown.Item>
@@ -567,7 +578,7 @@ function TopBar({
               onSelect={() =>
                 void save(
                   `/api/posts/${detail.post.id}/canva.pptx?aspect=${aspect}`,
-                  `${detail.post.slug}-${aspect.replace(":", "x")}.pptx`,
+                  `${fileSlug(detail.post.slug)}-${aspect.replace(":", "x")}.pptx`,
                 )
               }
             >

@@ -97,6 +97,7 @@ def test_the_demo_session_comes_from_the_server_without_the_password(
     out = http.post("/api/demo")
     assert out.status_code == 200
     body = out.json()
+    assert len(body.pop("visitor")) == 12  # who this visitor is (test_demo_visitors.py)
     assert body == {
         "access_token": "a",
         "refresh_token": "r",
@@ -167,11 +168,12 @@ def test_the_demo_cannot_upload_add_or_train(http: TestClient, method: str, path
 
 
 def test_the_demo_has_its_own_small_daily_cap() -> None:
-    budget = Budget(daily_cap_usd=5.0, caps={"demo-agency": main.DEMO_DAILY_CAP_USD})
+    cap = settings().demo_daily_cap_usd
+    budget = Budget(daily_cap_usd=5.0, caps={"demo-agency": cap})
     budget.check("real-agency", 4.0)
     with pytest.raises(BudgetExceeded):
-        budget.check("demo-agency", 0.6)
-    budget.record("demo-agency", 0.4)
+        budget.check("demo-agency", cap + 0.1)
+    budget.record("demo-agency", cap * 0.8)
     assert budget.warn_level("demo-agency") == pytest.approx(0.8)
 
 

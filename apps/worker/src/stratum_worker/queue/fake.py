@@ -25,6 +25,7 @@ from __future__ import annotations
 import asyncio
 import io
 import json
+import re
 import sqlite3
 import uuid
 from collections.abc import Callable
@@ -53,6 +54,23 @@ UNIQUE: dict[str, tuple[str, ...]] = {
 }
 # Written only by the database's own triggers; a signed-in user may only read them.
 READ_ONLY = {"brand_kits"}
+# ON DELETE CASCADE, as the migrations declare it: deleting a post takes its versions,
+# options, edits and steps with it, and a version takes its renders and flags.
+CASCADE: dict[str, tuple[tuple[str, str], ...]] = {
+    "posts": (
+        ("post_versions", "post_id"),
+        ("post_options", "post_id"),
+        ("edits", "post_id"),
+        ("steps", "post_id"),
+        ("review_items", "post_id"),
+        ("lab_screens", "post_id"),
+    ),
+    "post_versions": (
+        ("renders", "post_version_id"),
+        ("flags", "post_version_id"),
+        ("review_items", "version_id"),
+    ),
+}
 
 DEFAULTS: dict[str, dict[str, Any]] = {
     "clients": {"trade": "", "archived": False},
@@ -96,6 +114,35 @@ def connect(path: Path) -> sqlite3.Connection:
     return db
 
 
+def _like(have: Any, pattern: str) -> bool:
+    # PostgREST's like is SQL's LIKE with * in place of %.
+    regex = "^" + ".*".join(re.escape(part) for part in pattern.split("*")) + "$"
+    return have is not None and re.match(regex, str(have)) is not None
+
+
+def _instant(value: Any) -> datetime | None:
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def _holds(have: Any, op: str, want: str) -> bool:
+    if op == "eq":
+        text = json.dumps(have) if isinstance(have, bool) else str(have)
+        return text == want
+    if op == "like":
+        return _like(have, want)
+    if op == "in":
+        return str(have) in want.strip("()").split(",")
+    if op in ("lt", "gt"):
+        a, b = _instant(have), _instant(want)
+        if a is None or b is None:
+            return have is not None and (str(have) < want if op == "lt" else str(have) > want)
+        return a < b if op == "lt" else a > b
+    raise NotImplementedError(f"fake PostgREST supports eq, like, in, lt, gt and not., not {op!r}")
+
+
 def _matches(doc: dict[str, Any], filters: dict[str, str]) -> bool:
     for column, expression in filters.items():
         op, _, want = expression.partition(".")
@@ -110,10 +157,12 @@ def _matches(doc: dict[str, Any], filters: dict[str, str]) -> bool:
             if have is not None:
                 return False
             continue
-        if op != "eq":
-            raise NotImplementedError(f"fake PostgREST supports eq and is.null, not {expression!r}")
-        text = json.dumps(have) if isinstance(have, bool) else str(have)
-        if text != want:
+        if op == "not":
+            inner_op, _, inner_want = want.partition(".")
+            if _holds(have, inner_op, inner_want):
+                return False
+            continue
+        if not _holds(have, op, want):
             return False
     return True
 
@@ -262,6 +311,33 @@ class FakeSupa(Supa):
                 db.execute("rollback")
                 raise
         return out
+
+    async def delete(self, table: str, **filters: str) -> list[JSON]:
+        if not filters:
+            raise ValueError("delete needs at least one filter")
+        if table in READ_ONLY:
+            raise SupabaseError(403, f"permission denied for table {table}")
+        with self._world.db() as db:
+            db.execute("begin immediate")
+            try:
+                gone = [r for r in self._rows(db, table) if _matches(r, filters)]
+                for row in gone:
+                    self._remove(db, table, str(row["id"]))
+                db.execute("commit")
+            except BaseException:
+                db.execute("rollback")
+                raise
+        return gone
+
+    def _remove(self, db: sqlite3.Connection, table: str, row_id: str) -> None:
+        db.execute(
+            "delete from rows where tbl = ? and id = ? and agency_id = ?",
+            (table, row_id, self.agency_id),
+        )
+        for child, column in CASCADE.get(table, ()):
+            for row in self._rows(db, child):
+                if row.get(column) == row_id:
+                    self._remove(db, child, str(row["id"]))
 
     async def rpc(self, name: str, args: JSON | None = None) -> Any:
         raise SupabaseError(404, f"the fake has no function {name}")
