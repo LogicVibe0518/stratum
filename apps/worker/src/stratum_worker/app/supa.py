@@ -146,6 +146,22 @@ class Supa:
         body = (await self._send(client, request)).json()
         return body if isinstance(body, list) else [body]
 
+    async def delete(self, table: str, **filters: str) -> list[JSON]:
+        """Delete the rows the filters match, as this user: row-level security decides
+        which of them may go. Returns what was deleted. Refuses to run without a filter,
+        because PostgREST would otherwise take the whole (visible) table."""
+        if not filters:
+            raise ValueError("delete needs at least one filter")
+        client = pool()
+        request = client.build_request(
+            "DELETE",
+            f"{self.base_rest}/{table}",
+            headers=self._headers({"Prefer": "return=representation"}),
+            params=filters,
+        )
+        body = (await self._send(client, request)).json()
+        return body if isinstance(body, list) else []
+
     async def rpc(self, name: str, args: JSON | None = None) -> Any:
         client = pool()
         request = client.build_request(

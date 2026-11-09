@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     # on the server: a visitor's browser only ever gets that account's session.
     demo_email: str = Field(default="", alias="DEMO_EMAIL")
     demo_password: SecretStr = Field(default=SecretStr(""), alias="DEMO_PASSWORD")
+    # The demo account's AI spend per day, in US dollars, in place of an agency's cap.
+    # About $0.0005 a typed change, so the default is about 4,000 changes a day.
+    demo_daily_cap_usd: float = Field(default=2.0, ge=0, le=50, alias="DEMO_DAILY_CAP_USD")
 
     @property
     def rest_url(self) -> str:

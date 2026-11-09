@@ -3,7 +3,7 @@ import { LogOut, Plus } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, IconButton } from "../ui/Button";
 import { Logo } from "../ui/Logo";
-import { currentSession, getBlob, getJSON, sentence, signOut } from "../lib/api";
+import { currentSession, getBlob, getJSON, postName, sentence, signOut } from "../lib/api";
 import { CLASSIC, navigate } from "../lib/router";
 import type { Client, PostDetail, PostRow } from "../lib/types";
 
@@ -123,7 +123,7 @@ function PostCard({ post, client }: { post: PostRow; client: string }) {
     enabled: Boolean(render),
     staleTime: Number.POSITIVE_INFINITY,
   });
-  const title = post.slug.replace(/-/g, " ");
+  const title = postName(post.slug);
   return (
     <button ref={ref} type="button" className="post-card" onClick={() => navigate(`/posts/${post.id}`)}>
       <div
@@ -136,7 +136,7 @@ function PostCard({ post, client }: { post: PostRow; client: string }) {
           <div className="skeleton" style={{ height: "100%" }} />
         )}
       </div>
-      <span className="title">{title.charAt(0).toUpperCase() + title.slice(1)}</span>
+      <span className="title">{title}</span>
       <span className="meta">
         <span className="status-dot" data-status={post.status} />
         {STATUS[post.status]}

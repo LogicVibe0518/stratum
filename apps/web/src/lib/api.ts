@@ -3,6 +3,9 @@
 // key as the old page's, so signing in on either signs in on both.
 
 const SESSION_KEY = "stratum.session";
+// The demo visitor's name (see stratum_api/visitors.py), kept after signing out so a
+// visitor who comes back the same day finds their own copies of the demo's posts.
+const VISITOR_KEY = "stratum.demoVisitor";
 
 export interface Session {
   access_token: string;
@@ -11,6 +14,8 @@ export interface Session {
   user?: { email?: string };
   /** The shared demo account ("Try the demo"): it edits, it does not upload. */
   demo?: boolean;
+  /** Which demo visitor this is: each gets their own copies of the demo's posts. */
+  visitor?: string;
 }
 
 interface Config {
@@ -105,9 +110,31 @@ export async function demoAvailable(): Promise<boolean> {
 
 /** Sign in to the shared demo: the server signs in and hands back only the session. */
 export async function tryDemo(): Promise<void> {
-  const r = await fetch("/api/demo", { method: "POST" });
+  const known = session?.visitor ?? readVisitor();
+  const r = await fetch("/api/demo", {
+    method: "POST",
+    headers: known ? { "X-Demo-Visitor": known } : {},
+  });
   if (!r.ok) throw new ApiError(await errorText(r), r.status);
-  keep((await r.json()) as Session);
+  const next = (await r.json()) as Session;
+  if (next.visitor) writeVisitor(next.visitor);
+  keep(next);
+}
+
+function readVisitor(): string | null {
+  try {
+    return localStorage.getItem(VISITOR_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function writeVisitor(visitor: string): void {
+  try {
+    localStorage.setItem(VISITOR_KEY, visitor);
+  } catch {
+    // this tab still has it in the session
+  }
 }
 
 export function signOut(): void {
@@ -122,8 +149,9 @@ async function fresh(force = false): Promise<Session | null> {
   refreshing ??= (async () => {
     try {
       const demo = session?.demo;
+      const visitor = session?.visitor;
       const renewed = await auth("token?grant_type=refresh_token", { refresh_token: session?.refresh_token });
-      keep(demo ? { ...renewed, demo } : renewed);
+      keep(demo ? { ...renewed, demo, visitor } : renewed);
     } catch {
       keep(null);
     }
@@ -159,6 +187,7 @@ export async function request(path: string, options: RequestOptions = {}): Promi
     const current = await fresh(retry);
     if (!current) throw new SignedOut();
     const headers: Record<string, string> = { Authorization: `Bearer ${current.access_token}` };
+    if (current.demo && current.visitor) headers["X-Demo-Visitor"] = current.visitor;
     let body: BodyInit | undefined;
     if (options.json !== undefined) {
       headers["Content-Type"] = "application/json";
@@ -213,4 +242,15 @@ export async function download(path: string, fallback: string): Promise<void> {
 export function sentence(error: unknown): string {
   if (error instanceof Error && error.message) return error.message;
   return "Something went wrong. Try again.";
+}
+
+/** A post's name for people: its slug in words, without a demo visitor's suffix. */
+export function postName(slug: string): string {
+  const words = slug.replace(/--[0-9a-f]{12}$/, "").replace(/-/g, " ");
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+/** A post's slug for file names, without a demo visitor's suffix. */
+export function fileSlug(slug: string): string {
+  return slug.replace(/--[0-9a-f]{12}$/, "");
 }
